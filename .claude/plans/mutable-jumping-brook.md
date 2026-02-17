@@ -232,25 +232,34 @@ The original Blaster uses custom illustrated images per vocabulary word (the key
 
 ---
 
-### v1 Build Priorities (Proposed)
+### v1 Build Priorities (Revised)
 
-1. **Core grid UI** - iPad-first tile grid, sentence bar, speak button
-2. **Default tile set** - The ~500 word vocabulary, organized into categories
-3. **Sentence engine** - OpenAI API integration for sentence expansion
-4. **TTS** - OpenAI TTS integration, voice selection
-5. **SwiftData models** - TileSet/Tile/Scene architecture (even if v1 only uses defaults)
-6. **Therapist mode** - Face ID gate, create/edit tile sets, swap active sets
-7. **Promoted tiles** - Usage tracking, surfacing frequent combinations
-8. **Scenes** - Context switching between communication environments
-9. **AI tile set generator** - Therapist describes goal, AI builds the tile set
-10. **Import/export** - AirDrop / file sharing of tile sets
+Sentence generation is proven from the original Blaster. The high-value unknown is the content management / therapist layer. Build order reflects this — data architecture and content tools first, sentence engine is clean re-implementation of solved problem.
+
+1. **SwiftData models** — Tile, Page, PageTile, TileSet/Scene. Get the data architecture right first. This is the foundation everything else builds on.
+2. **Bootstrap loader** — Load the default ~500 word vocabulary + pages from JSON into SwiftData. Proves the data model works end-to-end.
+3. **Skeletal grid view** — Minimal tile grid + sentence tray. Just enough to see and tap tiles. Scrolling grid with snap/haptics.
+4. **Therapist mode** — The high-value new territory:
+   - Face ID / passcode gate
+   - Create / edit / save / name tile sets
+   - Swap active tile sets (load/unload/swap operations)
+   - Session mode (temporary takeover, revert)
+   - Import tile sets from JSON (URL, text message, AirDrop)
+5. **Sentence engine** — OpenAI integration, debounce, cache-first lookup, staleness guard, conversational context. Clean re-implementation of proven concept.
+6. **TTS + audio** — Voice selection, integrated audio response, repetition escalation in prosody.
+7. **Promoted tiles** — Usage tracking, surfacing frequent combinations as single tiles.
+8. **AI tile set generator** — Therapist describes a goal, AI generates vocabulary + layout.
+9. **Import/export polish** — JSON schema finalized, sharing via multiple channels.
+10. **UX polish** — Tray redesign, grid haptics, age-adaptive voice/complexity.
 
 ---
 
 ### Platform
-- iPad primary
+- **iPad + iPhone from the start.** Not "iPhone later" — develop both layouts together.
+- iPhone rationale: old/surplus iPhones are abundant and can be repurposed as dedicated communication devices. Lowers the barrier to access. Aligned with open source mission.
+- Grid adapts to form factor: iPad shows more tiles per screen, iPhone shows fewer but snapping scroll handles it naturally.
+- SwiftUI adaptive layouts handle most of this. Same data, same logic, different grid density.
 - iOS/iPadOS, SwiftUI, SwiftData
-- iPhone companion possible later
 - Target: iOS 26+
 
 ---
@@ -304,3 +313,73 @@ Page structure: Home -> category pages -> sub-pages (with pagination for large c
 - Sentence cache: Should cache be per-scene or global? What's the eviction strategy?
 - JSON sharing format: What's the schema? Define early so it's stable for third-party tile set creators.
 - Onboarding: How does a non-technical parent/guardian set up API keys without friction?
+
+---
+
+### Appendix: Discussion Log
+
+*(Newest first)*
+
+**2026-02-17 — iPhone from day one + sharing is solved**
+- iPhone layout developed alongside iPad, not deferred. Old/surplus iPhones become repurposed communication devices. Lowers access barrier.
+- Grid adapts to form factor (fewer tiles visible on iPhone, snapping scroll handles it).
+- Sharing (JSON import via text, file, URL) is solved engineering — Mark shipped this pattern in his production app Tibls (recipe sharing). Not a risk item.
+- *PRD impact: Platform section updated. Sharing de-risked.*
+
+
+- Sentence generation is proven — just needs clean re-implementation. The real unknown and high-value work is the therapist/content management layer.
+- New priority: data models → bootstrap loader → skeletal grid → therapist mode (create/edit/save/swap tile sets, import JSON, session mode) → then sentence engine and TTS.
+- Rationale: if content management is solid, the child grid is just "render the active set" and the sentence engine just processes whatever tiles are selected. The interesting problems are all in content creation and management.
+- *PRD impact: v1 Build Priorities reordered.*
+
+
+- API provider: No lock-in to OpenAI. Use whatever suite of APIs delivers what we need. Mark has direct working relationship with OpenAI team (filed/resolved audio bugs during beta). Provider choice is pragmatic, not ideological.
+- Sentence tray UX: The original tray layout was a rough guess. Needs real design thought. Open questions: should tiles shrink in the tray? Should text be more prominent? Better controls? The tray is prime real estate and deserves more attention.
+- Tile grid scrolling: Traditional AAC devices don't scroll (inherited from paper-based systems). Links/manual page transitions shouldn't be the solution for grid scalability. A snapping scroll view (page-at-a-time with haptics) is more natural - kids already know how to scroll. Links should be reserved for context switches (e.g., "eat" → food context), not pagination.
+- Tile key model: The `_`, `_1`, `_2` suffix convention for disambiguating duplicate words across categories is a hack but maybe a useful one if applied uniformly. Keys are designed to be simple, readable, sortable, and extensible.
+- Cache/phrase key model: Cache keys are formed by collecting member tile keys into a Set (order-independent: "mom cookie" == "cookie mom"), then concatenating the sorted set into a stable string key. Set membership makes lookup clean; concatenation makes the composite key stable and immune to selection order.
+- *PRD impact: Updated API provider stance, flagged tray UX as needing design work, added scrolling grid concept, clarified key/cache key patterns.*
+
+
+- Tile sharing: JSON grammar for tiles/pages. Importable via URL, text message, AirDrop. App registers as handler. No usage data in exports.
+- Age profiles: Age setting drives sentence complexity, vocab level, and voice in generated output. Feeds system prompt.
+- API keys: User-supplied at setup. Stored securely (Keychain TBD). OpenAI contacts available if platform gaps arise.
+
+**2026-02-17 — Repetition as emotional intensity**
+- Repeated tile combinations should escalate sentence urgency. Tap 1: polite request. Tap 10: emphatic demand.
+- Mirrors how non-verbal children use repetition as their "volume knob."
+- Cache serves baseline sentence; escalation applied dynamically via session context + repetition count.
+- TTS prosody should also escalate (louder, more emphatic).
+- *PRD impact: New section in Sentence Engine covering repetition escalation.*
+
+**2026-02-17 — Conversational context**
+- Sentence generation should be stateful within a session. Recent sentences feed back to AI as conversation history.
+- Enables natural follow-ups ("Can I have pizza?" instead of standalone "I want to eat pizza" when hunger was just expressed).
+- *PRD impact: Added to Sentence Engine section.*
+
+**2026-02-17 — BlasterState review**
+- Reviewed original sentence engine: 1-second debounce timer, cache-first lookup, staleness guard, OpenAI integration with integrated audio (gpt-4o-audio-preview), wordClass used as disambiguation context in prompts.
+- System prompt sets persona, safety rails, age-appropriate voice.
+- *PRD impact: New Sentence Engine section capturing full flow, prompt design, cache mechanics.*
+
+**2026-02-17 — Reference material review (models, screenshots, vocabulary, loader)**
+- Original architecture: TileModel (vocabulary unit, key=image asset name, metrics tracking), PageModel (ordered tile collection), PageTileModel (junction with link/isAudible behavior).
+- ~500 word vocabulary across 20+ wordClass categories. Pages defined separately in JSON.
+- Key clarification: wordClass is purely semantic metadata. Page membership is a layout decision, not driven by wordClass.
+- Screenshots confirmed: sentence tray at top, dense tile grid, cache view with hit counts, usage analytics.
+- *PRD impact: UX Patterns section, Data Model refined, Default Vocabulary Structure section added.*
+
+**2026-02-17 — Privacy and sharing architecture**
+- Data stays in SwiftData + iCloud. No external backend.
+- Therapist has local device access only (Face ID gated). No remote access.
+- AI API calls are stateless (words in, sentence out). OpenAI is target provider.
+- Open source under Apache license.
+- *PRD impact: Core Principles section, Architecture Overview updated.*
+
+**2026-02-17 — Initial brainstorm: two-layer architecture**
+- Child surface: stable, predictable tile grid. Fixed positions for muscle memory. No dynamic rearrangement.
+- Therapist/parent surface: create/edit tile sets, scenes/contexts, usage analytics, session mode.
+- AI is for the ecosystem (therapists, parents), not the child directly. Child experiences AI output, not complexity.
+- Promoted tiles: frequent combinations (from usage data) become single tiles. Emerges from child's own patterns.
+- Scenes/worlds: curated communication contexts (home, school, therapy, grandma's house). Therapist can take over for a session, then revert.
+- *PRD impact: Established Two-Layer UX, Core Principles, v1 Build Priorities.*
