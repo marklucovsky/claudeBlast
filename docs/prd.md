@@ -326,13 +326,13 @@ Page structure: Home -> category pages -> sub-pages (with pagination for large c
 - Sharing (JSON import via text, file, URL) is solved engineering — Mark shipped this pattern in his production app Tibls (recipe sharing). Not a risk item.
 - *PRD impact: Platform section updated. Sharing de-risked.*
 
-
+**2026-02-17 — Build order revised: content management first**
 - Sentence generation is proven — just needs clean re-implementation. The real unknown and high-value work is the therapist/content management layer.
 - New priority: data models → bootstrap loader → skeletal grid → therapist mode (create/edit/save/swap tile sets, import JSON, session mode) → then sentence engine and TTS.
 - Rationale: if content management is solid, the child grid is just "render the active set" and the sentence engine just processes whatever tiles are selected. The interesting problems are all in content creation and management.
 - *PRD impact: v1 Build Priorities reordered.*
 
-
+**2026-02-17 — PRD first pass review / clarifications**
 - API provider: No lock-in to OpenAI. Use whatever suite of APIs delivers what we need. Mark has direct working relationship with OpenAI team (filed/resolved audio bugs during beta). Provider choice is pragmatic, not ideological.
 - Sentence tray UX: The original tray layout was a rough guess. Needs real design thought. Open questions: should tiles shrink in the tray? Should text be more prominent? Better controls? The tray is prime real estate and deserves more attention.
 - Tile grid scrolling: Traditional AAC devices don't scroll (inherited from paper-based systems). Links/manual page transitions shouldn't be the solution for grid scalability. A snapping scroll view (page-at-a-time with haptics) is more natural - kids already know how to scroll. Links should be reserved for context switches (e.g., "eat" → food context), not pagination.
@@ -340,7 +340,7 @@ Page structure: Home -> category pages -> sub-pages (with pagination for large c
 - Cache/phrase key model: Cache keys are formed by collecting member tile keys into a Set (order-independent: "mom cookie" == "cookie mom"), then concatenating the sorted set into a stable string key. Set membership makes lookup clean; concatenation makes the composite key stable and immune to selection order.
 - *PRD impact: Updated API provider stance, flagged tray UX as needing design work, added scrolling grid concept, clarified key/cache key patterns.*
 
-
+**2026-02-17 — Open question resolutions**
 - Tile sharing: JSON grammar for tiles/pages. Importable via URL, text message, AirDrop. App registers as handler. No usage data in exports.
 - Age profiles: Age setting drives sentence complexity, vocab level, and voice in generated output. Feeds system prompt.
 - API keys: User-supplied at setup. Stored securely (Keychain TBD). OpenAI contacts available if platform gaps arise.
