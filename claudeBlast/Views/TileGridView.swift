@@ -7,15 +7,21 @@ import SwiftUI
 import SwiftData
 
 struct TileGridView: View {
-    @Query var pages: [PageModel]
-    @State var currentPageKey: String = "home"
+    @Query(filter: #Predicate<BlasterScene> { $0.isActive })
+    var activeScenes: [BlasterScene]
+
+    @State var currentPageKey: String?
     @State var selectedTiles: [TileModel] = []
 
     private let maxTiles = 4
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 12)]
 
+    private var activeScene: BlasterScene? { activeScenes.first }
+
     private var currentPage: PageModel? {
-        pages.first { $0.displayName == currentPageKey }
+        guard let scene = activeScene else { return nil }
+        let key = currentPageKey ?? scene.homePageKey
+        return scene.pages.first { $0.displayName == key }
     }
 
     var body: some View {
@@ -44,11 +50,16 @@ struct TileGridView: View {
                 }
             } else {
                 ContentUnavailableView(
-                    "Page Not Found",
+                    "No Active Scene",
                     systemImage: "questionmark.square",
-                    description: Text("Could not find page: \(currentPageKey)")
+                    description: Text("No scene is currently active.")
                 )
             }
+        }
+        .onChange(of: activeScene?.id) {
+            // Reset to new scene's home page when scene changes
+            currentPageKey = nil
+            selectedTiles.removeAll()
         }
     }
 
@@ -65,7 +76,7 @@ struct TileGridView: View {
 #Preview {
     TileGridView()
         .modelContainer(
-            for: [TileModel.self, PageModel.self, PageTileModel.self],
+            for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
             inMemory: true
         )
 }
