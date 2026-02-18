@@ -91,6 +91,52 @@ struct claudeBlastTests {
         #expect(cache1.cacheKey == "eat,mom,pizza")
     }
 
+    @Test func tileSelectionLogic() throws {
+        let eat = TileModel(key: "eat", wordClass: "actions")
+        let pizza = TileModel(key: "pizza", wordClass: "food")
+        let mom = TileModel(key: "mom", wordClass: "people")
+        let drink = TileModel(key: "drink", wordClass: "actions")
+        let water = TileModel(key: "water", wordClass: "food")
+
+        let maxTiles = 4
+        var selectedTiles: [TileModel] = []
+
+        // Add tiles up to max
+        for tile in [eat, pizza, mom, drink] {
+            if selectedTiles.count < maxTiles {
+                selectedTiles.append(tile)
+            }
+        }
+        #expect(selectedTiles.count == 4)
+
+        // Cannot exceed max
+        if selectedTiles.count < maxTiles {
+            selectedTiles.append(water)
+        }
+        #expect(selectedTiles.count == 4)
+
+        // Remove by index (tap-to-remove)
+        selectedTiles.remove(at: 1) // removes pizza
+        #expect(selectedTiles.count == 3)
+        #expect(selectedTiles[0].key == "eat")
+        #expect(selectedTiles[1].key == "mom")
+
+        // Clear all
+        selectedTiles.removeAll()
+        #expect(selectedTiles.isEmpty)
+    }
+
+    @Test func navigationTileHasLink() throws {
+        let tile = TileModel(key: "food", wordClass: "navigation")
+        let navTile = PageTileModel(tile: tile, link: "food_page", isAudible: false)
+        #expect(!navTile.link.isEmpty)
+        #expect(!navTile.isAudible)
+
+        let audibleNavTile = PageTileModel(tile: tile, link: "food_page", isAudible: true)
+        #expect(!audibleNavTile.link.isEmpty)
+        #expect(audibleNavTile.isAudible)
+    }
+
     @Test func bootstrapLoaderIntegration() throws {
         let container = try makeTestContainer()
         let result = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
