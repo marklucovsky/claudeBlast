@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SentenceTrayView: View {
     let selectedTiles: [TileModel]
@@ -25,15 +26,24 @@ struct SentenceTrayView: View {
                                 onTileTap(index)
                             } label: {
                                 HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.orange)
-                                        .frame(width: 28, height: 28)
-                                        .overlay {
-                                            Text(String(tile.displayName.prefix(1)).uppercased())
-                                                .font(.caption2)
-                                                .fontWeight(.bold)
-                                                .foregroundStyle(.white)
+                                    Group {
+                                        if UIImage(named: tile.bundleImage) != nil {
+                                            Image(tile.bundleImage)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        } else {
+                                            Circle()
+                                                .fill(Color.orange)
+                                                .overlay {
+                                                    Text(String(tile.displayName.prefix(1)).uppercased())
+                                                        .font(.caption2)
+                                                        .fontWeight(.bold)
+                                                        .foregroundStyle(.white)
+                                                }
                                         }
+                                    }
+                                    .frame(width: 28, height: 28)
                                     Text(tile.displayName)
                                         .font(.caption)
                                         .fontWeight(.medium)

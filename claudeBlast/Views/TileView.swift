@@ -15,15 +15,7 @@ struct TileView: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .fill(colorForWordClass(tile.wordClass))
-                        .frame(width: 64, height: 64)
-                    Text(String(tile.displayName.prefix(1)).uppercased())
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
-                }
+                tileImage
                 .overlay(alignment: .bottomTrailing) {
                     if isNavigation {
                         Image(systemName: "arrow.right.circle.fill")
@@ -53,6 +45,27 @@ struct TileView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var tileImage: some View {
+        if UIImage(named: tile.bundleImage) != nil {
+            Image(tile.bundleImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            ZStack {
+                Circle()
+                    .fill(colorForWordClass(tile.wordClass))
+                    .frame(width: 64, height: 64)
+                Text(String(tile.displayName.prefix(1)).uppercased())
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.white)
+            }
+        }
     }
 
     private func colorForWordClass(_ wordClass: String) -> Color {
