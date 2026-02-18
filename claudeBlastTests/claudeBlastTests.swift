@@ -7,6 +7,7 @@
 
 import Testing
 import SwiftData
+import Foundation
 @testable import claudeBlast
 
 @MainActor
@@ -15,7 +16,7 @@ struct claudeBlastTests {
     private func makeTestContainer() throws -> ModelContainer {
         let schema = Schema([
             TileModel.self, PageModel.self, PageTileModel.self,
-            SentenceCache.self, BlasterScene.self
+            SentenceCache.self, BlasterScene.self, MetricEvent.self
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContainer(for: schema, configurations: [config])
@@ -31,12 +32,35 @@ struct claudeBlastTests {
         #expect(tile.type == .word)
     }
 
-    @Test func tileMetricsTracking() throws {
-        let tile = TileModel(key: "eat", wordClass: "actions")
-        tile.recordMetric(metric: .selected)
-        tile.recordMetric(metric: .selected)
-        #expect(tile.getMetricCount(metric: .selected) == 2)
-        #expect(tile.getMetricCount(metric: .used) == 0)
+    @Test func metricEventCreation() throws {
+        let event = MetricEvent(subjectType: "tile", subjectKey: "eat", eventType: .selected)
+        #expect(event.subjectType == "tile")
+        #expect(event.subjectKey == "eat")
+        #expect(event.eventType == .selected)
+    }
+
+    @Test func metricEventInsertAndQuery() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        context.insert(MetricEvent(subjectType: "tile", subjectKey: "eat", eventType: .selected))
+        context.insert(MetricEvent(subjectType: "tile", subjectKey: "eat", eventType: .selected))
+        context.insert(MetricEvent(subjectType: "tile", subjectKey: "pizza", eventType: .selected))
+        context.insert(MetricEvent(subjectType: "cache", subjectKey: "eat,mom", eventType: .hit))
+
+        let eatSelected = try context.fetch(
+            FetchDescriptor<MetricEvent>(predicate: #Predicate {
+                $0.subjectKey == "eat" && $0.subjectType == "tile"
+            })
+        )
+        #expect(eatSelected.count == 2)
+
+        let allTileEvents = try context.fetch(
+            FetchDescriptor<MetricEvent>(predicate: #Predicate {
+                $0.subjectType == "tile"
+            })
+        )
+        #expect(allTileEvents.count == 3)
     }
 
     @Test func pageModelWithOrderedTiles() throws {
