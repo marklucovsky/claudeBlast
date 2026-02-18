@@ -7,17 +7,6 @@ import SwiftData
 import SwiftUI
 import Foundation
 
-enum MetricType: String, Codable {
-    case selected
-    case used
-    case edited
-    case created
-    case lookup
-    case hit
-    case flush
-    case refreshed
-}
-
 enum TileType: String, Codable {
     case word
     case phrase
@@ -26,7 +15,6 @@ enum TileType: String, Codable {
 @Model
 final class TileModel: Identifiable {
     var id: String = UUID().uuidString
-    var metrics: [MetricType: Metric]
     var created: Date = Date.now
 
     // Display
@@ -61,45 +49,9 @@ final class TileModel: Identifiable {
         self.key = key
         self.bundleImage = key
         self.wordClass = wordClass
-        self.metrics = [
-            .selected: Metric(type: .selected),
-            .used: Metric(type: .used),
-            .edited: Metric(type: .edited),
-            .created: Metric(type: .created),
-            .hit: Metric(type: .hit)
-        ]
     }
 
     convenience init(from codable: TileModelCodable) {
         self.init(key: codable.key, wordClass: codable.wordClass)
-    }
-
-    @discardableResult
-    func recordMetric(metric: MetricType) -> Metric {
-        if metrics[metric] == nil {
-            metrics[metric] = Metric(type: metric)
-        }
-        metrics[metric]!.record()
-        return metrics[metric]!
-    }
-
-    func getMetricCount(metric: MetricType) -> Int {
-        metrics[metric]?.count ?? 0
-    }
-
-    struct Metric: Codable, Hashable, Identifiable {
-        var id: String = UUID().uuidString
-        let type: MetricType
-        var count: Int = 0
-        var updated: Date = Date.now
-
-        init(type: MetricType) {
-            self.type = type
-        }
-
-        mutating func record() {
-            count += 1
-            updated = Date.now
-        }
     }
 }

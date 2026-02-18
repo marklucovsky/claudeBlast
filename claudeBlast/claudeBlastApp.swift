@@ -20,6 +20,7 @@ struct claudeBlastApp: App {
             PageTileModel.self,
             SentenceCache.self,
             BlasterScene.self,
+            MetricEvent.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: schema, configurations: [config])
