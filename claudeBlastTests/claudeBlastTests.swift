@@ -152,4 +152,65 @@ struct claudeBlastTests {
         #expect(snackTile != nil)
         #expect(snackTile!.displayName == "snack")
     }
+
+    @Test func bootstrapCreatesDefaultScene() throws {
+        let container = try makeTestContainer()
+        let result = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
+
+        #expect(result.scene.isDefault)
+        #expect(result.scene.isActive)
+        #expect(result.scene.name == "Default")
+        #expect(result.scene.homePageKey == "home")
+        #expect(result.scene.pages.count == result.pages.count)
+    }
+
+    @Test func sceneActivationDeactivatesOthers() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let scene1 = BlasterScene(name: "Default", isDefault: true, isActive: true)
+        let scene2 = BlasterScene(name: "Therapy", isActive: false)
+        context.insert(scene1)
+        context.insert(scene2)
+
+        try scene2.activate(context: context)
+
+        #expect(!scene1.isActive)
+        #expect(scene2.isActive)
+    }
+
+    @Test func deactivateRestoresDefault() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let defaultScene = BlasterScene(name: "Default", isDefault: true, isActive: false)
+        let therapyScene = BlasterScene(name: "Therapy", isActive: true)
+        context.insert(defaultScene)
+        context.insert(therapyScene)
+
+        try therapyScene.deactivateAndRestoreDefault(context: context)
+
+        #expect(!therapyScene.isActive)
+        #expect(defaultScene.isActive)
+    }
+
+    @Test func sceneOwnsPages() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let tile = TileModel(key: "eat", wordClass: "actions")
+        let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
+        let page = PageModel.make(displayName: "therapy_page", tiles: [pageTile], tileOrder: [pageTile.id])
+
+        let scene = BlasterScene(name: "Therapy Session", homePageKey: "therapy_page")
+        scene.pages = [page]
+
+        context.insert(tile)
+        context.insert(page)
+        context.insert(scene)
+
+        #expect(scene.pages.count == 1)
+        #expect(scene.pages.first?.displayName == "therapy_page")
+        #expect(scene.homePageKey == "therapy_page")
+    }
 }
