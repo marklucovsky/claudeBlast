@@ -306,6 +306,7 @@ Page structure: Home -> category pages -> sub-pages (with pagination for large c
 ---
 
 ### Open Questions
+- **TabView / minimum deployment target**: iOS 18 introduced a new `Tab` API with significantly improved iPad behavior (sidebar-style tab bar, better adaptive layout). We're currently using the legacy `tabItem` modifier to support older targets, but should revisit raising the minimum to iOS 18 to get the modern tab experience — especially important for the iPad form factor where the tab bar presentation changed substantially.
 - Voice selection: What voices feel right for a child? Can we let the child pick "their" voice?
 - Accessibility: Beyond AAC - VoiceOver, Switch Control, other iOS accessibility features?
 - Localization: Multi-language support from the start or later?

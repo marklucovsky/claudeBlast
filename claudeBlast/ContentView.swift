@@ -10,14 +10,23 @@ import SwiftData
 
 struct ContentView: View {
     var body: some View {
-        TileGridView()
+        TabView {
+            TileGridView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+            AdminView()
+                .tabItem {
+                    Label("Admin", systemImage: "lock.fill")
+                }
+        }
     }
 }
 
 #Preview {
     ContentView()
         .modelContainer(
-            for: [TileModel.self, PageModel.self, PageTileModel.self],
+            for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
             inMemory: true
         )
 }
