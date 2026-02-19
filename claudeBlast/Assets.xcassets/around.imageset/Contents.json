@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "around.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

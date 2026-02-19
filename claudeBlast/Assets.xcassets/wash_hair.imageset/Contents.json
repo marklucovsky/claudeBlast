@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "wash_hair.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
