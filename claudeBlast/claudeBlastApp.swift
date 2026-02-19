@@ -11,6 +11,7 @@ import SwiftData
 @main
 struct claudeBlastApp: App {
     private let modelContainer: ModelContainer
+    @State private var sentenceEngine = SentenceEngine(provider: MockSentenceProvider())
 
     init() {
         let schema = Schema([
@@ -30,6 +31,10 @@ struct claudeBlastApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(sentenceEngine)
+                .onAppear {
+                    sentenceEngine.configure(modelContext: modelContainer.mainContext)
+                }
         }
         .modelContainer(modelContainer)
     }

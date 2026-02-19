@@ -10,10 +10,9 @@ struct TileGridView: View {
     @Query(filter: #Predicate<BlasterScene> { $0.isActive })
     var activeScenes: [BlasterScene]
 
+    @Environment(SentenceEngine.self) private var engine
     @State var currentPageKey: String?
-    @State var selectedTiles: [TileModel] = []
 
-    private let maxTiles = 4
     private let columns = [GridItem(.adaptive(minimum: 100), spacing: 12)]
 
     private var activeScene: BlasterScene? { activeScenes.first }
@@ -27,12 +26,15 @@ struct TileGridView: View {
     var body: some View {
         VStack(spacing: 0) {
             SentenceTrayView(
-                selectedTiles: selectedTiles,
+                selectedTiles: engine.selectedTiles,
+                generatedSentence: engine.generatedSentence,
+                isThinking: engine.isThinking,
+                isWaiting: engine.isWaiting,
                 onTileTap: { index in
-                    selectedTiles.remove(at: index)
+                    engine.removeTile(at: index)
                 },
                 onClear: {
-                    selectedTiles.removeAll()
+                    engine.clearSelection()
                 }
             )
             .padding(.top, 8)
@@ -41,7 +43,10 @@ struct TileGridView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(page.orderedTiles) { pageTile in
-                            TileView(pageTile: pageTile) {
+                            TileView(
+                                pageTile: pageTile,
+                                isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key }
+                            ) {
                                 handleTileTap(pageTile)
                             }
                         }
@@ -59,13 +64,18 @@ struct TileGridView: View {
         .onChange(of: activeScene?.id) {
             // Reset to new scene's home page when scene changes
             currentPageKey = nil
-            selectedTiles.removeAll()
+            engine.clearSelection()
         }
     }
 
     private func handleTileTap(_ pageTile: PageTileModel) {
-        if pageTile.isAudible && selectedTiles.count < maxTiles {
-            selectedTiles.append(pageTile.tile)
+        if pageTile.isAudible {
+            // Toggle: tap selected tile in grid to deselect it
+            if let index = engine.selectedTiles.firstIndex(where: { $0.key == pageTile.tile.key }) {
+                engine.removeTile(at: index)
+            } else {
+                engine.addTile(pageTile.tile)
+            }
         }
         if !pageTile.link.isEmpty {
             currentPageKey = pageTile.link
@@ -75,6 +85,7 @@ struct TileGridView: View {
 
 #Preview {
     TileGridView()
+        .environment(SentenceEngine(provider: MockSentenceProvider()))
         .modelContainer(
             for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
             inMemory: true
