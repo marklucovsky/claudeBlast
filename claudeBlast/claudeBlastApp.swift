@@ -11,7 +11,6 @@ import SwiftData
 @main
 struct claudeBlastApp: App {
     private let modelContainer: ModelContainer
-    private let loadDuration: TimeInterval
 
     init() {
         let schema = Schema([
@@ -25,13 +24,12 @@ struct claudeBlastApp: App {
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: schema, configurations: [config])
         self.modelContainer = container
-        let result = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
-        self.loadDuration = result.duration
+        _ = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(loadDuration: loadDuration)
+            ContentView()
         }
         .modelContainer(modelContainer)
     }

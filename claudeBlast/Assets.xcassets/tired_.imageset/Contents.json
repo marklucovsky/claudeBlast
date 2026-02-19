@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "tired_.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
