@@ -8,6 +8,7 @@ import SwiftData
 
 struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
+    @Query(sort: \SentenceCache.lastUsed, order: .reverse) var cacheEntries: [SentenceCache]
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
@@ -27,6 +28,33 @@ struct AdminView: View {
                         createSampleScene()
                     } label: {
                         Label("Create Sample Scene", systemImage: "plus.circle")
+                    }
+                }
+
+                Section("Sentence Cache (\(cacheEntries.count))") {
+                    if cacheEntries.isEmpty {
+                        Text("No cached sentences")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(cacheEntries) { entry in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.cacheKey)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(entry.sentence)
+                                    .font(.subheadline)
+                                Text("Hits: \(entry.hitCount)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .onDelete(perform: deleteCacheEntries)
+
+                        Button(role: .destructive) {
+                            flushAllCache()
+                        } label: {
+                            Label("Flush All Cache", systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -50,6 +78,18 @@ struct AdminView: View {
                     defaultScene.isActive = true
                 }
             }
+        }
+    }
+
+    private func deleteCacheEntries(at offsets: IndexSet) {
+        for index in offsets {
+            modelContext.delete(cacheEntries[index])
+        }
+    }
+
+    private func flushAllCache() {
+        for entry in cacheEntries {
+            modelContext.delete(entry)
         }
     }
 
