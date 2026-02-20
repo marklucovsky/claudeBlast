@@ -7,6 +7,7 @@ import SwiftUI
 
 struct TileView: View {
     let pageTile: PageTileModel
+    var isSelected: Bool = false
     let onTap: () -> Void
 
     private var tile: TileModel { pageTile.tile }
@@ -36,13 +37,17 @@ struct TileView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.background)
+                    .fill(isSelected ? Color.orange.opacity(0.1) : Color(.systemBackground))
                     .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isNavigation ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 2)
+                    .stroke(
+                        isSelected ? Color.orange : (isNavigation ? Color.blue.opacity(0.4) : Color.clear),
+                        lineWidth: isSelected ? 2.5 : 2
+                    )
             )
+            .opacity(isSelected ? 0.85 : 1.0)
         }
         .buttonStyle(.plain)
     }
