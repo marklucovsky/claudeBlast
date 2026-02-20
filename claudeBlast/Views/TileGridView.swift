@@ -30,11 +30,15 @@ struct TileGridView: View {
                 generatedSentence: engine.generatedSentence,
                 isThinking: engine.isThinking,
                 isWaiting: engine.isWaiting,
+                canReplay: engine.canReplay,
                 onTileTap: { index in
                     engine.removeTile(at: index)
                 },
                 onClear: {
                     engine.clearSelection()
+                },
+                onReplay: {
+                    engine.replay()
                 }
             )
             .padding(.top, 8)

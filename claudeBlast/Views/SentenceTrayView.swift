@@ -11,8 +11,10 @@ struct SentenceTrayView: View {
     let generatedSentence: String?
     let isThinking: Bool
     let isWaiting: Bool
+    let canReplay: Bool
     let onTileTap: (Int) -> Void
     let onClear: () -> Void
+    let onReplay: () -> Void
 
     var body: some View {
         VStack(spacing: 6) {
@@ -67,6 +69,15 @@ struct SentenceTrayView: View {
                 }
 
                 if !selectedTiles.isEmpty {
+                    if canReplay && !isThinking && !isWaiting && generatedSentence != nil {
+                        Button(action: onReplay) {
+                            Image(systemName: "arrow.trianglehead.2.counterclockwise")
+                                .font(.title2)
+                                .foregroundStyle(.orange)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Button(action: onClear) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
