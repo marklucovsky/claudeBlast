@@ -145,10 +145,37 @@ struct OpenAISentenceProvider: SentenceProvider {
             throw OpenAIError.decodingError("No text content in response")
         }
 
+        // Parse usage
+        let usage = parseUsage(json: json)
+
         return SentenceResult(
             text: sentenceText,
             audioData: audioData,
-            audioFormat: audioData != nil ? "mp3" : nil
+            audioFormat: audioData != nil ? "mp3" : nil,
+            usage: usage
+        )
+    }
+
+    private func parseUsage(json: [String: Any]) -> TokenUsage? {
+        guard let usage = json["usage"] as? [String: Any] else { return nil }
+        let model = json["model"] as? String ?? "unknown"
+        let promptTokens = usage["prompt_tokens"] as? Int ?? 0
+        let completionTokens = usage["completion_tokens"] as? Int ?? 0
+        let totalTokens = usage["total_tokens"] as? Int ?? 0
+
+        let promptDetails = usage["prompt_tokens_details"] as? [String: Any]
+        let completionDetails = usage["completion_tokens_details"] as? [String: Any]
+
+        return TokenUsage(
+            model: model,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            totalTokens: totalTokens,
+            promptTextTokens: promptDetails?["text_tokens"] as? Int ?? 0,
+            promptAudioTokens: promptDetails?["audio_tokens"] as? Int ?? 0,
+            promptCachedTokens: promptDetails?["cached_tokens"] as? Int ?? 0,
+            completionTextTokens: completionDetails?["text_tokens"] as? Int ?? 0,
+            completionAudioTokens: completionDetails?["audio_tokens"] as? Int ?? 0
         )
     }
 }

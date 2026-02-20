@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 @Observable
 @MainActor
@@ -26,6 +27,7 @@ final class SentenceEngine {
 
     // MARK: - Dependencies
 
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "claudeBlast", category: "SentenceEngine")
     private var cacheManager: SentenceCacheManager?
     private let audioPlayer = AudioPlayer()
 
@@ -144,6 +146,8 @@ final class SentenceEngine {
                 isThinking = false
                 return
             }
+            let tileKeys = tiles.map(\.key).joined(separator: ", ")
+            Self.logger.info("generate: source=cache elapsed=0.000s tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\" hasAudio=\(!cached.audioData.isEmpty)")
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
             // Play cached audio if available
@@ -162,6 +166,7 @@ final class SentenceEngine {
         let systemPrompt = promptBuilder.buildSystemPrompt()
         let userPrompt = promptBuilder.formatUserPrompt(tiles: tiles)
 
+        let apiStart = ContinuousClock.now
         do {
             let result = try await provider.generateSentence(
                 tiles: tiles,
@@ -169,6 +174,7 @@ final class SentenceEngine {
                 conversationContext: conversationHistory + [userPrompt],
                 requestAudio: requestAudio
             )
+            let elapsed = apiStart.duration(to: .now)
 
             // Encode audio for cache storage
             let audioBase64 = result.audioData?.base64EncodedString() ?? ""
@@ -185,11 +191,30 @@ final class SentenceEngine {
             generatedSentence = result.text
             appendToHistory(result.text)
 
+            // Log API response
+            let tileKeys = tiles.map(\.key).joined(separator: ", ")
+            let secs = String(format: "%.3f", elapsed.timeInterval)
+            if let u = result.usage {
+                Self.logger.info("""
+                generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] model=\(u.model) \
+                sentence=\"\(result.text)\" hasAudio=\(result.audioData != nil) \
+                tokens(total=\(u.totalTokens) prompt=\(u.promptTokens) completion=\(u.completionTokens)) \
+                prompt_detail(text=\(u.promptTextTokens) audio=\(u.promptAudioTokens) cached=\(u.promptCachedTokens)) \
+                completion_detail(text=\(u.completionTextTokens) audio=\(u.completionAudioTokens))
+                """)
+            } else {
+                Self.logger.info("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] sentence=\"\(result.text)\" hasAudio=\(result.audioData != nil) usage=none")
+            }
+
             // Play audio if available
             if let audioData = result.audioData {
                 audioPlayer.play(data: audioData)
             }
         } catch {
+            let elapsed = apiStart.duration(to: .now)
+            let tileKeys = tiles.map(\.key).joined(separator: ", ")
+            let secs = String(format: "%.3f", elapsed.timeInterval)
+            Self.logger.error("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] error=\"\(error.localizedDescription)\"")
             // On error, only update if tiles are still current
             guard tiles == selectedTiles else {
                 isThinking = false
@@ -206,5 +231,12 @@ final class SentenceEngine {
         if conversationHistory.count > maxConversationHistory {
             conversationHistory.removeFirst()
         }
+    }
+}
+
+private extension Duration {
+    var timeInterval: Double {
+        let c = components
+        return Double(c.seconds) + Double(c.attoseconds) / 1e18
     }
 }
