@@ -11,7 +11,7 @@ protocol SentenceProvider: Sendable {
 
     func generateSentence(
         tiles: [TileSelection],
-        systemPrompt: String,
+        systemPrompt: [PromptMessage],
         conversationContext: [String],
         requestAudio: Bool
     ) async throws -> SentenceResult

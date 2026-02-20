@@ -25,15 +25,15 @@ struct SentenceEngineTests {
     @Test func promptBuilderIncludesGradeLevel() {
         let builder = SentencePromptBuilder()
         let prompt = builder.buildSystemPrompt()
-        #expect(prompt.contains("2nd-grade"))
+        #expect(prompt.contains(where: { $0.content.contains("2nd-grade") }))
     }
 
     @Test func promptBuilderIncludesRepetition() {
         var builder = SentencePromptBuilder()
         builder.repetitionCount = 2
         let prompt = builder.buildSystemPrompt()
-        #expect(prompt.contains("repeated"))
-        #expect(prompt.contains("urgent"))
+        #expect(prompt.contains(where: { $0.content.contains("repeated") }))
+        #expect(prompt.contains(where: { $0.content.contains("urgent") }))
     }
 
     @Test func promptBuilderFormatsUserPrompt() {
@@ -129,7 +129,7 @@ struct SentenceEngineTests {
             TileSelection(key: "mom", value: "mom", wordClass: "people"),
         ]
         let result = try await mock.generateSentence(
-            tiles: tiles, systemPrompt: "", conversationContext: [], requestAudio: false
+            tiles: tiles, systemPrompt: [], conversationContext: [], requestAudio: false
         )
         #expect(result.text == "Mom, I want to eat something!")
     }
@@ -141,7 +141,7 @@ struct SentenceEngineTests {
             TileSelection(key: "fast", value: "fast", wordClass: "describe"),
         ]
         let result = try await mock.generateSentence(
-            tiles: tiles, systemPrompt: "", conversationContext: [], requestAudio: false
+            tiles: tiles, systemPrompt: [], conversationContext: [], requestAudio: false
         )
         #expect(result.text.contains("run"))
         #expect(result.text.contains("fast"))

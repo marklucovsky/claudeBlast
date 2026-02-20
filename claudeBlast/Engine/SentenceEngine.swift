@@ -16,14 +16,18 @@ final class SentenceEngine {
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
 
+    var isPlaying: Bool { audioPlayer.isPlaying }
+
     // MARK: - Configuration
 
-    let provider: any SentenceProvider
+    private(set) var provider: any SentenceProvider
+    var audioEnabled: Bool = true
     let maxTiles: Int = 4
 
     // MARK: - Dependencies
 
     private var cacheManager: SentenceCacheManager?
+    private let audioPlayer = AudioPlayer()
 
     // MARK: - Internal state
 
@@ -43,6 +47,14 @@ final class SentenceEngine {
     /// Must be called after init to wire up SwiftData cache.
     func configure(modelContext: ModelContext) {
         self.cacheManager = SentenceCacheManager(modelContext: modelContext)
+    }
+
+    // MARK: - Provider switching
+
+    func switchProvider(_ newProvider: any SentenceProvider) {
+        clearSelection()
+        conversationHistory.removeAll()
+        provider = newProvider
     }
 
     // MARK: - Tile management
@@ -75,6 +87,7 @@ final class SentenceEngine {
         isWaiting = false
         repetitionCount = 0
         lastTileKey = nil
+        audioPlayer.stop()
     }
 
     // MARK: - Generation pipeline
@@ -83,6 +96,7 @@ final class SentenceEngine {
         debounceTask?.cancel()
         generatedSentence = nil
         isThinking = false
+        audioPlayer.stop()
 
         // Single tile: show display name immediately, no API call
         if selectedTiles.count == 1 {
@@ -121,6 +135,8 @@ final class SentenceEngine {
         isWaiting = false
         isThinking = true
 
+        let requestAudio = audioEnabled && provider.supportsIntegratedAudio
+
         // Cache lookup
         if let cached = cacheManager?.lookup(tiles: tiles) {
             // Staleness guard
@@ -130,6 +146,11 @@ final class SentenceEngine {
             }
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
+            // Play cached audio if available
+            if !cached.audioData.isEmpty,
+               let data = Data(base64Encoded: cached.audioData) {
+                audioPlayer.play(data: data)
+            }
             isThinking = false
             return
         }
@@ -146,11 +167,14 @@ final class SentenceEngine {
                 tiles: tiles,
                 systemPrompt: systemPrompt,
                 conversationContext: conversationHistory + [userPrompt],
-                requestAudio: false
+                requestAudio: requestAudio
             )
 
+            // Encode audio for cache storage
+            let audioBase64 = result.audioData?.base64EncodedString() ?? ""
+
             // Cache the result regardless of staleness
-            cacheManager?.store(tiles: tiles, sentence: result.text)
+            cacheManager?.store(tiles: tiles, sentence: result.text, audioData: audioBase64)
 
             // Staleness guard: only display if tiles haven't changed
             guard tiles == selectedTiles else {
@@ -160,6 +184,11 @@ final class SentenceEngine {
 
             generatedSentence = result.text
             appendToHistory(result.text)
+
+            // Play audio if available
+            if let audioData = result.audioData {
+                audioPlayer.play(data: audioData)
+            }
         } catch {
             // On error, only update if tiles are still current
             guard tiles == selectedTiles else {
