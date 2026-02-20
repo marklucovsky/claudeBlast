@@ -10,10 +10,57 @@ struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
     @Query(sort: \SentenceCache.lastUsed, order: .reverse) var cacheEntries: [SentenceCache]
     @Environment(\.modelContext) private var modelContext
+    @Environment(SentenceEngine.self) private var sentenceEngine
+
+    @AppStorage("openai_api_key") private var apiKey: String = ""
+    @AppStorage("provider_choice") private var providerChoice: String = "openai"
+    @AppStorage("audio_enabled") private var audioEnabled: Bool = true
+
+    private var envKeyOverride: Bool {
+        ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
+    }
 
     var body: some View {
         NavigationStack {
             List {
+                Section("Sentence Provider") {
+                    if envKeyOverride {
+                        LabeledContent("Provider", value: "OpenAI (env override)")
+                        LabeledContent("API Key") {
+                            Text("Set via environment")
+                                .foregroundStyle(.green)
+                        }
+                    } else {
+                        Picker("Provider", selection: $providerChoice) {
+                            Text("OpenAI").tag("openai")
+                            Text("Mock").tag("mock")
+                        }
+
+                        if providerChoice == "openai" {
+                            SecureField("OpenAI API Key", text: $apiKey)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+
+                            if apiKey.isEmpty {
+                                Text("Enter your OpenAI API key to enable AI sentence generation.")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+
+                    LabeledContent("Active Provider", value: sentenceEngine.provider.displayName)
+                    if sentenceEngine.provider.supportsIntegratedAudio {
+                        Toggle("Audio", isOn: $audioEnabled)
+                    } else {
+                        LabeledContent("Audio", value: "Not supported")
+                    }
+                }
+                .onChange(of: providerChoice) { applyProvider() }
+                .onChange(of: apiKey) { applyProvider() }
+                .onChange(of: audioEnabled) { sentenceEngine.audioEnabled = audioEnabled }
+                .onAppear { sentenceEngine.audioEnabled = audioEnabled }
+
                 Section("Scenes") {
                     ForEach(scenes) { scene in
                         SceneRow(scene: scene) {
@@ -91,6 +138,17 @@ struct AdminView: View {
         for entry in cacheEntries {
             modelContext.delete(entry)
         }
+    }
+
+    private func applyProvider() {
+        guard !envKeyOverride else { return }
+        let newProvider: any SentenceProvider
+        if providerChoice == "openai", !apiKey.isEmpty {
+            newProvider = OpenAISentenceProvider(apiKey: apiKey)
+        } else {
+            newProvider = MockSentenceProvider()
+        }
+        sentenceEngine.switchProvider(newProvider)
     }
 
     private func createSampleScene() {
