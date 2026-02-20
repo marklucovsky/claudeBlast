@@ -92,6 +92,22 @@ final class SentenceEngine {
         audioPlayer.stop()
     }
 
+    // MARK: - Replay
+
+    var canReplay: Bool {
+        selectedTiles.count >= 2 && !isThinking && generatedSentence != nil
+    }
+
+    func replay() {
+        guard canReplay else { return }
+        repetitionCount += 1
+        let tilesSnapshot = selectedTiles
+        let repetition = repetitionCount
+        Task {
+            await generate(tiles: tilesSnapshot, repetition: repetition)
+        }
+    }
+
     // MARK: - Generation pipeline
 
     private func scheduleGeneration() {
@@ -139,8 +155,8 @@ final class SentenceEngine {
 
         let requestAudio = audioEnabled && provider.supportsIntegratedAudio
 
-        // Cache lookup
-        if let cached = cacheManager?.lookup(tiles: tiles) {
+        // Cache lookup (skip for replay/escalation requests)
+        if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles) {
             // Staleness guard
             guard tiles == selectedTiles else {
                 isThinking = false
@@ -179,8 +195,10 @@ final class SentenceEngine {
             // Encode audio for cache storage
             let audioBase64 = result.audioData?.base64EncodedString() ?? ""
 
-            // Cache the result regardless of staleness
-            cacheManager?.store(tiles: tiles, sentence: result.text, audioData: audioBase64)
+            // Cache the result only for first-time (non-replay) requests
+            if repetition == 0 {
+                cacheManager?.store(tiles: tiles, sentence: result.text, audioData: audioBase64)
+            }
 
             // Staleness guard: only display if tiles haven't changed
             guard tiles == selectedTiles else {
