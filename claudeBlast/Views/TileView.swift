@@ -76,12 +76,20 @@ struct TileView: View {
     private func colorForWordClass(_ wordClass: String) -> Color {
         switch wordClass {
         case "actions": return .orange
-        case "descriptions": return .green
+        case "describe": return .green
         case "people": return .purple
-        case "food": return .red
+        case "food", "meals", "fruit", "veggie", "snacks": return .red
         case "places": return .blue
-        case "things": return .teal
+        case "social", "feeling", "question": return .pink
         case "navigation": return .indigo
+        case "drinks": return .cyan
+        case "weather": return Color(red: 0.3, green: 0.6, blue: 0.9)
+        case "colors": return .mint
+        case "shape": return .teal
+        case "body", "health": return Color(red: 0.9, green: 0.5, blue: 0.5)
+        case "toy", "games", "sports": return .yellow
+        case "art": return Color(red: 0.7, green: 0.4, blue: 0.8)
+        case "play": return .yellow
         default: return .gray
         }
     }
