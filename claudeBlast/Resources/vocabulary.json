@@ -12,6 +12,14 @@
     "wordClass": "navigation"
   },
   {
+    "key": "food",
+    "wordClass": "navigation"
+  },
+  {
+    "key": "body_health",
+    "wordClass": "navigation"
+  },
+  {
     "key": "question",
     "wordClass": "question"
   },
