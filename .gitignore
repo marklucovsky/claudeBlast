@@ -7,7 +7,9 @@ DerivedData/
 xcuserdata/
 *.moved-aside
 *.xcscmblueprint
+# Xcode user-specific files / schemes that often contain secrets
 *.xccheckout
+xcshareddata/
 
 # Build products
 build/
