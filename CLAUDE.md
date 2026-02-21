@@ -22,3 +22,5 @@ See `reference/` for the original Blaster models, screenshots, vocabulary, and l
 - SwiftUI + SwiftData. Target iOS 26+.
 - Privacy: no external backend. SwiftData + iCloud only. API calls (OpenAI) are stateless.
 - Never commit API keys or secrets.
+- You commit, I push to GitHub.
+- Always start new features in a feature branch, always off main.
