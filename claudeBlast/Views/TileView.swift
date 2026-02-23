@@ -15,62 +15,60 @@ struct TileView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 6) {
-                tileImage
-                .overlay(alignment: .bottomTrailing) {
-                    if isNavigation {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white, .blue)
-                            .offset(x: 4, y: 4)
-                    }
-                }
+            VStack(spacing: 3) {
+                // Full-bleed square image card
+                tileCard
 
+                // Small label below — the images already carry the word,
+                // so this is a subtle hint rather than the primary label
                 Text(tile.displayName)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.orange.opacity(0.1) : Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        isSelected ? Color.orange : (isNavigation ? Color.blue.opacity(0.4) : Color.clear),
-                        lineWidth: isSelected ? 2.5 : 2
-                    )
-            )
-            .opacity(isSelected ? 0.85 : 1.0)
         }
         .buttonStyle(.plain)
     }
 
     @ViewBuilder
-    private var tileImage: some View {
-        if UIImage(named: tile.bundleImage) != nil {
-            Image(tile.bundleImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        } else {
-            ZStack {
-                Circle()
+    private var tileCard: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if UIImage(named: tile.bundleImage) != nil {
+                Image(tile.bundleImage)
+                    .resizable()
+                    .scaledToFill()
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipped()
+            } else {
+                Rectangle()
                     .fill(colorForWordClass(tile.wordClass))
-                    .frame(width: 64, height: 64)
-                Text(String(tile.displayName.prefix(1)).uppercased())
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        Text(String(tile.displayName.prefix(1)).uppercased())
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                    }
+            }
+
+            if isNavigation {
+                Image(systemName: "arrow.right.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white, .blue)
+                    .padding(4)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(
+                    isSelected ? Color.orange : (isNavigation ? Color.blue.opacity(0.5) : Color.clear),
+                    lineWidth: isSelected ? 3 : 2
+                )
+        )
+        .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+        .opacity(isSelected ? 0.8 : 1.0)
     }
 
     private func colorForWordClass(_ wordClass: String) -> Color {

@@ -7,6 +7,13 @@ import SwiftUI
 import SwiftData
 import os
 
+struct HistoryEntry: Identifiable {
+    let id = UUID()
+    let tiles: [TileSelection]
+    let sentence: String
+    let timestamp: Date
+}
+
 @Observable
 @MainActor
 final class SentenceEngine {
@@ -16,6 +23,7 @@ final class SentenceEngine {
     private(set) var generatedSentence: String?
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
+    private(set) var recentHistory: [HistoryEntry] = []
 
     var isPlaying: Bool { audioPlayer.isPlaying }
 
@@ -34,11 +42,14 @@ final class SentenceEngine {
     // MARK: - Internal state
 
     private var debounceTask: Task<Void, Never>?
+    private var idleTask: Task<Void, Never>?
     private var conversationHistory: [String] = []
     private var repetitionCount: Int = 0
     private var lastTileKey: String?
     private let maxConversationHistory = 5
-    private let debounceDuration: Duration = .seconds(1)
+    private let debounceDuration: Duration = .milliseconds(350)
+    private let idleTimeout: Duration = .seconds(10)
+    private let maxHistory = 10
 
     // MARK: - Init
 
@@ -66,12 +77,14 @@ final class SentenceEngine {
         let selection = TileSelection(from: tile)
         // Prevent duplicate tiles — repetition is handled by the repetition counter
         guard !selectedTiles.contains(where: { $0.key == selection.key }) else { return }
+        idleTask?.cancel()
         selectedTiles.append(selection)
         scheduleGeneration()
     }
 
     func removeTile(at index: Int) {
         guard selectedTiles.indices.contains(index) else { return }
+        idleTask?.cancel()
         selectedTiles.remove(at: index)
         if selectedTiles.isEmpty {
             clearSelection()
@@ -83,6 +96,8 @@ final class SentenceEngine {
     func clearSelection() {
         debounceTask?.cancel()
         debounceTask = nil
+        idleTask?.cancel()
+        idleTask = nil
         selectedTiles.removeAll()
         generatedSentence = nil
         isThinking = false
@@ -100,11 +115,43 @@ final class SentenceEngine {
 
     func replay() {
         guard canReplay else { return }
+        idleTask?.cancel()
         repetitionCount += 1
         let tilesSnapshot = selectedTiles
         let repetition = repetitionCount
         Task {
             await generate(tiles: tilesSnapshot, repetition: repetition)
+        }
+    }
+
+    // MARK: - History
+
+    func replayFromHistory(_ entry: HistoryEntry) {
+        clearSelection()
+        selectedTiles = entry.tiles
+        Task {
+            await generate(tiles: entry.tiles, repetition: 0)
+        }
+    }
+
+    private func recordHistory(tiles: [TileSelection], sentence: String) {
+        recentHistory.removeAll { Set($0.tiles.map(\.key)) == Set(tiles.map(\.key)) }
+        recentHistory.insert(HistoryEntry(tiles: tiles, sentence: sentence, timestamp: .now), at: 0)
+        if recentHistory.count > maxHistory { recentHistory.removeLast() }
+    }
+
+    // MARK: - Idle timer
+
+    func cancelIdleTimer() {
+        idleTask?.cancel()
+        idleTask = nil
+    }
+
+    private func startIdleTimer() {
+        idleTask?.cancel()
+        idleTask = Task {
+            do { try await Task.sleep(for: idleTimeout) } catch { return }
+            clearSelection()
         }
     }
 
@@ -120,6 +167,8 @@ final class SentenceEngine {
         if selectedTiles.count == 1 {
             generatedSentence = selectedTiles[0].value
             isWaiting = false
+            recordHistory(tiles: selectedTiles, sentence: selectedTiles[0].value)
+            // No idle timer — timer only runs after a full generateSentence completes
             return
         }
 
@@ -166,12 +215,14 @@ final class SentenceEngine {
             Self.logger.info("generate: source=cache elapsed=0.000s tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\" hasAudio=\(!cached.audioData.isEmpty)")
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
+            recordHistory(tiles: tiles, sentence: cached.sentence)
             // Play cached audio if available
             if !cached.audioData.isEmpty,
                let data = Data(base64Encoded: cached.audioData) {
                 audioPlayer.play(data: data)
             }
             isThinking = false
+            startIdleTimer()
             return
         }
 
@@ -208,6 +259,7 @@ final class SentenceEngine {
 
             generatedSentence = result.text
             appendToHistory(result.text)
+            recordHistory(tiles: tiles, sentence: result.text)
 
             // Log API response
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
@@ -228,6 +280,8 @@ final class SentenceEngine {
             if let audioData = result.audioData {
                 audioPlayer.play(data: audioData)
             }
+
+            startIdleTimer()
         } catch {
             let elapsed = apiStart.duration(to: .now)
             let tileKeys = tiles.map(\.key).joined(separator: ", ")

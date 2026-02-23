@@ -15,6 +15,7 @@ struct AdminView: View {
     @AppStorage("openai_api_key") private var apiKey: String = ""
     @AppStorage("provider_choice") private var providerChoice: String = "openai"
     @AppStorage("audio_enabled") private var audioEnabled: Bool = true
+    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
 
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
@@ -55,6 +56,7 @@ struct AdminView: View {
                     } else {
                         LabeledContent("Audio", value: "Not supported")
                     }
+                    Toggle("Tile Speech Preview", isOn: $tileSpeechEnabled)
                 }
                 .onChange(of: providerChoice) { applyProvider() }
                 .onChange(of: apiKey) { applyProvider() }
