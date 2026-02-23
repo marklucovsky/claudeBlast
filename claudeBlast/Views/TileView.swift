@@ -34,12 +34,17 @@ struct TileView: View {
     @ViewBuilder
     private var tileCard: some View {
         ZStack(alignment: .bottomTrailing) {
+            // Card background — word-class color at low opacity so the
+            // ARASAAC images have a solid, tinted base instead of transparency.
+            colorForWordClass(tile.wordClass).opacity(0.12)
+                .aspectRatio(1, contentMode: .fit)
+
             if UIImage(named: tile.bundleImage) != nil {
                 Image(tile.bundleImage)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .aspectRatio(1, contentMode: .fit)
-                    .clipped()
+                    .padding(6)
             } else {
                 Rectangle()
                     .fill(colorForWordClass(tile.wordClass))
