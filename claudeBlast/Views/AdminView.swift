@@ -80,6 +80,27 @@ struct AdminView: View {
                     }
                 }
 
+                Section("Session Notes") {
+                    if sentenceEngine.sessionNotes.isEmpty {
+                        Text("Long-press any tile to add a note")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(sentenceEngine.sessionNotes)
+                            .font(.caption.monospaced())
+                        Button {
+                            UIPasteboard.general.string = sentenceEngine.sessionNotes
+                        } label: {
+                            Label("Copy to Clipboard", systemImage: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            sentenceEngine.sessionNotes = ""
+                        } label: {
+                            Label("Clear Notes", systemImage: "trash")
+                        }
+                    }
+                }
+
                 Section("Sentence Cache (\(cacheEntries.count))") {
                     if cacheEntries.isEmpty {
                         Text("No cached sentences")

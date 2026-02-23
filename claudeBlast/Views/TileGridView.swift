@@ -18,6 +18,8 @@ struct TileGridView: View {
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
     @State private var speechSynthesizer = AVSpeechSynthesizer()
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
+    @State private var pendingNote: String = ""
+    @State private var showNoteAlert: Bool = false
 
     private let columns = [GridItem(.adaptive(minimum: 90), spacing: 8)]
 
@@ -76,6 +78,11 @@ struct TileGridView: View {
             currentDisplayPage = 0
             engine.clearSelection()
         }
+        .alert("Add Note", isPresented: $showNoteAlert) {
+            TextField("Note", text: $pendingNote)
+            Button("Add") { engine.appendNote(pendingNote) }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     @ViewBuilder
@@ -102,10 +109,7 @@ struct TileGridView: View {
             ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
                 LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(tiles) { pageTile in
-                        TileView(
-                            pageTile: pageTile,
-                            isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key }
-                        ) { handleTileTap(pageTile) }
+                        tileCellView(for: pageTile)
                     }
                 }
                 .padding()
@@ -145,6 +149,21 @@ struct TileGridView: View {
                 haptic.impactOccurred()
             }
         }
+    }
+
+    @ViewBuilder
+    private func tileCellView(for pageTile: PageTileModel) -> some View {
+        TileView(
+            pageTile: pageTile,
+            isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key }
+        ) { handleTileTap(pageTile) }
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    pendingNote = "\(pageTile.tile.key) [\(pageTile.tile.wordClass)]"
+                    showNoteAlert = true
+                }
+        )
     }
 
     private func handleTileTap(_ pageTile: PageTileModel) {

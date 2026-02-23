@@ -24,8 +24,16 @@ final class SentenceEngine {
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
     private(set) var recentHistory: [HistoryEntry] = []
+    var sessionNotes: String = ""
 
     var isPlaying: Bool { audioPlayer.isPlaying }
+
+    func appendNote(_ note: String) {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if !sessionNotes.isEmpty { sessionNotes += "\n" }
+        sessionNotes += trimmed
+    }
 
     // MARK: - Configuration
 

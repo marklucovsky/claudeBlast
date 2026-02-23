@@ -79,6 +79,34 @@ enum BootstrapLoader {
             )
             defaultScene.pages = allPages
 
+            // "All Tiles (Review)" scene — full vocabulary sorted by word class,
+            // one flat page for image quality review.
+            var wcOrder: [String] = []
+            var wcGroups: [String: [TileModel]] = [:]
+            for tile in allTiles {
+                if wcGroups[tile.wordClass] == nil {
+                    wcOrder.append(tile.wordClass)
+                    wcGroups[tile.wordClass] = []
+                }
+                wcGroups[tile.wordClass]!.append(tile)
+            }
+            let reviewPageTiles: [PageTileModel] = wcOrder.flatMap { wc in
+                (wcGroups[wc] ?? []).map { PageTileModel(tile: $0, link: "", isAudible: true) }
+            }
+            let reviewPage = PageModel.make(
+                displayName: "all_tiles",
+                tiles: reviewPageTiles,
+                tileOrder: reviewPageTiles.map(\.id)
+            )
+            let reviewScene = BlasterScene(
+                name: "All Tiles (Review)",
+                descriptionText: "Full vocabulary by word class — image review",
+                homePageKey: "all_tiles",
+                isDefault: false,
+                isActive: false
+            )
+            reviewScene.pages = [reviewPage]
+
             try context.transaction {
                 for tile in allTiles {
                     context.insert(tile)
@@ -87,6 +115,9 @@ enum BootstrapLoader {
                     context.insert(page)
                 }
                 context.insert(defaultScene)
+                for pt in reviewPageTiles { context.insert(pt) }
+                context.insert(reviewPage)
+                context.insert(reviewScene)
             }
 
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
