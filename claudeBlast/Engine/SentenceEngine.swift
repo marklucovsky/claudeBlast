@@ -56,7 +56,7 @@ final class SentenceEngine {
     private var lastTileKey: String?
     private let maxConversationHistory = 5
     private let debounceDuration: Duration = .milliseconds(350)
-    private let idleTimeout: Duration = .seconds(10)
+    private let idleTimeout: Duration = .seconds(30)
     private let maxHistory = 10
 
     // MARK: - Init

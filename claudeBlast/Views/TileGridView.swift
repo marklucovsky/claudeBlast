@@ -20,8 +20,9 @@ struct TileGridView: View {
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
+    @State private var navigationPath: [String] = []
 
-    private let columns = [GridItem(.adaptive(minimum: 90), spacing: 8)]
+    private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
 
     private var activeScene: BlasterScene? { activeScenes.first }
 
@@ -55,6 +56,8 @@ struct TileGridView: View {
             )
             .padding(.top, 8)
 
+            breadcrumbBar
+
             if let page = currentPage {
                 pagedGrid(for: page)
             } else {
@@ -72,11 +75,22 @@ struct TileGridView: View {
             warmup.volume = 0
             speechSynthesizer.speak(warmup)
             speechSynthesizer.stopSpeaking(at: .immediate)
+            navigationPath = [activeScene?.homePageKey ?? "home"]
         }
         .onChange(of: activeScene?.id) {
             currentPageKey = nil
             currentDisplayPage = 0
+            navigationPath = [activeScene?.homePageKey ?? "home"]
             engine.clearSelection()
+        }
+        .onChange(of: currentPageKey) { _, newKey in
+            currentDisplayPage = 0
+            let pageKey = newKey ?? activeScene?.homePageKey ?? "home"
+            if let idx = navigationPath.firstIndex(of: pageKey) {
+                navigationPath = Array(navigationPath.prefix(idx + 1))
+            } else {
+                navigationPath.append(pageKey)
+            }
         }
         .alert("Add Note", isPresented: $showNoteAlert) {
             TextField("Note", text: $pendingNote)
@@ -86,10 +100,34 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
+    private var breadcrumbBar: some View {
+        #if DEBUG
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(Array(navigationPath.enumerated()), id: \.offset) { idx, segment in
+                    if idx > 0 {
+                        Text("›")
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(segment.replacingOccurrences(of: "_", with: " "))
+                        .fontWeight(idx == navigationPath.count - 1 ? .medium : .regular)
+                        .foregroundStyle(idx == navigationPath.count - 1 ? .primary : .secondary)
+                }
+            }
+            .font(.caption.monospaced())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+        }
+        .background(.regularMaterial)
+        #endif
+    }
+
+    @ViewBuilder
     private func pagedGrid(for page: PageModel) -> some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
-            let chunkedTiles = page.orderedTiles.chunked(into: 24)
+            let count = tilesPerPage(geo: geo, isLandscape: isLandscape)
+            let chunkedTiles = page.orderedTiles.chunked(into: count)
             Group {
                 if isLandscape {
                     landscapeTabView(chunks: chunkedTiles)
@@ -101,6 +139,25 @@ struct TileGridView: View {
                 currentDisplayPage = 0
             }
         }
+    }
+
+    /// Compute how many tiles fit on one page given the available geometry.
+    private func tilesPerPage(geo: GeometryProxy, isLandscape: Bool) -> Int {
+        let hPad: CGFloat = 32   // 16pt padding each side
+        let vPad: CGFloat = 32   // 16pt top + 16pt bottom within each page
+        let spacing: CGFloat = 8
+        let minTile: CGFloat = 72
+        let labelH: CGFloat = 17 // 3pt gap + 11pt font + ~3pt margin
+
+        let availW = geo.size.width - hPad
+        let availH = geo.size.height - vPad
+
+        let cols = max(1, Int((availW + spacing) / (minTile + spacing)))
+        let tileW = (availW - CGFloat(cols - 1) * spacing) / CGFloat(cols)
+        let tileH = tileW + spacing + labelH  // image is 1:1 square
+
+        let rows = max(1, Int((availH + spacing) / (tileH + spacing)))
+        return cols * rows
     }
 
     @ViewBuilder
@@ -126,14 +183,14 @@ struct TileGridView: View {
     @ViewBuilder
     private func portraitScrollView(chunks: [[PageTileModel]], pageHeight: CGFloat) -> some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            // VStack (not Lazy) ensures all page frames are committed upfront,
+            // giving scrollTargetBehavior(.paging) correct snap offsets and
+            // preventing layout artifacts on pages beyond the first.
+            VStack(spacing: 0) {
                 ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(tiles) { pageTile in
-                            TileView(
-                                pageTile: pageTile,
-                                isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key }
-                            ) { handleTileTap(pageTile) }
+                            tileCellView(for: pageTile)
                         }
                     }
                     .padding()
