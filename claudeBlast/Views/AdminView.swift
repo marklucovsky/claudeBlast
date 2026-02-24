@@ -17,6 +17,8 @@ struct AdminView: View {
     @AppStorage("audio_enabled") private var audioEnabled: Bool = true
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
 
+    @State private var navigateToNewScene: BlasterScene?
+
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
     }
@@ -65,8 +67,16 @@ struct AdminView: View {
 
                 Section("Scenes") {
                     ForEach(scenes) { scene in
-                        SceneRow(scene: scene) {
-                            activateScene(scene)
+                        NavigationLink(destination: SceneEditorView(scene: scene)) {
+                            SceneRow(scene: scene) {
+                                activateScene(scene)
+                            }
+                        }
+                        .swipeActions(edge: .leading) {
+                            if !scene.isActive {
+                                Button("Activate") { activateScene(scene) }
+                                    .tint(.green)
+                            }
                         }
                     }
                     .onDelete(perform: deleteScenes)
@@ -74,10 +84,13 @@ struct AdminView: View {
 
                 Section {
                     Button {
-                        createSampleScene()
+                        createNewScene()
                     } label: {
-                        Label("Create Sample Scene", systemImage: "plus.circle")
+                        Label("New Scene", systemImage: "plus.circle")
                     }
+                }
+                .navigationDestination(item: $navigateToNewScene) { scene in
+                    SceneEditorView(scene: scene)
                 }
 
                 Section("Session Notes") {
@@ -174,42 +187,10 @@ struct AdminView: View {
         sentenceEngine.switchProvider(newProvider)
     }
 
-    private func createSampleScene() {
-        let tiles = [
-            TileModel(key: "happy", wordClass: "describe"),
-            TileModel(key: "sad", wordClass: "describe"),
-            TileModel(key: "angry", wordClass: "describe"),
-            TileModel(key: "afraid", wordClass: "describe"),
-            TileModel(key: "tired", wordClass: "describe"),
-            TileModel(key: "hungry", wordClass: "describe"),
-            TileModel(key: "yes", wordClass: "social"),
-            TileModel(key: "no", wordClass: "social"),
-            TileModel(key: "help", wordClass: "actions"),
-            TileModel(key: "stop", wordClass: "actions"),
-            TileModel(key: "more", wordClass: "actions"),
-            TileModel(key: "please", wordClass: "social"),
-        ]
-
-        for tile in tiles {
-            modelContext.insert(tile)
-        }
-
-        let pageTiles = tiles.map { PageTileModel(tile: $0) }
-        let tileOrder = pageTiles.map(\.id)
-        let page = PageModel.make(
-            displayName: "feelings_session",
-            tiles: pageTiles,
-            tileOrder: tileOrder
-        )
-        modelContext.insert(page)
-
-        let scene = BlasterScene(
-            name: "Feelings Session",
-            descriptionText: "Focused emotions vocabulary for therapy",
-            homePageKey: "feelings_session"
-        )
-        scene.pages = [page]
+    private func createNewScene() {
+        let scene = BlasterScene(name: "New Scene")
         modelContext.insert(scene)
+        navigateToNewScene = scene
     }
 }
 
