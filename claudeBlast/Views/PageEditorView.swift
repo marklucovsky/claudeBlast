@@ -10,7 +10,11 @@ struct PageEditorView: View {
     @Bindable var page: PageModel
     let scene: BlasterScene
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.editMode) private var editMode
+
     @State private var isPickingTiles = false
+    @State private var showArrangeGrid = false
+    @State private var editingTile: PageTileModel? = nil
 
     var body: some View {
         Group {
@@ -27,6 +31,11 @@ struct PageEditorView: View {
                 List {
                     ForEach(page.orderedTiles) { pageTile in
                         tileRow(pageTile)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                guard editMode?.wrappedValue != .active else { return }
+                                editingTile = pageTile
+                            }
                     }
                     .onDelete(perform: deleteTiles)
                     .onMove(perform: moveTiles)
@@ -36,17 +45,30 @@ struct PageEditorView: View {
         .navigationTitle(page.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .navigationBarLeading) {
+                EditButton()
+            }
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    showArrangeGrid = true
+                } label: {
+                    Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                }
+                .disabled(page.orderedTiles.count < 2)
+
                 Button { isPickingTiles = true } label: {
                     Image(systemName: "plus")
                 }
             }
-            ToolbarItem(placement: .navigationBarLeading) {
-                EditButton()
-            }
         }
         .sheet(isPresented: $isPickingTiles) {
             TilePickerView(page: page)
+        }
+        .sheet(item: $editingTile) { tile in
+            TilePropertiesSheet(pageTile: tile, scene: scene)
+        }
+        .sheet(isPresented: $showArrangeGrid) {
+            GridArrangeView(page: page)
         }
     }
 
@@ -86,6 +108,13 @@ struct PageEditorView: View {
                     }
                 }
             }
+
+            Spacer()
+            if editMode?.wrappedValue != .active {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -100,5 +129,75 @@ struct PageEditorView: View {
 
     private func moveTiles(from source: IndexSet, to destination: Int) {
         page.tileOrder.move(fromOffsets: source, toOffset: destination)
+    }
+}
+
+// MARK: - Tile Properties Sheet
+
+struct TilePropertiesSheet: View {
+    @Bindable var pageTile: PageTileModel
+    let scene: BlasterScene
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 14) {
+                        Group {
+                            if UIImage(named: pageTile.tile.bundleImage) != nil {
+                                Image(pageTile.tile.bundleImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .padding(4)
+                                    .background(wordClassColor(pageTile.tile.wordClass).opacity(0.12))
+                            } else {
+                                Text(String(pageTile.tile.displayName.prefix(1)).uppercased())
+                                    .font(.title)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(wordClassColor(pageTile.tile.wordClass))
+                            }
+                        }
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pageTile.tile.displayName)
+                                .font(.headline)
+                            Text(pageTile.tile.wordClass)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Behavior") {
+                    Toggle("Add to sentence tray", isOn: $pageTile.isAudible)
+                }
+
+                Section("Navigation") {
+                    Picker("Link to Page", selection: $pageTile.link) {
+                        Text("None").tag("")
+                        ForEach(scene.pages, id: \.displayName) { page in
+                            Text(page.displayName).tag(page.displayName)
+                        }
+                    }
+                    if !pageTile.link.isEmpty {
+                        Text("Tapping this tile navigates to \"\(pageTile.link)\".")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Tile Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
