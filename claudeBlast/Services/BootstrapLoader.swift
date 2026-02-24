@@ -107,6 +107,64 @@ enum BootstrapLoader {
             )
             reviewScene.pages = [reviewPage]
 
+            // "Starter" scene — small people + food vocabulary for quick demos
+            func makePT(_ key: String, link: String = "", audible: Bool = true) -> PageTileModel? {
+                guard let tile = tileLookup[key] else { return nil }
+                return PageTileModel(tile: tile, link: link, isAudible: audible)
+            }
+
+            let starterHomeTiles: [PageTileModel] = [
+                ("people", "starter_people", false),
+                ("eat",    "starter_food",   true),
+                ("drink",  "",               true),
+                ("yes",    "",               true),
+                ("no",     "",               true),
+                ("more",   "",               true),
+                ("want",   "",               true),
+                ("help",   "",               true),
+                ("go",     "",               true),
+                ("good",   "",               true),
+                ("play",   "",               true),
+                ("stop",   "",               true),
+            ].compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
+            let starterHomePage = PageModel.make(
+                displayName: "starter_home",
+                tiles: starterHomeTiles,
+                tileOrder: starterHomeTiles.map(\.id)
+            )
+
+            let starterPeopleTiles: [PageTileModel] = ["mom", "dad", "brother", "sister",
+                "grandma", "grandpa", "friend", "baby",
+                "boy", "girl", "she", "teacher",
+                "family", "people"]
+                .compactMap { makePT($0) }
+            let starterPeoplePage = PageModel.make(
+                displayName: "starter_people",
+                tiles: starterPeopleTiles,
+                tileOrder: starterPeopleTiles.map(\.id)
+            )
+
+            let starterFoodTiles: [PageTileModel] = ["eat", "drink", "apple", "banana",
+                "pizza", "cereal", "crackers", "cookie",
+                "milk", "juice", "water", "snacks",
+                "fruit", "cheese", "grapes", "yogurt"]
+                .compactMap { makePT($0) }
+            let starterFoodPage = PageModel.make(
+                displayName: "starter_food",
+                tiles: starterFoodTiles,
+                tileOrder: starterFoodTiles.map(\.id)
+            )
+
+            let starterScene = BlasterScene(
+                name: "Starter",
+                descriptionText: "People & food — small vocabulary for quick demos",
+                homePageKey: "starter_home",
+                isDefault: false,
+                isActive: false
+            )
+            starterScene.pages = [starterHomePage, starterPeoplePage, starterFoodPage]
+            let starterAllTiles = starterHomeTiles + starterPeopleTiles + starterFoodTiles
+
             try context.transaction {
                 for tile in allTiles {
                     context.insert(tile)
@@ -118,6 +176,11 @@ enum BootstrapLoader {
                 for pt in reviewPageTiles { context.insert(pt) }
                 context.insert(reviewPage)
                 context.insert(reviewScene)
+                for pt in starterAllTiles { context.insert(pt) }
+                context.insert(starterHomePage)
+                context.insert(starterPeoplePage)
+                context.insert(starterFoodPage)
+                context.insert(starterScene)
             }
 
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
