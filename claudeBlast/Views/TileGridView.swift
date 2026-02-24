@@ -83,6 +83,19 @@ struct TileGridView: View {
             navigationPath = [activeScene?.homePageKey ?? "home"]
             engine.clearSelection()
         }
+        .onChange(of: activeScene?.pages.map(\.displayName)) { _, pageNames in
+            // If the current page was deleted or renamed, navigate home
+            guard let pageNames, let key = currentPageKey else { return }
+            if !pageNames.contains(key) {
+                currentPageKey = nil
+                currentDisplayPage = 0
+                navigationPath = [activeScene?.homePageKey ?? ""]
+            }
+        }
+        .onChange(of: currentPage?.tileOrder) { _, _ in
+            // Reset display page position when tile count changes significantly
+            currentDisplayPage = 0
+        }
         .onChange(of: currentPageKey) { _, newKey in
             currentDisplayPage = 0
             let pageKey = newKey ?? activeScene?.homePageKey ?? "home"
