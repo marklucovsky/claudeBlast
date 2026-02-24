@@ -50,31 +50,29 @@ struct SentenceTrayView: View {
                                     onTileTap(index)
                                 } label: {
                                     HStack(spacing: 4) {
-                                        Group {
+                                        ZStack {
+                                            wordClassColor(tile.wordClass).opacity(0.12)
                                             if UIImage(named: tile.key) != nil {
                                                 Image(tile.key)
                                                     .resizable()
                                                     .scaledToFit()
-                                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                                    .padding(2)
                                             } else {
-                                                Circle()
-                                                    .fill(Color.orange)
-                                                    .overlay {
-                                                        Text(String(tile.value.prefix(1)).uppercased())
-                                                            .font(.caption2)
-                                                            .fontWeight(.bold)
-                                                            .foregroundStyle(.white)
-                                                    }
+                                                Text(String(tile.value.prefix(1)).uppercased())
+                                                    .font(.caption2)
+                                                    .fontWeight(.bold)
+                                                    .foregroundStyle(wordClassColor(tile.wordClass))
                                             }
                                         }
                                         .frame(width: 28, height: 28)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
                                         Text(tile.value)
                                             .font(.caption)
                                             .fontWeight(.medium)
                                     }
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
-                                    .background(Capsule().fill(Color.orange.opacity(0.15)))
+                                    .background(Capsule().fill(wordClassColor(tile.wordClass).opacity(0.15)))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -193,6 +191,30 @@ struct SentenceTrayView: View {
     }
 }
 
+// MARK: - Shared helpers
+
+private func wordClassColor(_ wordClass: String) -> Color {
+    switch wordClass {
+    case "actions":                             return .orange
+    case "describe":                            return .green
+    case "people":                              return .purple
+    case "food", "meals", "fruit",
+         "veggie", "snacks":                    return .red
+    case "places":                              return .blue
+    case "social", "feeling", "question":       return .pink
+    case "navigation":                          return .indigo
+    case "drinks":                              return .cyan
+    case "weather":                             return Color(red: 0.3, green: 0.6, blue: 0.9)
+    case "colors":                              return .mint
+    case "shape":                               return .teal
+    case "body", "health":                      return Color(red: 0.9, green: 0.5, blue: 0.5)
+    case "toy", "games", "sports":              return .yellow
+    case "art":                                 return Color(red: 0.7, green: 0.4, blue: 0.8)
+    case "play":                                return .yellow
+    default:                                    return .gray
+    }
+}
+
 // MARK: - TileGridIcon
 
 /// Renders up to 4 tiles as a fixed 2×2 square icon.
@@ -225,40 +247,25 @@ private struct TileGridIcon: View {
     @ViewBuilder
     private func cell(_ tile: TileSelection?) -> some View {
         if let tile {
-            if UIImage(named: tile.key) != nil {
-                Image(tile.key)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: cellSize, height: cellSize)
-                    .clipped()
-            } else {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(wordClassColor(tile.wordClass))
-                    .frame(width: cellSize, height: cellSize)
-                    .overlay {
-                        Text(String(tile.value.prefix(1)).uppercased())
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
+            ZStack {
+                wordClassColor(tile.wordClass).opacity(0.12)
+                if UIImage(named: tile.key) != nil {
+                    Image(tile.key)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(2)
+                } else {
+                    wordClassColor(tile.wordClass)
+                    Text(String(tile.value.prefix(1)).uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
+            .frame(width: cellSize, height: cellSize)
         } else {
             Color(.secondarySystemBackground)
                 .frame(width: cellSize, height: cellSize)
         }
     }
 
-    private func wordClassColor(_ wordClass: String) -> Color {
-        switch wordClass {
-        case "actions":                          return .orange
-        case "describe":                         return .green
-        case "people":                           return .purple
-        case "food", "meals", "fruit",
-             "veggie", "snacks":                 return .red
-        case "places":                           return .blue
-        case "social", "feeling", "question":   return .pink
-        case "navigation":                       return .indigo
-        case "drinks":                           return .cyan
-        default:                                 return .gray
-        }
-    }
 }
