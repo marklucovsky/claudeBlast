@@ -23,86 +23,104 @@
     "key": "question",
     "wordClass": "question"
   },
-  
   {
-    "key": "Snack",
-    "wordClass": "food"
+    "key": "snack",
+    "wordClass": "food",
+    "bundleImage": "snack"
   },
   {
-    "key": "Popsicle",
-    "wordClass": "food"
+    "key": "popsicle",
+    "wordClass": "food",
+    "bundleImage": "popsicle"
   },
   {
-    "key": "Graham_Cracker",
-    "wordClass": "food"
+    "key": "graham_cracker",
+    "wordClass": "food",
+    "bundleImage": "graham_cracker"
   },
   {
-    "key": "Goldfish_Cracker",
-    "wordClass": "food"
+    "key": "goldfish_cracker",
+    "wordClass": "food",
+    "bundleImage": "goldfish_cracker"
   },
   {
-    "key": "Banana",
-    "wordClass": "food"
+    "key": "banana",
+    "wordClass": "food",
+    "bundleImage": "banana"
   },
   {
-    "key": "Snack_Bar",
-    "wordClass": "food"
+    "key": "snack_bar",
+    "wordClass": "food",
+    "bundleImage": "snack_bar"
   },
   {
-    "key": "Pretzel",
-    "wordClass": "food"
+    "key": "pretzel",
+    "wordClass": "food",
+    "bundleImage": "pretzel"
   },
   {
-    "key": "Water",
-    "wordClass": "food"
+    "key": "water",
+    "wordClass": "food",
+    "bundleImage": "water"
   },
   {
-    "key": "Tired",
-    "wordClass": "feeling"
+    "key": "tired",
+    "wordClass": "feeling",
+    "bundleImage": "tired"
   },
   {
-    "key": "Happy",
-    "wordClass": "feeling"
+    "key": "happy",
+    "wordClass": "feeling",
+    "bundleImage": "happy"
   },
   {
-    "key": "Hungry",
-    "wordClass": "food"
+    "key": "hungry",
+    "wordClass": "food",
+    "bundleImage": "hungry"
   },
   {
-    "key": "Thirsty",
-    "wordClass": "food"
+    "key": "thirsty",
+    "wordClass": "food",
+    "bundleImage": "thirsty"
   },
   {
-    "key": "Play",
-    "wordClass": "play"
+    "key": "play",
+    "wordClass": "play",
+    "bundleImage": "play"
   },
   {
-    "key": "Walk",
-    "wordClass": "play"
+    "key": "walk",
+    "wordClass": "play",
+    "bundleImage": "walk"
   },
   {
-    "key": "Slide",
-    "wordClass": "play"
+    "key": "slide",
+    "wordClass": "play",
+    "bundleImage": "slide"
   },
   {
-    "key": "Outside",
-    "wordClass": "play"
+    "key": "outside",
+    "wordClass": "play",
+    "bundleImage": "outside"
   },
   {
     "key": "playground",
     "wordClass": "play"
   },
   {
-    "key": "Soccer",
-    "wordClass": "play"
+    "key": "soccer",
+    "wordClass": "play",
+    "bundleImage": "soccer"
   },
   {
-    "key": "Basketball",
-    "wordClass": "play"
+    "key": "basketball",
+    "wordClass": "play",
+    "bundleImage": "basketball"
   },
   {
-    "key": "Tricycle",
-    "wordClass": "play"
+    "key": "tricycle",
+    "wordClass": "play",
+    "bundleImage": "tricycle"
   },
   {
     "key": "friend",
