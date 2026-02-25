@@ -9,12 +9,14 @@ import SwiftData
 struct PageEditorView: View {
     @Bindable var page: PageModel
     let scene: BlasterScene
+    var autoSuggestGoal: String = ""
     @Environment(\.modelContext) private var modelContext
     @Environment(\.editMode) private var editMode
 
     @State private var isPickingTiles = false
     @State private var showArrangeGrid = false
     @State private var editingTile: PageTileModel? = nil
+    @State private var pendingPickerGoal: String = ""
 
     var body: some View {
         Group {
@@ -61,8 +63,13 @@ struct PageEditorView: View {
                 }
             }
         }
-        .sheet(isPresented: $isPickingTiles) {
-            TilePickerView(page: page)
+        .sheet(isPresented: $isPickingTiles, onDismiss: { pendingPickerGoal = "" }) {
+            TilePickerView(page: page, initialGoal: pendingPickerGoal)
+        }
+        .task {
+            guard !autoSuggestGoal.isEmpty else { return }
+            pendingPickerGoal = autoSuggestGoal
+            isPickingTiles = true
         }
         .sheet(item: $editingTile) { tile in
             TilePropertiesSheet(pageTile: tile, scene: scene)

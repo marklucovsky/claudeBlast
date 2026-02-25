@@ -18,6 +18,8 @@ struct AdminView: View {
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
 
     @State private var navigateToNewScene: BlasterScene?
+    @State private var isCreatingScene = false
+    @State private var newSceneFirstPageGoal = ""
 
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
@@ -84,13 +86,18 @@ struct AdminView: View {
 
                 Section {
                     Button {
-                        createNewScene()
+                        isCreatingScene = true
                     } label: {
                         Label("New Scene", systemImage: "plus.circle")
                     }
                 }
                 .navigationDestination(item: $navigateToNewScene) { scene in
-                    SceneEditorView(scene: scene)
+                    SceneEditorView(scene: scene, initialPageGoal: newSceneFirstPageGoal)
+                }
+                .sheet(isPresented: $isCreatingScene) {
+                    NewSceneSheet { name, goal in
+                        createNewScene(name: name, goal: goal)
+                    }
                 }
 
                 Section("Session Notes") {
@@ -187,9 +194,16 @@ struct AdminView: View {
         sentenceEngine.switchProvider(newProvider)
     }
 
-    private func createNewScene() {
-        let scene = BlasterScene(name: "New Scene")
+    private func createNewScene(name: String, goal: String) {
+        let scene = BlasterScene(name: name.isEmpty ? "New Scene" : name)
         modelContext.insert(scene)
+        if !goal.isEmpty {
+            let home = PageModel(displayName: "home")
+            modelContext.insert(home)
+            scene.pages.append(home)
+            scene.homePageKey = "home"
+        }
+        newSceneFirstPageGoal = goal
         navigateToNewScene = scene
     }
 }
@@ -239,5 +253,49 @@ struct SceneRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - New Scene Sheet
+
+private struct NewSceneSheet: View {
+    let onCreate: (String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var sceneName = ""
+    @State private var goal = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Scene") {
+                    TextField("Scene name", text: $sceneName)
+                }
+                Section {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.secondary)
+                        TextField("Suggest tiles for home page… (optional)", text: $goal)
+                    }
+                } header: {
+                    Text("AI Tile Suggestion")
+                } footer: {
+                    Text("AI will pre-select tiles for this scene's home page.")
+                }
+            }
+            .navigationTitle("New Scene")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        onCreate(sceneName, goal)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
