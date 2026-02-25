@@ -8,6 +8,7 @@ import SwiftData
 
 struct TilePickerView: View {
     let page: PageModel
+    var initialGoal: String = ""
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -69,6 +70,11 @@ struct TilePickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search tiles")
+            .task {
+                guard !initialGoal.isEmpty else { return }
+                suggestionGoal = initialGoal
+                suggestTiles()
+            }
             .navigationTitle("Add Tiles")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -213,7 +219,7 @@ struct TilePickerView: View {
         Task {
             do {
                 let keys = try await service.suggest(goal: goal, allTiles: tiles)
-                selectedKeys = selectedKeys.union(keys)
+                selectedKeys = selectedKeys.union(keys.subtracting(existingKeys))
                 // Clear the word class filter so suggested tiles are all visible
                 selectedWordClass = "all"
             } catch {
@@ -224,7 +230,7 @@ struct TilePickerView: View {
     }
 
     private func addSelectedTiles() {
-        let tilesToAdd = allTiles.filter { selectedKeys.contains($0.key) }
+        let tilesToAdd = allTiles.filter { selectedKeys.contains($0.key) && !existingKeys.contains($0.key) }
         for tile in tilesToAdd {
             let pt = PageTileModel(tile: tile, link: "", isAudible: true)
             modelContext.insert(pt)

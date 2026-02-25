@@ -8,9 +8,11 @@ import SwiftData
 
 struct SceneEditorView: View {
     @Bindable var scene: BlasterScene
+    var initialPageGoal: String = ""
     @Environment(\.modelContext) private var modelContext
     @State private var isAddingPage = false
-    @State private var newPageName = ""
+    @State private var navigateToNewPage: PageModel? = nil
+    @State private var navigateToNewPageGoal: String = ""
 
     var body: some View {
         List {
@@ -67,30 +69,23 @@ struct SceneEditorView: View {
         }
         .navigationTitle(scene.name.isEmpty ? "New Scene" : scene.name)
         .navigationBarTitleDisplayMode(.inline)
-        .alert("New Page", isPresented: $isAddingPage) {
-            TextField("Page name", text: $newPageName)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-            Button("Create") { addPage() }
-            Button("Cancel", role: .cancel) { newPageName = "" }
-        } message: {
-            Text("Enter a name for the new page (e.g. \"my_words\").")
+        .sheet(isPresented: $isAddingPage) {
+            AddPageSheet(scene: scene) { page, goal in
+                navigateToNewPageGoal = goal
+                navigateToNewPage = page
+            }
         }
-    }
-
-    private func addPage() {
-        let key = newPageName
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
-        guard !key.isEmpty else { newPageName = ""; return }
-        let page = PageModel(displayName: key)
-        modelContext.insert(page)
-        scene.pages.append(page)
-        if scene.homePageKey.isEmpty {
-            scene.homePageKey = key
+        .navigationDestination(item: $navigateToNewPage) { page in
+            PageEditorView(page: page, scene: scene, autoSuggestGoal: navigateToNewPageGoal)
         }
-        newPageName = ""
+        .task {
+            guard !initialPageGoal.isEmpty,
+                  let home = scene.pages.first(where: { $0.displayName == scene.homePageKey }),
+                  navigateToNewPage == nil
+            else { return }
+            navigateToNewPageGoal = initialPageGoal
+            navigateToNewPage = home
+        }
     }
 
     private func deletePages(at offsets: IndexSet) {
@@ -102,5 +97,65 @@ struct SceneEditorView: View {
         if !scene.pages.contains(where: { $0.displayName == scene.homePageKey }) {
             scene.homePageKey = scene.pages.first?.displayName ?? ""
         }
+    }
+}
+
+// MARK: - Add Page Sheet
+
+private struct AddPageSheet: View {
+    let scene: BlasterScene
+    let onCreate: (PageModel, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var pageName = ""
+    @State private var goal = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Page Name") {
+                    TextField("e.g. emotions", text: $pageName)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+                Section {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.secondary)
+                        TextField("Suggest tiles for… (optional)", text: $goal)
+                    }
+                } header: {
+                    Text("AI Tile Suggestion")
+                } footer: {
+                    Text("AI will pre-select tiles when the tile picker opens.")
+                }
+            }
+            .navigationTitle("New Page")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") { createAndClose() }
+                        .disabled(pageName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func createAndClose() {
+        let key = pageName
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "_")
+        guard !key.isEmpty else { return }
+        let page = PageModel(displayName: key)
+        modelContext.insert(page)
+        scene.pages.append(page)
+        if scene.homePageKey.isEmpty { scene.homePageKey = key }
+        onCreate(page, goal)
+        dismiss()
     }
 }
