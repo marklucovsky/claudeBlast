@@ -16,6 +16,14 @@ struct TilePickerView: View {
     @State private var selectedKeys: Set<String> = []
     @State private var searchText = ""
     @State private var selectedWordClass = "all"
+    @State private var suggestionGoal = ""
+    @State private var isSuggesting = false
+    @State private var suggestionError: String? = nil
+
+    @AppStorage("openai_api_key") private var storedAPIKey: String = ""
+    private var apiKey: String {
+        ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? storedAPIKey
+    }
 
     private var existingKeys: Set<String> {
         Set(page.tiles.map { $0.tile.key })
@@ -40,6 +48,10 @@ struct TilePickerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
+                suggestionBar
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+
                 wordClassFilter
                     .padding(.vertical, 8)
 
@@ -149,6 +161,66 @@ struct TilePickerView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var suggestionBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("Suggest tiles for… (e.g. emotions for a 6-year-old)", text: $suggestionGoal)
+                    .font(.subheadline)
+                    .submitLabel(.go)
+                    .onSubmit { suggestTiles() }
+                    .disabled(isSuggesting)
+
+                if isSuggesting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Go") { suggestTiles() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(suggestionGoal.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || apiKey.isEmpty)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+
+            if let error = suggestionError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            if apiKey.isEmpty {
+                Text("Add an OpenAI API key in Admin to enable AI suggestions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func suggestTiles() {
+        let goal = suggestionGoal.trimmingCharacters(in: .whitespaces)
+        guard !goal.isEmpty, !apiKey.isEmpty else { return }
+        isSuggesting = true
+        suggestionError = nil
+        let service = TileSuggestionService(apiKey: apiKey)
+        let tiles = allTiles  // capture before async hop
+        Task {
+            do {
+                let keys = try await service.suggest(goal: goal, allTiles: tiles)
+                selectedKeys = selectedKeys.union(keys)
+                // Clear the word class filter so suggested tiles are all visible
+                selectedWordClass = "all"
+            } catch {
+                suggestionError = error.localizedDescription
+            }
+            isSuggesting = false
+        }
     }
 
     private func addSelectedTiles() {
