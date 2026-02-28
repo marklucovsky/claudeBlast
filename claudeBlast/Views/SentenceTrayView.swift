@@ -193,7 +193,7 @@ struct SentenceTrayView: View {
 
 // MARK: - Shared helpers
 
-private func wordClassColor(_ wordClass: String) -> Color {
+func wordClassColor(_ wordClass: String) -> Color {
     switch wordClass {
     case "actions":                             return .orange
     case "describe":                            return .green
