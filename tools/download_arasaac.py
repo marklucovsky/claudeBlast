@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Mark Lucovsky
 """
 Phase 1: Download ARASAAC pictograms for all Blaster vocabulary tiles.
 

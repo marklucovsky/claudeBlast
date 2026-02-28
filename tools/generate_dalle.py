@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Mark Lucovsky
 """
 Phase 2: Generate custom tile artwork via DALL-E 3 for all Blaster vocabulary tiles.
 
