@@ -32,12 +32,14 @@ enum BootstrapLoader {
         do {
             let tilesData = try Data(contentsOf: vocabularyUrl)
             let codableTiles = try JSONDecoder().decode([TileModelCodable].self, from: tilesData)
-            let allTiles = codableTiles.map { TileModel(from: $0) }
+            // Deduplicate by key at load time (CloudKit does not support @Attribute(.unique))
+            var seenTileKeys = Set<String>()
+            let allTiles: [TileModel] = codableTiles.compactMap { codable in
+                guard seenTileKeys.insert(codable.key).inserted else { return nil }
+                return TileModel(from: codable)
+            }
 
-            let tileLookup = Dictionary(
-                allTiles.map { ($0.key, $0) },
-                uniquingKeysWith: { first, _ in first }
-            )
+            let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
 
             let pagesData = try Data(contentsOf: pagesUrl)
             let codablePages = try JSONDecoder().decode([PageModelCodable].self, from: pagesData)

@@ -44,11 +44,6 @@
     "bundleImage": "goldfish_cracker"
   },
   {
-    "key": "banana",
-    "wordClass": "food",
-    "bundleImage": "banana"
-  },
-  {
     "key": "snack_bar",
     "wordClass": "food",
     "bundleImage": "snack_bar"
@@ -57,11 +52,6 @@
     "key": "pretzel",
     "wordClass": "food",
     "bundleImage": "pretzel"
-  },
-  {
-    "key": "water",
-    "wordClass": "food",
-    "bundleImage": "water"
   },
   {
     "key": "tired",
@@ -74,43 +64,9 @@
     "bundleImage": "happy"
   },
   {
-    "key": "hungry",
-    "wordClass": "food",
-    "bundleImage": "hungry"
-  },
-  {
-    "key": "thirsty",
-    "wordClass": "food",
-    "bundleImage": "thirsty"
-  },
-  {
-    "key": "play",
-    "wordClass": "play",
-    "bundleImage": "play"
-  },
-  {
-    "key": "walk",
-    "wordClass": "play",
-    "bundleImage": "walk"
-  },
-  {
     "key": "slide",
     "wordClass": "play",
     "bundleImage": "slide"
-  },
-  {
-    "key": "outside",
-    "wordClass": "play",
-    "bundleImage": "outside"
-  },
-  {
-    "key": "playground",
-    "wordClass": "play"
-  },
-  {
-    "key": "soccer",
-    "wordClass": "play",
-    "bundleImage": "soccer"
   },
   {
     "key": "basketball",
@@ -708,10 +664,6 @@
   },
   {
     "key": "thirsty",
-    "wordClass": "social"
-  },
-  {
-    "key": "tired",
     "wordClass": "social"
   },
   {
@@ -1452,10 +1404,6 @@
   },
   {
     "key": "dirty",
-    "wordClass": "describe"
-  },
-  {
-    "key": "happy",
     "wordClass": "describe"
   },
   {
