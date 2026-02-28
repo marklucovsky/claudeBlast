@@ -56,8 +56,6 @@ struct TileGridView: View {
             )
             .padding(.top, 8)
 
-            breadcrumbBar
-
             if let page = currentPage {
                 pagedGrid(for: page)
             } else {
@@ -67,6 +65,9 @@ struct TileGridView: View {
                     description: Text("No scene is currently active.")
                 )
             }
+
+            breadcrumbBar
+                .animation(.easeInOut(duration: 0.2), value: navigationPath.count > 1)
         }
         .task {
             haptic.prepare()
@@ -82,6 +83,19 @@ struct TileGridView: View {
             currentDisplayPage = 0
             navigationPath = [activeScene?.homePageKey ?? "home"]
             engine.clearSelection()
+        }
+        .onChange(of: activeScene?.pages.map(\.displayName)) { _, pageNames in
+            // If the current page was deleted or renamed, navigate home
+            guard let pageNames, let key = currentPageKey else { return }
+            if !pageNames.contains(key) {
+                currentPageKey = nil
+                currentDisplayPage = 0
+                navigationPath = [activeScene?.homePageKey ?? ""]
+            }
+        }
+        .onChange(of: currentPage?.tileOrder) { _, _ in
+            // Reset display page position when tile count changes significantly
+            currentDisplayPage = 0
         }
         .onChange(of: currentPageKey) { _, newKey in
             currentDisplayPage = 0
@@ -99,27 +113,75 @@ struct TileGridView: View {
         }
     }
 
-    @ViewBuilder
+    // Precomputed breadcrumb steps — avoids @ViewBuilder let-binding type-inference pitfalls.
+    private struct BreadcrumbStep: Identifiable {
+        let id: String        // unique per render (index + segment)
+        let segment: String
+        let isFirst: Bool
+        let isLast: Bool
+        let label: String
+    }
+
+    private var breadcrumbSteps: [BreadcrumbStep] {
+        navigationPath.enumerated().map { i, seg in
+            BreadcrumbStep(
+                id: "\(i)-\(seg)",
+                segment: seg,
+                isFirst: i == 0,
+                isLast: i == navigationPath.count - 1,
+                label: i == 0 ? "Home" : seg.replacingOccurrences(of: "_", with: " ").capitalized
+            )
+        }
+    }
+
+    // Navigation breadcrumb bar — shown only when one level below home.
+    // Tapping any non-current segment navigates back to it.
     private var breadcrumbBar: some View {
-        #if DEBUG
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(Array(navigationPath.enumerated()), id: \.offset) { idx, segment in
-                    if idx > 0 {
-                        Text("›")
-                            .foregroundStyle(.tertiary)
-                    }
-                    Text(segment.replacingOccurrences(of: "_", with: " "))
-                        .fontWeight(idx == navigationPath.count - 1 ? .medium : .regular)
-                        .foregroundStyle(idx == navigationPath.count - 1 ? .primary : .secondary)
+            HStack(spacing: 0) {
+                ForEach(breadcrumbSteps, id: \.id) { step in
+                    breadcrumbStepView(step)
                 }
             }
-            .font(.caption.monospaced())
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 16)
         }
-        .background(.regularMaterial)
-        #endif
+        .frame(height: 30)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { Divider() }
+        .opacity(navigationPath.count > 1 ? 1 : 0)
+    }
+
+    @ViewBuilder
+    private func breadcrumbStepView(_ step: BreadcrumbStep) -> some View {
+        if !step.isFirst {
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 5)
+        }
+        if step.isLast {
+            Text(step.label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+        } else {
+            Button {
+                currentPageKey = step.isFirst ? nil : step.segment
+            } label: {
+                HStack(spacing: 3) {
+                    if step.isFirst {
+                        Image(systemName: "house.fill")
+                            .font(.caption2)
+                    }
+                    Text(step.label)
+                        .font(.caption)
+                }
+                .foregroundStyle(.tertiary)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     @ViewBuilder
