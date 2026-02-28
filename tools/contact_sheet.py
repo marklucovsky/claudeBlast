@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Mark Lucovsky
 """
 Generate a contact sheet (grid of tile thumbnails) for visual review.
 
