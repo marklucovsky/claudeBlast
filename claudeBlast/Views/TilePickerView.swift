@@ -8,7 +8,7 @@ import SwiftData
 
 struct TilePickerView: View {
     let page: PageModel
-    var initialGoal: String = ""
+    var initialSelectedKeys: Set<String> = []
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -70,10 +70,10 @@ struct TilePickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search tiles")
-            .task {
-                guard !initialGoal.isEmpty else { return }
-                suggestionGoal = initialGoal
-                suggestTiles()
+            .onAppear {
+                if !initialSelectedKeys.isEmpty {
+                    selectedKeys = initialSelectedKeys.subtracting(existingKeys)
+                }
             }
             .navigationTitle("Add Tiles")
             .navigationBarTitleDisplayMode(.inline)
@@ -230,7 +230,10 @@ struct TilePickerView: View {
     }
 
     private func addSelectedTiles() {
-        let tilesToAdd = allTiles.filter { selectedKeys.contains($0.key) && !existingKeys.contains($0.key) }
+        var seenKeys = Set<String>()
+        let tilesToAdd = allTiles.filter {
+            selectedKeys.contains($0.key) && !existingKeys.contains($0.key) && seenKeys.insert($0.key).inserted
+        }
         for tile in tilesToAdd {
             let pt = PageTileModel(tile: tile, link: "", isAudible: true)
             modelContext.insert(pt)
