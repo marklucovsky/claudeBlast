@@ -37,6 +37,9 @@ fastlane/test_output
 # Claude Code local settings
 .claude/settings.local.json
 
+# Python
+tools/__pycache__/
+
 # Secrets / API keys
 .env
 *.secret

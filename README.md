@@ -8,7 +8,12 @@ Blaster lets children communicate by tapping word tiles on a visual grid. After 
 
 ## Status
 
-Early development. Data is currently held in memory only and reloaded from bundled vocabulary on every launch. The app is not yet on the App Store.
+> **Alpha — data does not persist between launches.**
+> The app currently stores all data in memory only (`isStoredInMemoryOnly: true`). Every time you launch the app, SwiftData reloads from the bundled vocabulary files — any scenes, pages, or tiles you create in the session are lost on exit. This is intentional for now; persistent storage + iCloud sync is the next planned milestone.
+>
+> Do not use this build to communicate with a child who depends on their communication setup being stable. This is a development preview.
+
+The app is not yet on the App Store.
 
 ## Requirements
 
