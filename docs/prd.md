@@ -4,7 +4,7 @@
 ### Mission
 Redefine communication for non-verbal children. Open source (Apache license) to give back to the community.
 
-Personal motivation: Built for a granddaughter who benefits from AAC technology. These devices are life-changing.
+Personal motivation: Built after seening how non-verbal granddaughter benefits from AAC technology. These devices are life-changing.
 
 ---
 

@@ -4,7 +4,7 @@
 
 ## What it does
 
-Blaster lets children communicate by tapping word tiles on a visual grid. After selecting up to four tiles, an AI model (OpenAI GPT-4o) constructs an age-appropriate sentence and speaks it aloud. The app is designed for iPad and iPhone, with a child-facing tile grid and a parent/caregiver admin panel.
+Blaster lets children communicate by tapping word tiles on a visual grid. After selecting up to four tiles, an AI model (e.g., OpenAI GPT-4o) constructs an age-appropriate sentence and speaks it aloud. The app is designed for iPad and iPhone, with a child-facing tile grid and a parent/caregiver admin panel.
 
 ## Status
 
@@ -17,7 +17,7 @@ The app is not yet on the App Store.
 
 ## Requirements
 
-- Xcode 16+
+- Xcode 16+ (26.3 preferred if you want to use in-Xcode Claude)
 - iOS 26 Simulator (iPad Pro 11-inch M5 recommended) or a physical device running iOS 26
 - OpenAI API key (optional — a mock provider is available for development without a key)
 
@@ -50,4 +50,4 @@ Tile images have separate licensing terms as described above and in [NOTICE](NOT
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome once the app's initial feature list are MVP complete. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
