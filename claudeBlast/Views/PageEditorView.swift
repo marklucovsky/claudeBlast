@@ -134,10 +134,12 @@ struct PageEditorView: View {
             page.removeTile(pt)
             modelContext.delete(pt)
         }
+        try? modelContext.save()
     }
 
     private func moveTiles(from source: IndexSet, to destination: Int) {
         page.tileOrder.move(fromOffsets: source, toOffset: destination)
+        try? modelContext.save()
     }
 }
 

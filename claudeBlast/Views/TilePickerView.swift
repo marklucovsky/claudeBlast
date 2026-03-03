@@ -242,5 +242,6 @@ struct TilePickerView: View {
             page.tiles.append(pt)
             page.tileOrder.append(pt.id)
         }
+        try? modelContext.save()
     }
 }

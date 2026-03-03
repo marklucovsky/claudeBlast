@@ -16,6 +16,14 @@ enum BootstrapLoader {
         let duration: TimeInterval
     }
 
+    static func needsBootstrap() -> Bool {
+        UserDefaults.standard.integer(forKey: AppSettingsKey.bootstrapVersion) < currentBootstrapVersion
+    }
+
+    static func markBootstrapComplete() {
+        UserDefaults.standard.set(currentBootstrapVersion, forKey: AppSettingsKey.bootstrapVersion)
+    }
+
     static func loadDefaultVocabulary(context: ModelContext) -> LoadResult {
         let startTime = CFAbsoluteTimeGetCurrent()
 

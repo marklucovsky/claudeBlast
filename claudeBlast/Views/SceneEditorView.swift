@@ -96,6 +96,7 @@ struct SceneEditorView: View {
         if !scene.pages.contains(where: { $0.displayName == scene.homePageKey }) {
             scene.homePageKey = scene.pages.first?.displayName ?? ""
         }
+        try? modelContext.save()
     }
 }
 
