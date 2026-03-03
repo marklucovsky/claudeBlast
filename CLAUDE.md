@@ -110,9 +110,15 @@ home(35), people(20), social(36), actions(108), describe(114), food(48), drinks(
 No next_page/previous_page tiles — app's built-in grid paging handles overflow.
 
 ### Branches
-- `main` — stable
-- `scene-editor` — next feature branch (scene & page editor)
-- Feature work: always branch off main
+**RULE: every feature or fix gets its own branch off main. Create the branch before writing any code. No exceptions.**
+
+```
+git checkout main && git checkout -b feature/<name>
+```
+
+- `main` — stable, direct commits only for trivial single-file fixes
+- `feature/local-tts` — replace audio model with gpt-4o-mini + AVSpeechSynthesizer (in progress)
+- `scene-editor` — scene & page editor (next after local-tts)
 
 ### Known deferred items
 - `isStoredInMemoryOnly: true` — intentional, persistence is next planned chunk
