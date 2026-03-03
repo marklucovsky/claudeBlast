@@ -16,10 +16,16 @@ struct AdminView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SentenceEngine.self) private var sentenceEngine
 
-    @AppStorage("openai_api_key") private var apiKey: String = ""
-    @AppStorage("provider_choice") private var providerChoice: String = "openai"
-    @AppStorage("audio_enabled") private var audioEnabled: Bool = true
-    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
+    @AppStorage(AppSettingsKey.openaiApiKey) private var apiKey: String = ""
+    @AppStorage(AppSettingsKey.providerChoice) private var providerChoice: String = "openai"
+    @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
+    @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
+
+    #if DEBUG
+    @AppStorage(AppSettingsKey.icloudEnabled) private var icloudEnabled: Bool = false
+    @State private var showResetConfirmation = false
+    @State private var isResetting = false
+    #endif
 
     @State private var navigateToNewScene: BlasterScene?
     @State private var isCreatingScene = false
@@ -69,6 +75,17 @@ struct AdminView: View {
                 .onChange(of: apiKey) { applyProvider() }
                 .onChange(of: audioEnabled) { sentenceEngine.audioEnabled = audioEnabled }
                 .onAppear { sentenceEngine.audioEnabled = audioEnabled }
+
+                #if DEBUG
+                Section("Storage") {
+                    Toggle("iCloud Sync", isOn: $icloudEnabled)
+                    if icloudEnabled {
+                        Text("iCloud sync takes effect on next launch.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                #endif
 
                 Section("Scenes") {
                     ForEach(scenes) { scene in
@@ -152,6 +169,28 @@ struct AdminView: View {
                         }
                     }
                 }
+                #if DEBUG
+                Section("Developer") {
+                    if isResetting {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Resetting…").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button(role: .destructive) {
+                            showResetConfirmation = true
+                        } label: {
+                            Label("Factory Reset", systemImage: "exclamationmark.triangle")
+                        }
+                    }
+                }
+                .confirmationDialog("Factory Reset", isPresented: $showResetConfirmation, titleVisibility: .visible) {
+                    Button("Reset All Data", role: .destructive) { performFactoryReset() }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("Deletes all scenes, pages, tiles, and cache. Vocabulary reloads from the bundle.")
+                }
+                #endif
             }
             .navigationTitle("Admin")
         }
@@ -179,18 +218,21 @@ struct AdminView: View {
                 }
             }
         }
+        try? modelContext.save()
     }
 
     private func deleteCacheEntries(at offsets: IndexSet) {
         for index in offsets {
             modelContext.delete(cacheEntries[index])
         }
+        try? modelContext.save()
     }
 
     private func flushAllCache() {
         for entry in cacheEntries {
             modelContext.delete(entry)
         }
+        try? modelContext.save()
     }
 
     private func applyProvider() {
@@ -213,6 +255,32 @@ struct AdminView: View {
         modelContext.insert(scene)
         navigateToNewScene = scene
     }
+
+    #if DEBUG
+    private func performFactoryReset() {
+        isResetting = true
+        sentenceEngine.clearSelection()
+        do {
+            // Relationship-safe deletion order:
+            // BlasterScene.pages = nullify (doesn't cascade to PageModel)
+            // PageModel.tiles = cascade (auto-deletes PageTileModel)
+            try modelContext.delete(model: MetricEvent.self)
+            try modelContext.delete(model: SentenceCache.self)
+            try modelContext.delete(model: BlasterScene.self)
+            try modelContext.delete(model: PageModel.self)   // cascades PageTileModel
+            try modelContext.delete(model: TileModel.self)
+            try modelContext.save()
+        } catch {
+            print("Factory reset failed: \(error)")
+            isResetting = false
+            return
+        }
+        UserDefaults.standard.set(0, forKey: AppSettingsKey.bootstrapVersion)
+        _ = BootstrapLoader.loadDefaultVocabulary(context: modelContext)
+        BootstrapLoader.markBootstrapComplete()
+        isResetting = false
+    }
+    #endif
 }
 
 struct SceneRow: View {
