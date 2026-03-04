@@ -18,7 +18,6 @@ struct TileGridView: View {
     @State var currentPageKey: String?
     @State private var currentDisplayPage: Int? = 0
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
-    @State private var speechSynthesizer = AVSpeechSynthesizer()
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
@@ -73,11 +72,6 @@ struct TileGridView: View {
         }
         .task {
             haptic.prepare()
-            // Pre-warm AVSpeechSynthesizer on first appear to eliminate first-tap delay
-            let warmup = AVSpeechUtterance(string: " ")
-            warmup.volume = 0
-            speechSynthesizer.speak(warmup)
-            speechSynthesizer.stopSpeaking(at: .immediate)
             navigationPath = [activeScene?.homePageKey ?? "home"]
         }
         .onChange(of: activeScene?.id) {
@@ -297,12 +291,7 @@ struct TileGridView: View {
             } else {
                 // Only speak when adding to the tray
                 if tileSpeechEnabled {
-                    let name = pageTile.tile.displayName
-                    Task { @MainActor in
-                        let utterance = AVSpeechUtterance(string: name)
-                        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.85
-                        speechSynthesizer.speak(utterance)
-                    }
+                    engine.speakTile(pageTile.tile.displayName)
                 }
                 engine.addTile(pageTile.tile)
             }

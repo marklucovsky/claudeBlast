@@ -9,6 +9,7 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 @main
 struct claudeBlastApp: App {
@@ -48,7 +49,17 @@ struct claudeBlastApp: App {
         let engine = SentenceEngine(provider: provider)
         let storedAudio = UserDefaults.standard.object(forKey: AppSettingsKey.audioEnabled)
         engine.audioEnabled = (storedAudio as? Bool) ?? true
+        engine.voiceIdentifier = UserDefaults.standard.string(forKey: AppSettingsKey.speechVoiceIdentifier) ?? ""
         self._sentenceEngine = State(initialValue: engine)
+
+        // Configure audio session at launch so speech plays regardless of the
+        // ringer/silent switch. .playback bypasses the mute switch; .spokenAudio
+        // mode ducks other audio and resumes it after each utterance.
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(
+            .playback, mode: .spokenAudio, options: .duckOthers)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
     }
 
     var body: some Scene {

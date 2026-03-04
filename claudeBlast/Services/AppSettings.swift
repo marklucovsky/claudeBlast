@@ -13,8 +13,9 @@ enum AppSettingsKey {
     static let icloudEnabled     = "icloud_enabled"
     static let openaiApiKey      = "openai_api_key"
     static let providerChoice    = "provider_choice"
-    static let audioEnabled      = "audio_enabled"
-    static let tileSpeechEnabled = "tile_speech_enabled"
+    static let audioEnabled          = "audio_enabled"
+    static let tileSpeechEnabled     = "tile_speech_enabled"
+    static let speechVoiceIdentifier = "speech_voice_identifier"
 }
 
 /// Version stamp written to UserDefaults after bootstrap completes.

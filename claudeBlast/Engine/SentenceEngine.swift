@@ -28,7 +28,7 @@ final class SentenceEngine {
     private(set) var recentHistory: [HistoryEntry] = []
     var sessionNotes: String = ""
 
-    var isPlaying: Bool { audioPlayer.isPlaying }
+    var isSpeaking: Bool { speechSynthesizer.isSpeaking }
 
     func appendNote(_ note: String) {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,13 +41,14 @@ final class SentenceEngine {
 
     private(set) var provider: any SentenceProvider
     var audioEnabled: Bool = true
+    var voiceIdentifier: String = ""
     let maxTiles: Int = 4
 
     // MARK: - Dependencies
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "claudeBlast", category: "SentenceEngine")
     private var cacheManager: SentenceCacheManager?
-    private let audioPlayer = AudioPlayer()
+    private let speechSynthesizer = SpeechSynthesizer()
 
     // MARK: - Internal state
 
@@ -85,7 +86,6 @@ final class SentenceEngine {
     func addTile(_ tile: TileModel) {
         guard selectedTiles.count < maxTiles else { return }
         let selection = TileSelection(from: tile)
-        // Prevent duplicate tiles — repetition is handled by the repetition counter
         guard !selectedTiles.contains(where: { $0.key == selection.key }) else { return }
         idleTask?.cancel()
         selectedTiles.append(selection)
@@ -114,7 +114,7 @@ final class SentenceEngine {
         isWaiting = false
         repetitionCount = 0
         lastTileKey = nil
-        audioPlayer.stop()
+        speechSynthesizer.stop()
     }
 
     // MARK: - Replay
@@ -171,14 +171,12 @@ final class SentenceEngine {
         debounceTask?.cancel()
         generatedSentence = nil
         isThinking = false
-        audioPlayer.stop()
 
         // Single tile: show display name immediately, no API call
         if selectedTiles.count == 1 {
             generatedSentence = selectedTiles[0].value
             isWaiting = false
             recordHistory(tiles: selectedTiles, sentence: selectedTiles[0].value)
-            // No idle timer — timer only runs after a full generateSentence completes
             return
         }
 
@@ -212,25 +210,18 @@ final class SentenceEngine {
         isWaiting = false
         isThinking = true
 
-        let requestAudio = audioEnabled && provider.supportsIntegratedAudio
-
         // Cache lookup (skip for replay/escalation requests)
         if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles) {
-            // Staleness guard
             guard tiles == selectedTiles else {
                 isThinking = false
                 return
             }
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
-            Self.logger.info("generate: source=cache elapsed=0.000s tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\" hasAudio=\(!cached.audioData.isEmpty)")
+            Self.logger.info("generate: source=cache tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\"")
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
             recordHistory(tiles: tiles, sentence: cached.sentence)
-            // Play cached audio if available
-            if !cached.audioData.isEmpty,
-               let data = Data(base64Encoded: cached.audioData) {
-                audioPlayer.play(data: data)
-            }
+            speak(cached.sentence)
             isThinking = false
             startIdleTimer()
             return
@@ -248,20 +239,14 @@ final class SentenceEngine {
             let result = try await provider.generateSentence(
                 tiles: tiles,
                 systemPrompt: systemPrompt,
-                conversationContext: conversationHistory + [userPrompt],
-                requestAudio: requestAudio
+                conversationContext: conversationHistory + [userPrompt]
             )
             let elapsed = apiStart.duration(to: .now)
 
-            // Encode audio for cache storage
-            let audioBase64 = result.audioData?.base64EncodedString() ?? ""
-
-            // Cache the result only for first-time (non-replay) requests
             if repetition == 0 {
-                cacheManager?.store(tiles: tiles, sentence: result.text, audioData: audioBase64)
+                cacheManager?.store(tiles: tiles, sentence: result.text)
             }
 
-            // Staleness guard: only display if tiles haven't changed
             guard tiles == selectedTiles else {
                 isThinking = false
                 return
@@ -271,33 +256,25 @@ final class SentenceEngine {
             appendToHistory(result.text)
             recordHistory(tiles: tiles, sentence: result.text)
 
-            // Log API response
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             let secs = String(format: "%.3f", elapsed.timeInterval)
             if let u = result.usage {
                 Self.logger.info("""
                 generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] model=\(u.model) \
-                sentence=\"\(result.text)\" hasAudio=\(result.audioData != nil) \
-                tokens(total=\(u.totalTokens) prompt=\(u.promptTokens) completion=\(u.completionTokens)) \
-                prompt_detail(text=\(u.promptTextTokens) audio=\(u.promptAudioTokens) cached=\(u.promptCachedTokens)) \
-                completion_detail(text=\(u.completionTextTokens) audio=\(u.completionAudioTokens))
+                sentence=\"\(result.text)\" \
+                tokens(total=\(u.totalTokens) prompt=\(u.promptTokens) completion=\(u.completionTokens) cached=\(u.promptCachedTokens))
                 """)
             } else {
-                Self.logger.info("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] sentence=\"\(result.text)\" hasAudio=\(result.audioData != nil) usage=none")
+                Self.logger.info("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] sentence=\"\(result.text)\"")
             }
 
-            // Play audio if available
-            if let audioData = result.audioData {
-                audioPlayer.play(data: audioData)
-            }
-
+            speak(result.text)
             startIdleTimer()
         } catch {
             let elapsed = apiStart.duration(to: .now)
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             let secs = String(format: "%.3f", elapsed.timeInterval)
             Self.logger.error("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] error=\"\(error.localizedDescription)\"")
-            // On error, only update if tiles are still current
             guard tiles == selectedTiles else {
                 isThinking = false
                 return
@@ -306,6 +283,16 @@ final class SentenceEngine {
         }
 
         isThinking = false
+    }
+
+    func speakTile(_ text: String) {
+        speak(text)
+    }
+
+    private func speak(_ text: String) {
+        guard audioEnabled else { return }
+        let vid = voiceIdentifier.isEmpty ? nil : voiceIdentifier
+        speechSynthesizer.speak(text, voiceIdentifier: vid)
     }
 
     private func appendToHistory(_ sentence: String) {

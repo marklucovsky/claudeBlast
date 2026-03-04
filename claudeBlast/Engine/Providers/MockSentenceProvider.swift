@@ -9,8 +9,6 @@ import Foundation
 
 struct MockSentenceProvider: SentenceProvider {
     let displayName = "Mock"
-    let supportsIntegratedAudio = false
-
     private static let cannedResponses: [String: String] = [
         "eat,mom": "Mom, I want to eat something!",
         "eat,mom,pizza": "Mom, can I have some pizza please?",
@@ -37,8 +35,7 @@ struct MockSentenceProvider: SentenceProvider {
     func generateSentence(
         tiles: [TileSelection],
         systemPrompt: [PromptMessage],
-        conversationContext: [String],
-        requestAudio: Bool
+        conversationContext: [String]
     ) async throws -> SentenceResult {
         // Simulate network latency
         let delay = Double.random(in: minLatency...maxLatency)

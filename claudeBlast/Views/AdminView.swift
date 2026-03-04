@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import Speech
+import AVFoundation
 
 struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
@@ -20,6 +21,7 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.providerChoice) private var providerChoice: String = "openai"
     @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
+    @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
 
     #if DEBUG
     @AppStorage(AppSettingsKey.icloudEnabled) private var icloudEnabled: Bool = false
@@ -64,17 +66,23 @@ struct AdminView: View {
                     }
 
                     LabeledContent("Active Provider", value: sentenceEngine.provider.displayName)
-                    if sentenceEngine.provider.supportsIntegratedAudio {
-                        Toggle("Audio", isOn: $audioEnabled)
-                    } else {
-                        LabeledContent("Audio", value: "Not supported")
-                    }
+                    Toggle("Audio", isOn: $audioEnabled)
                     Toggle("Tile Speech Preview", isOn: $tileSpeechEnabled)
                 }
                 .onChange(of: providerChoice) { applyProvider() }
                 .onChange(of: apiKey) { applyProvider() }
                 .onChange(of: audioEnabled) { sentenceEngine.audioEnabled = audioEnabled }
-                .onAppear { sentenceEngine.audioEnabled = audioEnabled }
+                .onAppear {
+                    sentenceEngine.audioEnabled = audioEnabled
+                    sentenceEngine.voiceIdentifier = voiceIdentifier
+                }
+
+                Section {
+                    VoicePickerSection(voiceIdentifier: $voiceIdentifier)
+                } header: {
+                    VoiceSectionHeader()
+                }
+                .onChange(of: voiceIdentifier) { sentenceEngine.voiceIdentifier = voiceIdentifier }
 
                 #if DEBUG
                 Section("Storage") {
@@ -281,6 +289,133 @@ struct AdminView: View {
         isResetting = false
     }
     #endif
+}
+
+// MARK: - Voice Picker
+
+/// Lists installed English voices grouped by quality tier.
+///
+/// iOS ships three tiers:
+///   Default   — built-in, always available, sounds robotic
+///   Enhanced  — ~50–150 MB download per voice, noticeably better
+///   Premium   — ~200 MB download, on-device neural model (iOS 17+),
+///               sounds natural and is indistinguishable from cloud TTS
+///
+/// Downloads live in Settings → Accessibility → Spoken Content → Voices.
+/// Audio never leaves the device regardless of tier.
+private struct VoicePickerSection: View {
+    @Binding var voiceIdentifier: String
+    @State private var previewSynthesizer = AVSpeechSynthesizer()
+
+    private var englishVoices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("en") }
+            .sorted {
+                if $0.quality != $1.quality { return $0.quality.sortOrder > $1.quality.sortOrder }
+                return $0.name < $1.name
+            }
+    }
+
+    private var hasHighQualityVoice: Bool {
+        englishVoices.contains { $0.quality == .enhanced || $0.quality == .premium }
+    }
+
+    var body: some View {
+        Picker("Voice", selection: $voiceIdentifier) {
+            Text("System Default").tag("")
+            ForEach(englishVoices, id: \.identifier) { voice in
+                Text(voice.name).tag(voice.identifier)
+            }
+        }
+        .onChange(of: voiceIdentifier) { _, newValue in
+            previewVoice(identifier: newValue)
+        }
+
+        if !hasHighQualityVoice {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Enhanced and Premium voices sound much more natural.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Settings → Accessibility → Spoken Content → Voices")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Open Settings") {
+                    UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+                }
+                .font(.caption)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func previewVoice(identifier: String) {
+        previewSynthesizer.stopSpeaking(at: .immediate)
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(
+            .playback, mode: .spokenAudio, options: .duckOthers)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
+        let utterance = AVSpeechUtterance(string: "Welcome to Blaster")
+        if !identifier.isEmpty, let voice = AVSpeechSynthesisVoice(identifier: identifier) {
+            utterance.voice = voice
+        }
+        previewSynthesizer.speak(utterance)
+    }
+}
+
+private extension AVSpeechSynthesisVoiceQuality {
+    var sortOrder: Int {
+        switch self {
+        case .premium: return 2
+        case .enhanced: return 1
+        default: return 0
+        }
+    }
+}
+
+// MARK: - Voice section header with help popover
+
+private struct VoiceSectionHeader: View {
+    @State private var showHelp = false
+
+    var body: some View {
+        HStack {
+            Text("Voice")
+            Spacer()
+            Button {
+                showHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showHelp) {
+                VoiceHelpPopover()
+            }
+        }
+    }
+}
+
+private struct VoiceHelpPopover: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Voice Quality Tiers")
+                .font(.headline)
+            Text("**Default** — Built-in voices, always available.")
+            Text("**Enhanced** — Noticeably better quality. ~50–150 MB download per voice.")
+            Text("**Premium** — On-device neural voice, sounds natural. ~200 MB download.")
+            Divider()
+            Text("To download Enhanced or Premium voices, go to:")
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+            Text("Settings → Accessibility → Spoken Content → Voices")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding()
+        .frame(minWidth: 300, maxWidth: 400)
+    }
 }
 
 struct SceneRow: View {
