@@ -30,25 +30,15 @@ struct TokenUsage: Sendable {
     let promptTokens: Int
     let completionTokens: Int
     let totalTokens: Int
-    // Prompt breakdown
-    let promptTextTokens: Int
-    let promptAudioTokens: Int
     let promptCachedTokens: Int
-    // Completion breakdown
-    let completionTextTokens: Int
-    let completionAudioTokens: Int
 }
 
 struct SentenceResult: Sendable {
     let text: String
-    let audioData: Data?
-    let audioFormat: String?
     let usage: TokenUsage?
 
-    init(text: String, audioData: Data? = nil, audioFormat: String? = nil, usage: TokenUsage? = nil) {
+    init(text: String, usage: TokenUsage? = nil) {
         self.text = text
-        self.audioData = audioData
-        self.audioFormat = audioFormat
         self.usage = usage
     }
 }

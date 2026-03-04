@@ -88,8 +88,10 @@ Lives in `Engine/SentenceEngine.swift`. Injected as environment object.
 - `sessionNotes: String` — free-text notes, long-press any tile to append
 
 Provider abstraction: `SentenceProvider` protocol. Implementations:
-- `OpenAISentenceProvider` — gpt-4o-audio-preview, returns text + base64 audio
+- `OpenAISentenceProvider` — gpt-4o-mini, returns text only
 - `MockSentenceProvider` — instant fake response, no API key needed
+
+Audio: `SpeechSynthesizer.swift` wraps `AVSpeechSynthesizer` for all TTS (sentences + tile preview). Audio session configured with `.playback` + `.spokenAudio` at launch so speech plays regardless of the silent switch. Voice selected in AdminView, persisted in `speechVoiceIdentifier` UserDefaults key.
 
 API key stored in `@AppStorage("openai_api_key")` (UserDefaults). Dev-only acceptable.
 Override: set `OPENAI_API_KEY` env var in scheme → takes precedence, skips UI entry.
@@ -110,9 +112,15 @@ home(35), people(20), social(36), actions(108), describe(114), food(48), drinks(
 No next_page/previous_page tiles — app's built-in grid paging handles overflow.
 
 ### Branches
-- `main` — stable
-- `scene-editor` — next feature branch (scene & page editor)
-- Feature work: always branch off main
+**RULE: every feature or fix gets its own branch off main. Create the branch before writing any code. No exceptions.**
+
+```
+git checkout main && git checkout -b feature/<name>
+```
+
+- `main` — stable, direct commits only for trivial single-file fixes
+- `feature/local-tts` — replace audio model with gpt-4o-mini + AVSpeechSynthesizer (in progress)
+- `scene-editor` — scene & page editor (next after local-tts)
 
 ### Known deferred items
 - `isStoredInMemoryOnly: true` — intentional, persistence is next planned chunk
