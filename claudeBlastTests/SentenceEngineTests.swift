@@ -131,7 +131,7 @@ struct SentenceEngineTests {
             TileSelection(key: "mom", value: "mom", wordClass: "people"),
         ]
         let result = try await mock.generateSentence(
-            tiles: tiles, systemPrompt: [], conversationContext: [], requestAudio: false
+            tiles: tiles, systemPrompt: [], conversationContext: []
         )
         #expect(result.text == "Mom, I want to eat something!")
     }
@@ -143,7 +143,7 @@ struct SentenceEngineTests {
             TileSelection(key: "fast", value: "fast", wordClass: "describe"),
         ]
         let result = try await mock.generateSentence(
-            tiles: tiles, systemPrompt: [], conversationContext: [], requestAudio: false
+            tiles: tiles, systemPrompt: [], conversationContext: []
         )
         #expect(result.text.contains("run"))
         #expect(result.text.contains("fast"))

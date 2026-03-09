@@ -77,4 +77,20 @@ final class SentenceCacheManager {
             modelContext.delete(entry)
         }
     }
+
+    /// Fetch promoted entries: hitCount >= threshold or pinned, sorted by hitCount desc.
+    func fetchPromoted(threshold: Int = 3, limit: Int = 8) -> [SentenceCache] {
+        let entries = allEntries()
+        let promoted = entries.filter { $0.hitCount >= threshold || $0.isPinned }
+        return Array(promoted.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned }
+            return $0.hitCount > $1.hitCount
+        }.prefix(limit))
+    }
+
+    /// Log a MetricEvent.
+    func logEvent(subjectType: String, subjectKey: String, eventType: MetricType) {
+        let event = MetricEvent(subjectType: subjectType, subjectKey: subjectKey, eventType: eventType)
+        modelContext.insert(event)
+    }
 }

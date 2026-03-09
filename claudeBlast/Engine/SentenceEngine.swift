@@ -89,6 +89,7 @@ final class SentenceEngine {
         guard !selectedTiles.contains(where: { $0.key == selection.key }) else { return }
         idleTask?.cancel()
         selectedTiles.append(selection)
+        cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
         scheduleGeneration()
     }
 
@@ -218,6 +219,7 @@ final class SentenceEngine {
             }
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             Self.logger.info("generate: source=cache tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\"")
+            cacheManager?.logEvent(subjectType: "cache", subjectKey: cached.cacheKey, eventType: .hit)
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
             recordHistory(tiles: tiles, sentence: cached.sentence)
@@ -245,6 +247,8 @@ final class SentenceEngine {
 
             if repetition == 0 {
                 cacheManager?.store(tiles: tiles, sentence: result.text)
+                let usedKey = SentenceCacheManager.cacheKey(for: tiles)
+                cacheManager?.logEvent(subjectType: "sentence", subjectKey: usedKey, eventType: .used)
             }
 
             guard tiles == selectedTiles else {
@@ -283,6 +287,15 @@ final class SentenceEngine {
         }
 
         isThinking = false
+    }
+
+    /// Play a promoted (cached) phrase directly — no API call, instant feedback.
+    func speakPromoted(_ entry: SentenceCache) {
+        clearSelection()
+        generatedSentence = entry.sentence
+        cacheManager?.logEvent(subjectType: "promoted", subjectKey: entry.cacheKey, eventType: .hit)
+        speak(entry.sentence)
+        startIdleTimer()
     }
 
     func speakTile(_ text: String) {

@@ -10,9 +10,19 @@ import SwiftData
 import AVFoundation
 import UIKit
 
+private let promotedHitThreshold = 3
+
 struct TileGridView: View {
     @Query(filter: #Predicate<BlasterScene> { $0.isActive })
     var activeScenes: [BlasterScene]
+
+    @Query(
+        filter: #Predicate<SentenceCache> { entry in
+            entry.hitCount >= promotedHitThreshold || entry.isPinned
+        },
+        sort: \SentenceCache.hitCount, order: .reverse
+    )
+    private var promotedEntries: [SentenceCache]
 
     @Environment(SentenceEngine.self) private var engine
     @State var currentPageKey: String?
@@ -26,6 +36,16 @@ struct TileGridView: View {
     private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
 
     private var activeScene: BlasterScene? { activeScenes.first }
+
+    private var isOnHomePage: Bool {
+        currentPageKey == nil || currentPageKey == activeScene?.homePageKey
+    }
+
+    /// All tile keys reachable anywhere in the active scene.
+    private var sceneKeySet: Set<String> {
+        guard let scene = activeScene else { return [] }
+        return Set(scene.pages.flatMap { $0.orderedTiles.map(\.tile.key) })
+    }
 
     private var currentPage: PageModel? {
         guard let scene = activeScene else { return nil }
@@ -56,6 +76,15 @@ struct TileGridView: View {
                 }
             )
             .padding(.top, 8)
+
+            if isOnHomePage && !promotedEntries.isEmpty {
+                PromotedTileStrip(
+                    entries: Array(promotedEntries.prefix(8)),
+                    sceneKeySet: sceneKeySet
+                ) { entry in
+                    engine.speakPromoted(entry)
+                }
+            }
 
             if let page = currentPage {
                 pagedGrid(for: page)
@@ -300,6 +329,103 @@ struct TileGridView: View {
             engine.cancelIdleTimer()
             currentPageKey = pageTile.link
         }
+    }
+}
+
+// MARK: - Promoted Tile Strip
+
+private struct PromotedTileStrip: View {
+    let entries: [SentenceCache]
+    let sceneKeySet: Set<String>
+    let onTap: (SentenceCache) -> Void
+
+    private func isInScene(_ entry: SentenceCache) -> Bool {
+        entry.tileKeys.allSatisfy { sceneKeySet.contains($0) }
+    }
+
+    private var inScene: [SentenceCache] {
+        entries.filter { isInScene($0) }
+    }
+
+    private var outOfScene: [SentenceCache] {
+        entries.filter { !isInScene($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: "star.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Text("Frequent")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(inScene) { entry in
+                        PromotedChip(entry: entry, isInScene: true, onTap: onTap)
+                    }
+
+                    if !outOfScene.isEmpty {
+                        if !inScene.isEmpty {
+                            Rectangle()
+                                .fill(.separator)
+                                .frame(width: 1, height: 28)
+                                .padding(.horizontal, 4)
+                        }
+                        Text("other phrases")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+
+                        ForEach(outOfScene) { entry in
+                            PromotedChip(entry: entry, isInScene: false, onTap: onTap)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+            }
+        }
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+private struct PromotedChip: View {
+    let entry: SentenceCache
+    let isInScene: Bool
+    let onTap: (SentenceCache) -> Void
+
+    var body: some View {
+        Button {
+            onTap(entry)
+        } label: {
+            HStack(spacing: 4) {
+                if entry.isPinned && isInScene {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                } else if !isInScene {
+                    Image(systemName: "arrow.up.forward")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Text(entry.sentence)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .foregroundStyle(isInScene ? .primary : .secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.quaternary, in: Capsule())
+            .overlay(Capsule().strokeBorder(.orange.opacity(entry.isPinned && isInScene ? 0.6 : 0), lineWidth: 1.5))
+            .opacity(isInScene ? 1 : 0.65)
+        }
+        .buttonStyle(.plain)
     }
 }
 

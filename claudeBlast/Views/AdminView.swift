@@ -14,6 +14,12 @@ struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
     @Query(sort: \SentenceCache.lastUsed, order: .reverse) var cacheEntries: [SentenceCache]
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
+    @Query(
+        filter: #Predicate<SentenceCache> { entry in
+            entry.hitCount >= 3 || entry.isPinned
+        },
+        sort: \SentenceCache.hitCount, order: .reverse
+    ) private var promotedCandidates: [SentenceCache]
     @Environment(\.modelContext) private var modelContext
     @Environment(SentenceEngine.self) private var sentenceEngine
 
@@ -147,6 +153,38 @@ struct AdminView: View {
                             sentenceEngine.sessionNotes = ""
                         } label: {
                             Label("Clear Notes", systemImage: "trash")
+                        }
+                    }
+                }
+
+                Section("Promoted Tiles (\(promotedCandidates.count))") {
+                    if promotedCandidates.isEmpty {
+                        Text("No promoted tiles yet — use the same tile combo \(3)+ times")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(promotedCandidates) { entry in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.sentence)
+                                        .font(.subheadline)
+                                    Text(entry.cacheKey)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    Text("Hits: \(entry.hitCount)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button {
+                                    entry.isPinned.toggle()
+                                    try? modelContext.save()
+                                } label: {
+                                    Image(systemName: entry.isPinned ? "pin.fill" : "pin")
+                                        .foregroundStyle(entry.isPinned ? .orange : .secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
