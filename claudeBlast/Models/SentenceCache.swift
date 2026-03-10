@@ -16,6 +16,7 @@ final class SentenceCache {
     var sentence: String = ""
     var audioData: String = ""
     var hitCount: Int = 0
+    var isPinned: Bool = false
     var created: Date = Date.now
     var lastUsed: Date = Date.now
 

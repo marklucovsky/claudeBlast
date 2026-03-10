@@ -10,9 +10,19 @@ import SwiftData
 import AVFoundation
 import UIKit
 
+private let promotedHitThreshold = 3
+
 struct TileGridView: View {
     @Query(filter: #Predicate<BlasterScene> { $0.isActive })
     var activeScenes: [BlasterScene]
+
+    @Query(
+        filter: #Predicate<SentenceCache> { entry in
+            entry.hitCount >= promotedHitThreshold || entry.isPinned
+        },
+        sort: \SentenceCache.hitCount, order: .reverse
+    )
+    private var promotedEntries: [SentenceCache]
 
     @Environment(SentenceEngine.self) private var engine
     @State var currentPageKey: String?
@@ -23,9 +33,31 @@ struct TileGridView: View {
     @State private var showNoteAlert: Bool = false
     @State private var navigationPath: [String] = []
 
-    private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
+    @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: CGFloat(tileMinSize)), spacing: 8)]
+    }
 
     private var activeScene: BlasterScene? { activeScenes.first }
+
+    /// All tile keys reachable anywhere in the active scene.
+    private var sceneKeySet: Set<String> {
+        guard let scene = activeScene else { return [] }
+        return Set(scene.pages.flatMap { $0.orderedTiles.map(\.tile.key) })
+    }
+
+    /// key → wordClass for all tiles in the active scene (used for icon color coding).
+    private var tileWordClass: [String: String] {
+        guard let scene = activeScene else { return [:] }
+        var result: [String: String] = [:]
+        for page in scene.pages {
+            for pt in page.orderedTiles {
+                result[pt.tile.key] = pt.tile.wordClass
+            }
+        }
+        return result
+    }
 
     private var currentPage: PageModel? {
         guard let scene = activeScene else { return nil }
@@ -56,6 +88,16 @@ struct TileGridView: View {
                 }
             )
             .padding(.top, 8)
+
+            if !promotedEntries.isEmpty {
+                PromotedTileStrip(
+                    entries: Array(promotedEntries.prefix(8)),
+                    sceneKeySet: sceneKeySet,
+                    tileWordClass: tileWordClass
+                ) { entry in
+                    engine.speakPromoted(entry)
+                }
+            }
 
             if let page = currentPage {
                 pagedGrid(for: page)
@@ -204,7 +246,7 @@ struct TileGridView: View {
         let hPad: CGFloat = 32   // 16pt padding each side
         let vPad: CGFloat = 32   // 16pt top + 16pt bottom within each page
         let spacing: CGFloat = 8
-        let minTile: CGFloat = 72
+        let minTile = CGFloat(tileMinSize)
         let labelH: CGFloat = 17 // 3pt gap + 11pt font + ~3pt margin
 
         let availW = geo.size.width - hPad
@@ -300,6 +342,116 @@ struct TileGridView: View {
             engine.cancelIdleTimer()
             currentPageKey = pageTile.link
         }
+    }
+}
+
+// MARK: - Promoted Tile Strip
+
+private struct PromotedTileStrip: View {
+    let entries: [SentenceCache]
+    let sceneKeySet: Set<String>
+    let tileWordClass: [String: String]
+    let onTap: (SentenceCache) -> Void
+
+    private func isInScene(_ entry: SentenceCache) -> Bool {
+        entry.tileKeys.allSatisfy { sceneKeySet.contains($0) }
+    }
+
+    private var inScene: [SentenceCache] { entries.filter { isInScene($0) } }
+    private var outOfScene: [SentenceCache] { entries.filter { !isInScene($0) } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: "star.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Text("Frequent")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(inScene) { entry in
+                        PromotedChip(entry: entry, isInScene: true,
+                                     tileWordClass: tileWordClass, onTap: onTap)
+                    }
+
+                    if !outOfScene.isEmpty {
+                        if !inScene.isEmpty {
+                            Rectangle()
+                                .fill(.separator)
+                                .frame(width: 1, height: 36)
+                                .padding(.horizontal, 4)
+                        }
+                        Text("other")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+
+                        ForEach(outOfScene) { entry in
+                            PromotedChip(entry: entry, isInScene: false,
+                                         tileWordClass: tileWordClass, onTap: onTap)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+            }
+        }
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+private struct PromotedChip: View {
+    let entry: SentenceCache
+    let isInScene: Bool
+    let tileWordClass: [String: String]
+    let onTap: (SentenceCache) -> Void
+
+    private let iconSize: CGFloat = 30
+    private let cornerRadius: CGFloat = 10
+
+    private var borderColor: Color {
+        if entry.isPinned && isInScene { return .orange.opacity(0.7) }
+        if isInScene { return .primary.opacity(0.15) }
+        return .secondary.opacity(0.25)
+    }
+
+    var body: some View {
+        Button { onTap(entry) } label: {
+            HStack(spacing: 3) {
+                ForEach(entry.tileKeys.prefix(4), id: \.self) { key in
+                    let wordClass = tileWordClass[key] ?? "default"
+                    ZStack {
+                        wordClassColor(wordClass).opacity(0.15)
+                        if UIImage(named: key) != nil {
+                            Image(key)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(3)
+                        } else {
+                            Text(String(key.prefix(1)).uppercased())
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(wordClassColor(wordClass))
+                        }
+                    }
+                    .frame(width: iconSize, height: iconSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                }
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(borderColor, lineWidth: 1.5)
+            )
+            .opacity(isInScene ? 1 : 0.6)
+        }
+        .buttonStyle(.plain)
     }
 }
 

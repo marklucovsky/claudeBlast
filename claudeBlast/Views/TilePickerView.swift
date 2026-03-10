@@ -22,6 +22,7 @@ struct TilePickerView: View {
     @State private var suggestionGoal = ""
     @State private var isSuggesting = false
     @State private var suggestionError: String? = nil
+    @Environment(\.isSearching) private var isSearching
 
     @AppStorage("openai_api_key") private var storedAPIKey: String = ""
     private var apiKey: String {
@@ -80,15 +81,20 @@ struct TilePickerView: View {
             .navigationTitle("Add Tiles")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(selectedKeys.count)") {
-                        addSelectedTiles()
-                        dismiss()
+                // While search is active, hide these — the searchable's own Cancel
+                // exits search mode cleanly. Showing two "cancel"-style buttons
+                // at once creates confusion about which discards selections.
+                if !isSearching {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(selectedKeys.isEmpty ? "Dismiss" : "Discard") { dismiss() }
                     }
-                    .disabled(selectedKeys.isEmpty)
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Add \(selectedKeys.count)") {
+                            addSelectedTiles()
+                            dismiss()
+                        }
+                        .disabled(selectedKeys.isEmpty)
+                    }
                 }
             }
         }

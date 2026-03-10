@@ -21,6 +21,19 @@ final class SentenceCacheManager {
         Set(tiles.map(\.key)).sorted().joined(separator: ",")
     }
 
+    /// Increment hitCount for an existing cache entry without returning the sentence.
+    /// Called on escalation paths that bypass the cache for generation but should still count usage.
+    func recordHit(tiles: [TileSelection]) {
+        let key = Self.cacheKey(for: tiles)
+        var descriptor = FetchDescriptor<SentenceCache>(
+            predicate: #Predicate { $0.cacheKey == key }
+        )
+        descriptor.fetchLimit = 1
+        guard let entry = try? modelContext.fetch(descriptor).first else { return }
+        entry.hitCount += 1
+        entry.lastUsed = .now
+    }
+
     /// Look up a cached sentence. Returns nil on miss; increments hitCount on hit.
     func lookup(tiles: [TileSelection]) -> SentenceCache? {
         let key = Self.cacheKey(for: tiles)
@@ -76,5 +89,21 @@ final class SentenceCacheManager {
         for entry in entries {
             modelContext.delete(entry)
         }
+    }
+
+    /// Fetch promoted entries: hitCount >= threshold or pinned, sorted by hitCount desc.
+    func fetchPromoted(threshold: Int = 3, limit: Int = 8) -> [SentenceCache] {
+        let entries = allEntries()
+        let promoted = entries.filter { $0.hitCount >= threshold || $0.isPinned }
+        return Array(promoted.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned }
+            return $0.hitCount > $1.hitCount
+        }.prefix(limit))
+    }
+
+    /// Log a MetricEvent.
+    func logEvent(subjectType: String, subjectKey: String, eventType: MetricType) {
+        let event = MetricEvent(subjectType: subjectType, subjectKey: subjectKey, eventType: eventType)
+        modelContext.insert(event)
     }
 }

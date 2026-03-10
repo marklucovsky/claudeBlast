@@ -220,7 +220,7 @@ func wordClassColor(_ wordClass: String) -> Color {
 // MARK: - TileGridIcon
 
 /// Renders up to 4 tiles as a fixed 2×2 square icon.
-private struct TileGridIcon: View {
+struct TileGridIcon: View {
     let tiles: [TileSelection]
 
     private let cellSize: CGFloat = 26
