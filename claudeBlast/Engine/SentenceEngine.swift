@@ -211,6 +211,11 @@ final class SentenceEngine {
         isWaiting = false
         isThinking = true
 
+        // Escalation: still count the hit even though we bypass the cached sentence
+        if repetition > 0 {
+            cacheManager?.recordHit(tiles: tiles)
+        }
+
         // Cache lookup (skip for replay/escalation requests)
         if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles) {
             guard tiles == selectedTiles else {

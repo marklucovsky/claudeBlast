@@ -21,6 +21,19 @@ final class SentenceCacheManager {
         Set(tiles.map(\.key)).sorted().joined(separator: ",")
     }
 
+    /// Increment hitCount for an existing cache entry without returning the sentence.
+    /// Called on escalation paths that bypass the cache for generation but should still count usage.
+    func recordHit(tiles: [TileSelection]) {
+        let key = Self.cacheKey(for: tiles)
+        var descriptor = FetchDescriptor<SentenceCache>(
+            predicate: #Predicate { $0.cacheKey == key }
+        )
+        descriptor.fetchLimit = 1
+        guard let entry = try? modelContext.fetch(descriptor).first else { return }
+        entry.hitCount += 1
+        entry.lastUsed = .now
+    }
+
     /// Look up a cached sentence. Returns nil on miss; increments hitCount on hit.
     func lookup(tiles: [TileSelection]) -> SentenceCache? {
         let key = Self.cacheKey(for: tiles)
