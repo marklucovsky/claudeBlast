@@ -28,6 +28,7 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
+    @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
 
     #if DEBUG
     @AppStorage(AppSettingsKey.icloudEnabled) private var icloudEnabled: Bool = false
@@ -74,6 +75,12 @@ struct AdminView: View {
                     LabeledContent("Active Provider", value: sentenceEngine.provider.displayName)
                     Toggle("Audio", isOn: $audioEnabled)
                     Toggle("Tile Speech Preview", isOn: $tileSpeechEnabled)
+                    Stepper(
+                        "Tile Size: \(Int(tileMinSize))pt",
+                        value: $tileMinSize,
+                        in: 56...140,
+                        step: 4
+                    )
                 }
                 .onChange(of: providerChoice) { applyProvider() }
                 .onChange(of: apiKey) { applyProvider() }

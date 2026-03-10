@@ -33,7 +33,11 @@ struct TileGridView: View {
     @State private var showNoteAlert: Bool = false
     @State private var navigationPath: [String] = []
 
-    private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
+    @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: CGFloat(tileMinSize)), spacing: 8)]
+    }
 
     private var activeScene: BlasterScene? { activeScenes.first }
 
@@ -242,7 +246,7 @@ struct TileGridView: View {
         let hPad: CGFloat = 32   // 16pt padding each side
         let vPad: CGFloat = 32   // 16pt top + 16pt bottom within each page
         let spacing: CGFloat = 8
-        let minTile: CGFloat = 72
+        let minTile = CGFloat(tileMinSize)
         let labelH: CGFloat = 17 // 3pt gap + 11pt font + ~3pt margin
 
         let availW = geo.size.width - hPad
