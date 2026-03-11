@@ -12,7 +12,7 @@ import AVFoundation
 
 struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
-    @Query(sort: \SentenceCache.lastUsed, order: .reverse) var cacheEntries: [SentenceCache]
+    @Query(sort: \SentenceCache.hitCount, order: .reverse) var cacheEntries: [SentenceCache]
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Query(
         filter: #Predicate<SentenceCache> { entry in
@@ -20,6 +20,16 @@ struct AdminView: View {
         },
         sort: \SentenceCache.hitCount, order: .reverse
     ) private var promotedCandidates: [SentenceCache]
+
+    // Cache hit/miss metrics from MetricEvent log
+    @Query(sort: \MetricEvent.timestamp) private var allMetricEvents: [MetricEvent]
+
+    private var cacheHitCount: Int {
+        allMetricEvents.count { $0.subjectType == "cache" && $0.eventType == .hit }
+    }
+    private var cacheMissCount: Int {
+        allMetricEvents.count { $0.subjectType == "sentence" && $0.eventType == .used }
+    }
     @Environment(\.modelContext) private var modelContext
     @Environment(SentenceEngine.self) private var sentenceEngine
 
@@ -164,61 +174,51 @@ struct AdminView: View {
                     }
                 }
 
-                Section("Promoted Tiles (\(promotedCandidates.count))") {
+                Section {
+                    cacheStatsView
+                } header: {
+                    Text("Cache Performance")
+                }
+
+                Section {
                     if promotedCandidates.isEmpty {
-                        Text("No promoted tiles yet — use the same tile combo \(3)+ times")
+                        Text("No promoted tiles yet — use the same tile combo 3+ times")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(promotedCandidates) { entry in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(entry.sentence)
-                                        .font(.subheadline)
-                                    Text(entry.cacheKey)
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                    Text("Hits: \(entry.hitCount)")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Button {
-                                    entry.isPinned.toggle()
-                                    try? modelContext.save()
-                                } label: {
-                                    Image(systemName: entry.isPinned ? "pin.fill" : "pin")
-                                        .foregroundStyle(entry.isPinned ? .orange : .secondary)
-                                }
-                                .buttonStyle(.plain)
+                        ForEach(promotedCandidates.prefix(5)) { entry in
+                            promotedTileRow(entry)
+                        }
+                        if promotedCandidates.count > 5 {
+                            NavigationLink {
+                                PromotedTilesDetailView(entries: promotedCandidates, tileLookup: tileLookup)
+                            } label: {
+                                Text("View All (\(promotedCandidates.count))")
+                                    .font(.caption)
                             }
                         }
                     }
+                } header: {
+                    Text("Promoted Tiles (\(promotedCandidates.count))")
                 }
 
-                Section("Sentence Cache (\(cacheEntries.count))") {
-                    if cacheEntries.isEmpty {
-                        Text("No cached sentences")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(cacheEntries) { entry in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.cacheKey)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(entry.sentence)
-                                    .font(.subheadline)
-                                Text("Hits: \(entry.hitCount)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                Section {
+                    NavigationLink {
+                        CacheDetailView(entries: cacheEntries, onDelete: deleteCacheEntries, onFlush: flushAllCache)
+                    } label: {
+                        Text("View \(cacheEntries.count) entries")
+                    }
+                    .disabled(cacheEntries.isEmpty)
+                } header: {
+                    HStack {
+                        Text("Sentence Cache (\(cacheEntries.count))")
+                        Spacer()
+                        if !cacheEntries.isEmpty {
+                            Button("Flush All", role: .destructive) {
+                                flushAllCache()
                             }
-                        }
-                        .onDelete(perform: deleteCacheEntries)
-
-                        Button(role: .destructive) {
-                            flushAllCache()
-                        } label: {
-                            Label("Flush All Cache", systemImage: "trash")
+                            .font(.caption)
+                            .textCase(nil)
                         }
                     }
                 }
@@ -254,6 +254,69 @@ struct AdminView: View {
         }
     }
 
+    // MARK: - Tile Lookup
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    private func tileSelections(for entry: SentenceCache) -> [TileSelection] {
+        entry.tileKeys.compactMap { key in
+            guard let tile = tileLookup[key] else { return nil }
+            return TileSelection(from: tile)
+        }
+    }
+
+    private func promotedTileRow(_ entry: SentenceCache) -> some View {
+        HStack(spacing: 10) {
+            TileGridIcon(tiles: tileSelections(for: entry))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.sentence)
+                    .font(.caption)
+                    .lineLimit(1)
+                Text("\(entry.hitCount) hits")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if entry.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    // MARK: - Cache Stats
+
+    private var cacheStatsView: some View {
+        let hits = cacheHitCount
+        let misses = cacheMissCount
+        let total = hits + misses
+        let hitRate = total > 0 ? Double(hits) / Double(total) * 100 : 0
+        let missRate = total > 0 ? Double(misses) / Double(total) * 100 : 0
+
+        return Group {
+            HStack {
+                StatBox(label: "Lookups", value: "\(total)", color: .primary)
+                StatBox(label: "Hits", value: "\(hits)", color: .green)
+                StatBox(label: "Misses", value: "\(misses)", color: .orange)
+            }
+
+            HStack {
+                StatBox(label: "Hit Rate", value: String(format: "%.1f%%", hitRate), color: .green)
+                StatBox(label: "Miss Rate", value: String(format: "%.1f%%", missRate), color: .orange)
+                StatBox(label: "Entries", value: "\(cacheEntries.count)", color: .blue)
+            }
+
+            if total == 0 {
+                Text("No lookups recorded yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func activateScene(_ scene: BlasterScene) {
         try? scene.activate(context: modelContext)
     }
@@ -284,6 +347,12 @@ struct AdminView: View {
     private func flushAllCache() {
         for entry in cacheEntries {
             modelContext.delete(entry)
+        }
+        // Clear cache-related metric events so stats reset with the cache
+        for event in allMetricEvents where
+            (event.subjectType == "cache" && event.eventType == .hit) ||
+            (event.subjectType == "sentence" && event.eventType == .used) {
+            modelContext.delete(event)
         }
         try? modelContext.save()
     }
@@ -825,5 +894,108 @@ private struct GeneratedTileCell: View {
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - Promoted Tiles Detail
+
+private struct PromotedTilesDetailView: View {
+    let entries: [SentenceCache]
+    let tileLookup: [String: TileModel]
+
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        List {
+            ForEach(entries) { entry in
+                HStack(spacing: 10) {
+                    TileGridIcon(tiles: tileSelections(for: entry))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.sentence)
+                            .font(.subheadline)
+                        Text(entry.cacheKey)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text("Hits: \(entry.hitCount)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        entry.isPinned.toggle()
+                        try? modelContext.save()
+                    } label: {
+                        Image(systemName: entry.isPinned ? "pin.fill" : "pin")
+                            .foregroundStyle(entry.isPinned ? .orange : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .navigationTitle("Promoted Tiles")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func tileSelections(for entry: SentenceCache) -> [TileSelection] {
+        entry.tileKeys.compactMap { key in
+            guard let tile = tileLookup[key] else { return nil }
+            return TileSelection(from: tile)
+        }
+    }
+}
+
+// MARK: - Cache Detail
+
+private struct CacheDetailView: View {
+    let entries: [SentenceCache]
+    let onDelete: (IndexSet) -> Void
+    let onFlush: () -> Void
+
+    var body: some View {
+        List {
+            ForEach(entries) { entry in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.cacheKey)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(entry.sentence)
+                        .font(.subheadline)
+                    Text("Hits: \(entry.hitCount)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .onDelete(perform: onDelete)
+        }
+        .navigationTitle("Sentence Cache (\(entries.count))")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .destructiveAction) {
+                Button("Flush All", role: .destructive) {
+                    onFlush()
+                }
+                .font(.caption)
+            }
+        }
+    }
+}
+
+// MARK: - Cache Stats Box
+
+private struct StatBox: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.monospacedDigit().bold())
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

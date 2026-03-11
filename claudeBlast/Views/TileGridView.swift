@@ -25,13 +25,13 @@ struct TileGridView: View {
     private var promotedEntries: [SentenceCache]
 
     @Environment(SentenceEngine.self) private var engine
-    @State var currentPageKey: String?
+    @Environment(NavigationCoordinator.self) private var coordinator
+    @Environment(TileScriptRunner.self) private var scriptRunner
     @State private var currentDisplayPage: Int? = 0
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
-    @State private var navigationPath: [String] = []
 
     @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
 
@@ -61,7 +61,7 @@ struct TileGridView: View {
 
     private var currentPage: PageModel? {
         guard let scene = activeScene else { return nil }
-        let key = currentPageKey ?? scene.homePageKey
+        let key = coordinator.currentPageKey ?? scene.homePageKey
         return scene.pages.first { $0.displayName == key }
     }
 
@@ -110,39 +110,36 @@ struct TileGridView: View {
             }
 
             breadcrumbBar
-                .animation(.easeInOut(duration: 0.2), value: navigationPath.count > 1)
+                .animation(.easeInOut(duration: 0.2), value: coordinator.navigationPath.count > 1)
+        }
+        .overlay(alignment: .bottom) {
+            if scriptRunner.state != .idle {
+                TileScriptPlaybackOverlay()
+            }
         }
         .task {
             haptic.prepare()
-            navigationPath = [activeScene?.homePageKey ?? "home"]
+            coordinator.navigationPath = [activeScene?.homePageKey ?? "home"]
         }
         .onChange(of: activeScene?.id) {
-            currentPageKey = nil
+            coordinator.navigateHome(homePageKey: activeScene?.homePageKey ?? "home")
             currentDisplayPage = 0
-            navigationPath = [activeScene?.homePageKey ?? "home"]
             engine.clearSelection()
         }
         .onChange(of: activeScene?.pages.map(\.displayName)) { _, pageNames in
             // If the current page was deleted or renamed, navigate home
-            guard let pageNames, let key = currentPageKey else { return }
+            guard let pageNames, let key = coordinator.currentPageKey else { return }
             if !pageNames.contains(key) {
-                currentPageKey = nil
+                coordinator.navigateHome(homePageKey: activeScene?.homePageKey ?? "")
                 currentDisplayPage = 0
-                navigationPath = [activeScene?.homePageKey ?? ""]
             }
         }
         .onChange(of: currentPage?.tileOrder) { _, _ in
             // Reset display page position when tile count changes significantly
             currentDisplayPage = 0
         }
-        .onChange(of: currentPageKey) { _, newKey in
+        .onChange(of: coordinator.currentPageKey) { _, _ in
             currentDisplayPage = 0
-            let pageKey = newKey ?? activeScene?.homePageKey ?? "home"
-            if let idx = navigationPath.firstIndex(of: pageKey) {
-                navigationPath = Array(navigationPath.prefix(idx + 1))
-            } else {
-                navigationPath.append(pageKey)
-            }
         }
         .alert("Add Note", isPresented: $showNoteAlert) {
             TextField("Note", text: $pendingNote)
@@ -161,12 +158,12 @@ struct TileGridView: View {
     }
 
     private var breadcrumbSteps: [BreadcrumbStep] {
-        navigationPath.enumerated().map { i, seg in
+        coordinator.navigationPath.enumerated().map { i, seg in
             BreadcrumbStep(
                 id: "\(i)-\(seg)",
                 segment: seg,
                 isFirst: i == 0,
-                isLast: i == navigationPath.count - 1,
+                isLast: i == coordinator.navigationPath.count - 1,
                 label: i == 0 ? "Home" : seg.replacingOccurrences(of: "_", with: " ").capitalized
             )
         }
@@ -186,7 +183,7 @@ struct TileGridView: View {
         .frame(height: 30)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .top) { Divider() }
-        .opacity(navigationPath.count > 1 ? 1 : 0)
+        .opacity(coordinator.navigationPath.count > 1 ? 1 : 0)
     }
 
     @ViewBuilder
@@ -204,7 +201,11 @@ struct TileGridView: View {
                 .padding(.vertical, 8)
         } else {
             Button {
-                currentPageKey = step.isFirst ? nil : step.segment
+                if step.isFirst {
+                    coordinator.navigateToRoot()
+                } else {
+                    coordinator.navigate(to: step.segment)
+                }
             } label: {
                 HStack(spacing: 3) {
                     if step.isFirst {
@@ -340,7 +341,7 @@ struct TileGridView: View {
         }
         if !pageTile.link.isEmpty {
             engine.cancelIdleTimer()
-            currentPageKey = pageTile.link
+            coordinator.navigate(to: pageTile.link)
         }
     }
 }
@@ -464,6 +465,8 @@ private extension Array {
 #Preview {
     TileGridView()
         .environment(SentenceEngine(provider: MockSentenceProvider()))
+        .environment(NavigationCoordinator())
+        .environment(TileScriptRunner())
         .modelContainer(
             for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
             inMemory: true

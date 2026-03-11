@@ -76,7 +76,7 @@ final class SentenceEngine {
     // MARK: - Provider switching
 
     func switchProvider(_ newProvider: any SentenceProvider) {
-        clearSelection()
+        resetAll()
         conversationHistory.removeAll()
         provider = newProvider
     }
@@ -113,9 +113,19 @@ final class SentenceEngine {
         generatedSentence = nil
         isThinking = false
         isWaiting = false
+        // Preserve repetitionCount and lastTileKey so escalation
+        // works across clear cycles (e.g., TileScript rows).
+        // They reset naturally in scheduleGeneration() when a
+        // different combo is selected.
+        speechSynthesizer.stop()
+    }
+
+    /// Full reset including escalation state. Used when switching
+    /// providers or contexts where repetition history should not carry over.
+    func resetAll() {
+        clearSelection()
         repetitionCount = 0
         lastTileKey = nil
-        speechSynthesizer.stop()
     }
 
     // MARK: - Replay

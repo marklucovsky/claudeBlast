@@ -1,0 +1,14 @@
+name: Basic AAC Demo
+description: Child requesting food from mom — demonstrates navigation, sentence generation, and escalation
+audio: on
+tileWait: .human
+sentenceWait: .human
+
+script:
+  - comment: Basic AAC interaction flow
+  - tiles:
+    - <home>, mom, <food>, pizza       # Mom, I want pizza!
+    - pizza, fries                      # Same page — combo order
+    - pizza, fries                      # Repeat triggers escalation
+    - <home>, mom, <places>, playground # Let's go to the playground
+  - comment: Demo complete

@@ -90,6 +90,7 @@
 			);
 			name = claudeBlast;
 			packageProductDependencies = (
+				AA000002AAAA000200000002 /* Yams */,
 			);
 			productName = claudeBlast;
 			productReference = 56B216532F357AEC00A89419 /* claudeBlast.app */;
@@ -148,6 +149,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 56B216542F357AEC00A89419 /* Products */;
+			packageReferences = (
+				AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -472,6 +476,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA000002AAAA000200000002 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 56B2164B2F357AEC00A89419 /* Project object */;
 }
