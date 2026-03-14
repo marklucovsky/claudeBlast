@@ -60,14 +60,34 @@ script:
 | `wait` | Explicit pause |
 | Settings | Override globals mid-script |
 
+## Demo Sources
+
+### Built-in Demos
+Curated YAML scripts bundled in `Resources/Scripts/`. Hand-authored to showcase specific scenarios (food ordering, basic AAC interaction, escalation). Available in the TileScript tab under "Curated Demos" with Step and Run buttons.
+
+### User-Recorded Demos
+Users can record their own demos by tapping a Record button on the Home tab, interacting with the app naturally, then stopping and saving. The recorder captures tile taps and page navigations as they happen, grouping them into YAML rows using `clearSelection()` as the row boundary. The generated sentence for each utterance is saved as a YAML comment for readability.
+
+Recordings are stored as `RecordedScript` SwiftData models (syncs across devices via CloudKit). They appear in the TileScript tab under "My Recordings" with the same Step/Run controls as curated demos. Recordings can be exported as `.yaml` files for sharing.
+
+**Recording flow:**
+1. Tap the red Record button on the Home tab
+2. Interact naturally — navigate pages, tap tiles, let sentences generate
+3. Each `clearSelection()` (user X button or idle timer) finalizes one YAML row
+4. Tap Stop → name the recording → Save
+5. The recording is now playable via TileScriptRunner like any other script
+
 ## Architecture
 
 ### Key Types
 - **NavigationCoordinator** — Shared nav state extracted from TileGridView
 - **TileScript** — Parsed script model
 - **TileScriptParser** — YAML → TileScript (Yams)
+- **TileScriptSerializer** — TileScript → YAML (inverse of parser)
 - **TileScriptRunner** — @Observable execution engine with debugger-style stepping
-- **BulkCacheGenerator** — Direct cache population bypassing engine
+- **TileScriptRecorder** — @Observable recording state machine
+- **BulkCacheGenerator** — Cache population for bulk test scenarios
+- **RecordedScript** — SwiftData model for user recordings
 
 ### Stepping Model
 Position tracked as `(commandIndex, rowIndex)`:
@@ -77,8 +97,9 @@ Position tracked as `(commandIndex, rowIndex)`:
 - **Play**: Resume continuous execution
 
 ### UI
-- **TileScriptView** — New tab: browse curated scripts, configure test runs
+- **TileScriptView** — TileScript tab: curated demos, user recordings, test generator
 - **TileScriptPlaybackOverlay** — Floating HUD on Home tab during playback
+- **TileScriptRecordingOverlay** — Record button + recording indicator on Home tab
 
 ## Files
 ```
@@ -86,13 +107,19 @@ claudeBlast/Engine/TileScript/
   TileScriptCommand.swift
   TileScript.swift
   TileScriptParser.swift
+  TileScriptSerializer.swift
   TileScriptRunner.swift
+  TileScriptRecorder.swift
   BulkCacheGenerator.swift
   NavigationCoordinator.swift
+
+claudeBlast/Models/
+  RecordedScript.swift
 
 claudeBlast/Views/
   TileScriptView.swift
   TileScriptPlaybackOverlay.swift
+  TileScriptRecordingOverlay.swift
 
 claudeBlast/Resources/Scripts/
   demo_basic.yaml
