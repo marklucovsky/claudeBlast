@@ -28,6 +28,14 @@ final class SentenceEngine {
     private(set) var recentHistory: [HistoryEntry] = []
     var sessionNotes: String = ""
 
+    /// Called with the current generatedSentence just before clearSelection() wipes state.
+    /// Used by TileScriptRecorder to capture sentence text and finalize the current row.
+    var onWillClear: ((String?) -> Void)?
+
+    /// Called when a real multi-tile sentence is generated (from cache or API, 2+ tiles).
+    /// Single-tile display names do NOT trigger this.
+    var onSentenceReady: ((String) -> Void)?
+
     var isSpeaking: Bool { speechSynthesizer.isSpeaking }
 
     func appendNote(_ note: String) {
@@ -105,6 +113,7 @@ final class SentenceEngine {
     }
 
     func clearSelection() {
+        onWillClear?(generatedSentence)
         debounceTask?.cancel()
         debounceTask = nil
         idleTask?.cancel()
@@ -238,6 +247,7 @@ final class SentenceEngine {
             generatedSentence = cached.sentence
             appendToHistory(cached.sentence)
             recordHistory(tiles: tiles, sentence: cached.sentence)
+            onSentenceReady?(cached.sentence)
             speak(cached.sentence)
             isThinking = false
             startIdleTimer()
@@ -274,6 +284,7 @@ final class SentenceEngine {
             generatedSentence = result.text
             appendToHistory(result.text)
             recordHistory(tiles: tiles, sentence: result.text)
+            onSentenceReady?(result.text)
 
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             let secs = String(format: "%.3f", elapsed.timeInterval)

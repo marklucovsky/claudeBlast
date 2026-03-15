@@ -27,6 +27,7 @@ struct TileGridView: View {
     @Environment(SentenceEngine.self) private var engine
     @Environment(NavigationCoordinator.self) private var coordinator
     @Environment(TileScriptRunner.self) private var scriptRunner
+    @Environment(TileScriptRecorder.self) private var recorder
     @State private var currentDisplayPage: Int? = 0
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
@@ -81,6 +82,9 @@ struct TileGridView: View {
                     engine.clearSelection()
                 },
                 onReplay: {
+                    if recorder.state == .recording {
+                        recorder.recordReplay()
+                    }
                     engine.replay()
                 },
                 onReplayHistory: { entry in
@@ -115,6 +119,8 @@ struct TileGridView: View {
         .overlay(alignment: .bottom) {
             if scriptRunner.state != .idle {
                 TileScriptPlaybackOverlay()
+            } else {
+                TileScriptRecordingOverlay()
             }
         }
         .task {
@@ -337,11 +343,17 @@ struct TileGridView: View {
                     engine.speakTile(pageTile.tile.displayName)
                 }
                 engine.addTile(pageTile.tile)
+                if recorder.state == .recording {
+                    recorder.recordTap(tileKey: pageTile.tile.key)
+                }
             }
         }
         if !pageTile.link.isEmpty {
             engine.cancelIdleTimer()
             coordinator.navigate(to: pageTile.link)
+            if recorder.state == .recording {
+                recorder.recordNavigate(pageKey: pageTile.link)
+            }
         }
     }
 }
@@ -467,6 +479,7 @@ private extension Array {
         .environment(SentenceEngine(provider: MockSentenceProvider()))
         .environment(NavigationCoordinator())
         .environment(TileScriptRunner())
+        .environment(TileScriptRecorder())
         .modelContainer(
             for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
             inMemory: true

@@ -12,6 +12,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(TileScriptRunner.self) private var scriptRunner
+    @Environment(TileScriptRecorder.self) private var scriptRecorder
     @State private var selectedTab: Int = 0
 
     var body: some View {
@@ -34,6 +35,8 @@ struct ContentView: View {
         }
         .onAppear {
             scriptRunner.onSwitchToHome = { selectedTab = 0 }
+            scriptRecorder.onSwitchToHome = { selectedTab = 0 }
+            scriptRecorder.onSwitchToScript = { selectedTab = 2 }
         }
     }
 }
