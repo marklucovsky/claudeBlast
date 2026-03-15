@@ -15,6 +15,9 @@ import AVFoundation
 struct claudeBlastApp: App {
     private let modelContainer: ModelContainer
     @State private var sentenceEngine: SentenceEngine
+    @State private var navigationCoordinator = NavigationCoordinator()
+    @State private var scriptRunner = TileScriptRunner()
+    @State private var scriptRecorder = TileScriptRecorder()
 
     init() {
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
@@ -66,8 +69,17 @@ struct claudeBlastApp: App {
         WindowGroup {
             ContentView()
                 .environment(sentenceEngine)
+                .environment(navigationCoordinator)
+                .environment(scriptRunner)
+                .environment(scriptRecorder)
                 .onAppear {
                     sentenceEngine.configure(modelContext: modelContainer.mainContext)
+                    scriptRunner.configure(
+                        engine: sentenceEngine,
+                        coordinator: navigationCoordinator,
+                        modelContext: modelContainer.mainContext
+                    )
+                    scriptRecorder.configure(engine: sentenceEngine, runner: scriptRunner, coordinator: navigationCoordinator)
                 }
         }
         .modelContainer(modelContainer)

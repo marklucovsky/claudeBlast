@@ -305,6 +305,26 @@ Page structure: Home -> category pages -> sub-pages (with pagination for large c
 
 ---
 
+### Demo Record & Playback (TileScript)
+
+**Problem:** Demoing the app live is hard — the presenter can't simultaneously talk and drive the UI without mistakes. Preparing for a specific demo scenario requires writing YAML by hand.
+
+**Solution:** TileScript provides scriptable playback with two content sources:
+- **Built-in demos** — Hand-authored YAML scripts bundled with the app for common scenarios
+- **User-recorded demos** — Record mode captures real interactions as replayable scripts
+
+**Record mode flow:** Tap Record on the Home tab, interact with the app naturally (navigate pages, tap tiles, let sentences generate), tap Stop, name and save. The system captures every navigation and tile tap, grouping actions into utterance rows. The generated sentence becomes a comment in the YAML for readability.
+
+**Playback features:** Scripts play back hands-free with configurable timing. Debugger-style controls (step over, step into, continue, pause, rewind) allow fine-grained control during presentations. A floating HUD shows current position and upcoming actions.
+
+**Storage:** Recordings are SwiftData models (`RecordedScript`) — they sync across devices via iCloud alongside other app data. Export to `.yaml` files is available for sharing.
+
+**Test harness:** TileScript also supports bulk cache generation for scale testing (e.g., 10K random tile combinations exercising the sentence cache). This shares the same script format and runner infrastructure.
+
+See `docs/tilescript.md` for the full technical specification.
+
+---
+
 ### Open Questions
 - **TabView / minimum deployment target**: iOS 18 introduced a new `Tab` API with significantly improved iPad behavior (sidebar-style tab bar, better adaptive layout). We're currently using the legacy `tabItem` modifier to support older targets, but should revisit raising the minimum to iOS 18 to get the modern tab experience — especially important for the iPad form factor where the tab bar presentation changed substantially.
 - Voice selection: What voices feel right for a child? Can we let the child pick "their" voice?

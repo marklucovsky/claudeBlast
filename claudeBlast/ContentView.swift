@@ -11,16 +11,32 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @Environment(TileScriptRunner.self) private var scriptRunner
+    @Environment(TileScriptRecorder.self) private var scriptRecorder
+    @State private var selectedTab: Int = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             TileGridView()
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
+                .tag(0)
             AdminView()
                 .tabItem {
                     Label("Admin", systemImage: "lock.fill")
                 }
+                .tag(1)
+            TileScriptView()
+                .tabItem {
+                    Label("TileScript", systemImage: "play.rectangle.fill")
+                }
+                .tag(2)
+        }
+        .onAppear {
+            scriptRunner.onSwitchToHome = { selectedTab = 0 }
+            scriptRecorder.onSwitchToHome = { selectedTab = 0 }
+            scriptRecorder.onSwitchToScript = { selectedTab = 2 }
         }
     }
 }

@@ -1,0 +1,22 @@
+name: Food Ordering
+description: Child requesting various foods with increasing urgency
+audio: on
+tileWait: .human
+sentenceWait: .human
+
+script:
+  - comment: Starting with a simple request
+  - tiles:
+    - <home>, <food>, pizza             # Just pizza to start
+  - comment: Adding more items
+  - tiles:
+    - <food>, pizza, fries              # Pizza and fries combo
+  - comment: Wants a drink too
+  - tiles:
+    - <home>, <drinks>, water           # Thirsty!
+  - comment: Back to food — escalation begins
+  - tiles:
+    - <food>, pizza, fries              # First repeat
+    - <food>, pizza, fries              # Getting impatient
+    - <food>, pizza, fries              # Really wants it now
+  - comment: Food ordering demo complete

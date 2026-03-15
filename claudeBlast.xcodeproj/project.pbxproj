@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		563E573B2F6216A500773737 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = AA000002AAAA000200000002 /* Yams */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		56B2166B2F43D23D00A89419 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -39,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				563E573B2F6216A500773737 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +95,7 @@
 			);
 			name = claudeBlast;
 			packageProductDependencies = (
+				AA000002AAAA000200000002 /* Yams */,
 			);
 			productName = claudeBlast;
 			productReference = 56B216532F357AEC00A89419 /* claudeBlast.app */;
@@ -146,6 +152,9 @@
 			);
 			mainGroup = 56B2164A2F357AEC00A89419;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 56B216542F357AEC00A89419 /* Products */;
 			projectDirPath = "";
@@ -472,6 +481,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA000002AAAA000200000002 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000001AAAA000100000001 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 56B2164B2F357AEC00A89419 /* Project object */;
 }

@@ -28,6 +28,7 @@ func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
     let schema = Schema([
         TileModel.self, PageModel.self, PageTileModel.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
+        RecordedScript.self,
     ])
     let localConfig = ModelConfiguration(schema: schema,
                                          isStoredInMemoryOnly: false,
