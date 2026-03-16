@@ -26,6 +26,7 @@ final class SentenceEngine {
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
     private(set) var recentHistory: [HistoryEntry] = []
+    private(set) var comparisonSentence: String?
     var sessionNotes: String = ""
 
     /// Called with the current generatedSentence just before clearSelection() wipes state.
@@ -50,6 +51,7 @@ final class SentenceEngine {
     private(set) var provider: any SentenceProvider
     var audioEnabled: Bool = true
     var voiceIdentifier: String = ""
+    var compareProviders: Bool = false
     let maxTiles: Int = 4
 
     // MARK: - Dependencies
@@ -120,6 +122,7 @@ final class SentenceEngine {
         idleTask = nil
         selectedTiles.removeAll()
         generatedSentence = nil
+        comparisonSentence = nil
         isThinking = false
         isWaiting = false
         // Preserve repetitionCount and lastTileKey so escalation
@@ -261,13 +264,31 @@ final class SentenceEngine {
         let systemPrompt = promptBuilder.buildSystemPrompt()
         let userPrompt = promptBuilder.formatUserPrompt(tiles: tiles)
 
+        // Fire comparison provider in parallel when enabled
+        let shouldCompare = compareProviders && repetition == 0
+        let comparisonProvider: (any SentenceProvider)? = shouldCompare ? makeAppleProviderIfAvailable() : nil
+
+        let context = conversationHistory + [userPrompt]
         let apiStart = ContinuousClock.now
         do {
-            let result = try await provider.generateSentence(
-                tiles: tiles,
-                systemPrompt: systemPrompt,
-                conversationContext: conversationHistory + [userPrompt]
-            )
+            let result: SentenceResult
+            let comparisonText: String?
+
+            if let compProvider = comparisonProvider {
+                // Run both providers concurrently
+                async let primaryTask = provider.generateSentence(
+                    tiles: tiles, systemPrompt: systemPrompt, conversationContext: context)
+                async let compTask = Self.safeGenerate(
+                    provider: compProvider, tiles: tiles, systemPrompt: systemPrompt, context: context)
+
+                result = try await primaryTask
+                comparisonText = await compTask
+            } else {
+                result = try await provider.generateSentence(
+                    tiles: tiles, systemPrompt: systemPrompt, conversationContext: context)
+                comparisonText = nil
+            }
+
             let elapsed = apiStart.duration(to: .now)
 
             if repetition == 0 {
@@ -282,6 +303,7 @@ final class SentenceEngine {
             }
 
             generatedSentence = result.text
+            comparisonSentence = comparisonText
             appendToHistory(result.text)
             recordHistory(tiles: tiles, sentence: result.text)
             onSentenceReady?(result.text)
@@ -297,6 +319,9 @@ final class SentenceEngine {
             } else {
                 Self.logger.info("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] sentence=\"\(result.text)\"")
             }
+            if let comp = comparisonText {
+                Self.logger.info("generate: comparison(apple)=\"\(comp)\"")
+            }
 
             speak(result.text)
             startIdleTimer()
@@ -310,6 +335,7 @@ final class SentenceEngine {
                 return
             }
             generatedSentence = nil
+            comparisonSentence = nil
         }
 
         isThinking = false
@@ -338,6 +364,32 @@ final class SentenceEngine {
         conversationHistory.append(sentence)
         if conversationHistory.count > maxConversationHistory {
             conversationHistory.removeFirst()
+        }
+    }
+
+    // MARK: - Comparison helpers
+
+    private func makeAppleProviderIfAvailable() -> (any SentenceProvider)? {
+        if #available(iOS 26, *) {
+            return AppleSentenceProvider()
+        }
+        return nil
+    }
+
+    /// Runs a provider's generateSentence without throwing — returns nil on failure.
+    private static func safeGenerate(
+        provider: any SentenceProvider,
+        tiles: [TileSelection],
+        systemPrompt: [PromptMessage],
+        context: [String]
+    ) async -> String? {
+        do {
+            let result = try await provider.generateSentence(
+                tiles: tiles, systemPrompt: systemPrompt, conversationContext: context)
+            return result.text
+        } catch {
+            logger.warning("comparison provider failed: \(error.localizedDescription)")
+            return nil
         }
     }
 }

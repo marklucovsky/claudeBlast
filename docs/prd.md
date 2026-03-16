@@ -341,6 +341,15 @@ See `docs/tilescript.md` for the full technical specification.
 
 *(Newest first)*
 
+**2026-03-15 — Apple Foundation Models evaluation: blocked by safety guardrails**
+- Built an `AppleSentenceProvider` using iOS 26 `FoundationModels` framework (`@Generable` structured output, on-device ~3B LLM). Goal: eliminate the OpenAI API key requirement — the #1 adoption barrier from the GTM plan.
+- Also built a provider comparison mode (A/B): fire OpenAI and Apple in parallel, show both results in the sentence tray for side-by-side quality evaluation.
+- **Result: Apple Intelligence is currently unusable for AAC sentence generation.** The on-device safety guardrails trigger on completely innocuous tile combinations — "grandpa" + "banana", "dad" + "cheese", "grandpa" + "peanut butter". These are core AAC vocabulary items.
+- Tried multiple prompt strategies: (1) reusing the full OpenAI system prompt — triggered guardrails due to content-filtering language ("sex acts", "pornographic") in the prompt itself; (2) simplified child-focused prompt — "child" + food words triggered guardrails; (3) fully neutral prompt with no mention of children, age, or disabilities — still triggered on family member + food combinations.
+- The ~3B on-device model also struggled with output quality when it did work — echoing prompt format back instead of generating sentences, likely due to the model's limited instruction-following capability.
+- **Decision:** Apple provider code retained but hidden from the UI. The comparison infrastructure (parallel provider execution, comparison display in tray) is kept as general-purpose plumbing for future provider A/B testing (e.g., OpenAI vs Anthropic Claude API). The `AppleSentenceProvider`, `compareProviders` setting key, and `comparisonSentence` flow through `SentenceEngine` are all in place and can be re-enabled when Apple improves their guardrails or offers a way to configure safety thresholds for assistive technology use cases.
+- **Filed as a known limitation.** Apple's Foundation Models framework is iOS 26 beta — safety guardrails may be relaxed or made configurable before GA. Worth re-evaluating each beta cycle.
+
 **2026-02-17 — iPhone from day one + sharing is solved**
 - iPhone layout developed alongside iPad, not deferred. Old/surplus iPhones become repurposed communication devices. Lowers access barrier.
 - Grid adapts to form factor (fewer tiles visible on iPhone, snapping scroll handles it).

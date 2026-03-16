@@ -17,6 +17,7 @@ enum AppSettingsKey {
     static let tileSpeechEnabled     = "tile_speech_enabled"
     static let speechVoiceIdentifier = "speech_voice_identifier"
     static let tileMinSize           = "tile_min_size"
+    static let compareProviders      = "compare_providers"
 }
 
 /// Version stamp written to UserDefaults after bootstrap completes.
