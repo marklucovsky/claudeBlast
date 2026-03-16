@@ -71,6 +71,7 @@ struct TileGridView: View {
             SentenceTrayView(
                 selectedTiles: engine.selectedTiles,
                 generatedSentence: engine.generatedSentence,
+                comparisonSentence: engine.comparisonSentence,
                 isThinking: engine.isThinking,
                 isWaiting: engine.isWaiting,
                 canReplay: engine.canReplay,

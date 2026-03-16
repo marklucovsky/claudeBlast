@@ -12,11 +12,13 @@ import UIKit
 private let kChipsHeight: CGFloat = 36
 private let kSentenceHeight: CGFloat = 22
 private let kContentHeight: CGFloat = kChipsHeight + 4 + kSentenceHeight
+private let kComparisonHeight: CGFloat = 16
 private let kColumnWidth: CGFloat = 36
 
 struct SentenceTrayView: View {
     let selectedTiles: [TileSelection]
     let generatedSentence: String?
+    let comparisonSentence: String?
     let isThinking: Bool
     let isWaiting: Bool
     let canReplay: Bool
@@ -30,6 +32,14 @@ struct SentenceTrayView: View {
 
     private var showReplay: Bool {
         canReplay && !isThinking && !isWaiting && generatedSentence != nil
+    }
+
+    private var hasComparison: Bool {
+        comparisonSentence != nil && generatedSentence != nil
+    }
+
+    private var totalContentHeight: CGFloat {
+        hasComparison ? kContentHeight + kComparisonHeight + 4 : kContentHeight
     }
 
     var body: some View {
@@ -110,6 +120,22 @@ struct SentenceTrayView: View {
                 .frame(height: kSentenceHeight, alignment: .leading)
                 .animation(.easeInOut(duration: 0.2), value: generatedSentence)
                 .animation(.easeInOut(duration: 0.2), value: isThinking)
+
+                // Comparison sentence (Apple Intelligence A/B mode)
+                if let comparison = comparisonSentence, generatedSentence != nil {
+                    HStack(spacing: 4) {
+                        Text("AI")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.green)
+                        Text(comparison)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(height: kComparisonHeight, alignment: .leading)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -149,9 +175,10 @@ struct SentenceTrayView: View {
                 .allowsHitTesting(!recentHistory.isEmpty)
                 .animation(.easeInOut(duration: 0.15), value: recentHistory.isEmpty)
             }
-            .frame(width: kColumnWidth, height: kContentHeight)
+            .frame(width: kColumnWidth, height: totalContentHeight)
         }
-        .frame(height: kContentHeight)
+        .frame(height: totalContentHeight)
+        .animation(.easeInOut(duration: 0.2), value: hasComparison)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(

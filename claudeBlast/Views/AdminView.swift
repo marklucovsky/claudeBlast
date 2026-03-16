@@ -66,6 +66,9 @@ struct AdminView: View {
                     } else {
                         Picker("Provider", selection: $providerChoice) {
                             Text("OpenAI").tag("openai")
+                            // Apple Intelligence hidden — on-device safety guardrails
+                            // block innocuous AAC content (see PRD discussion log).
+                            // Comparison infrastructure retained for future provider A/B.
                             Text("Mock").tag("mock")
                         }
 
