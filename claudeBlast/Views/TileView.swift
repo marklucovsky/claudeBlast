@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct TileView: View {
     let pageTile: PageTileModel
@@ -17,7 +18,7 @@ struct TileView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 3) {
+            VStack(spacing: 0) {
                 // Full-bleed square image card
                 tileCard
 
@@ -98,4 +99,28 @@ struct TileView: View {
         default: return .gray
         }
     }
+}
+
+#Preview("Audible tile") {
+    let tile = TileModel(key: "eat", wordClass: "actions")
+    let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
+    TileView(pageTile: pageTile, isSelected: false) {}
+        .frame(width: 80)
+        .modelContainer(for: TileModel.self, inMemory: true)
+}
+
+#Preview("Nav tile") {
+    let tile = TileModel(key: "food", wordClass: "navigation")
+    let pageTile = PageTileModel(tile: tile, link: "food", isAudible: false)
+    TileView(pageTile: pageTile, isSelected: false) {}
+        .frame(width: 80)
+        .modelContainer(for: TileModel.self, inMemory: true)
+}
+
+#Preview("Selected tile") {
+    let tile = TileModel(key: "happy", wordClass: "feeling")
+    let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
+    TileView(pageTile: pageTile, isSelected: true) {}
+        .frame(width: 80)
+        .modelContainer(for: TileModel.self, inMemory: true)
 }

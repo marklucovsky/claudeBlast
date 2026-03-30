@@ -13,6 +13,7 @@ struct TileScriptView: View {
     @Environment(TileScriptRunner.self) private var runner
     @Environment(TileScriptRecorder.self) private var recorder
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \RecordedScript.created, order: .reverse)
     private var recordings: [RecordedScript]
@@ -50,6 +51,11 @@ struct TileScriptView: View {
                 }
             }
             .navigationTitle("TileScript")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .onChange(of: recorder.lastRecordedScript != nil) { _, hasScript in
             if hasScript, let script = recorder.lastRecordedScript {
@@ -387,4 +393,9 @@ struct TileScriptView: View {
             ScriptInfo(name: "Food Ordering", description: "Food ordering scenario with escalation", resourceName: "demo_food"),
         ]
     }
+}
+
+#Preview {
+    TileScriptView()
+        .previewEnvironment()
 }

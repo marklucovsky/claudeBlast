@@ -10,10 +10,10 @@ import Foundation
 
 @MainActor
 final class SentenceCacheManager {
-    private let modelContext: ModelContext
+    let context: ModelContext
 
     init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+        self.context = modelContext
     }
 
     /// Build a canonical cache key from tile keys (deduplicated, sorted, comma-joined).
@@ -29,7 +29,7 @@ final class SentenceCacheManager {
             predicate: #Predicate { $0.cacheKey == key }
         )
         descriptor.fetchLimit = 1
-        guard let entry = try? modelContext.fetch(descriptor).first else { return }
+        guard let entry = try? context.fetch(descriptor).first else { return }
         entry.hitCount += 1
         entry.lastUsed = .now
     }
@@ -42,7 +42,7 @@ final class SentenceCacheManager {
         )
         descriptor.fetchLimit = 1
 
-        guard let entry = try? modelContext.fetch(descriptor).first else {
+        guard let entry = try? context.fetch(descriptor).first else {
             return nil
         }
 
@@ -59,14 +59,14 @@ final class SentenceCacheManager {
         )
         descriptor.fetchLimit = 1
 
-        if let existing = try? modelContext.fetch(descriptor).first {
+        if let existing = try? context.fetch(descriptor).first {
             existing.sentence = sentence
             existing.audioData = audioData
             existing.lastUsed = .now
         } else {
             let tileKeys = tiles.map(\.key)
             let entry = SentenceCache(tileKeys: tileKeys, sentence: sentence, audioData: audioData)
-            modelContext.insert(entry)
+            context.insert(entry)
         }
     }
 
@@ -75,19 +75,19 @@ final class SentenceCacheManager {
         let descriptor = FetchDescriptor<SentenceCache>(
             sortBy: [SortDescriptor(\.lastUsed, order: .reverse)]
         )
-        return (try? modelContext.fetch(descriptor)) ?? []
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     /// Delete a single cache entry.
     func delete(_ entry: SentenceCache) {
-        modelContext.delete(entry)
+        context.delete(entry)
     }
 
     /// Flush all cache entries.
     func flushAll() {
         let entries = allEntries()
         for entry in entries {
-            modelContext.delete(entry)
+            context.delete(entry)
         }
     }
 
@@ -104,6 +104,6 @@ final class SentenceCacheManager {
     /// Log a MetricEvent.
     func logEvent(subjectType: String, subjectKey: String, eventType: MetricType) {
         let event = MetricEvent(subjectType: subjectType, subjectKey: subjectKey, eventType: eventType)
-        modelContext.insert(event)
+        context.insert(event)
     }
 }
