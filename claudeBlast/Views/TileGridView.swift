@@ -33,11 +33,12 @@ struct TileGridView: View {
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
+    @State private var promotedExpanded: Bool = false
 
     @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
 
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: CGFloat(tileMinSize)), spacing: 8)]
+        [GridItem(.adaptive(minimum: CGFloat(tileMinSize)), spacing: 6)]
     }
 
     private var activeScene: BlasterScene? { activeScenes.first }
@@ -94,14 +95,8 @@ struct TileGridView: View {
             )
             .padding(.top, 8)
 
-            if !promotedEntries.isEmpty {
-                PromotedTileStrip(
-                    entries: Array(promotedEntries.prefix(8)),
-                    sceneKeySet: sceneKeySet,
-                    tileWordClass: tileWordClass
-                ) { entry in
-                    engine.speakPromoted(entry)
-                }
+            if coordinator.navigationPath.count > 1 || !promotedEntries.isEmpty {
+                navBar
             }
 
             if let page = currentPage {
@@ -113,9 +108,6 @@ struct TileGridView: View {
                     description: Text("No scene is currently active.")
                 )
             }
-
-            breadcrumbBar
-                .animation(.easeInOut(duration: 0.2), value: coordinator.navigationPath.count > 1)
         }
         .overlay(alignment: .bottom) {
             if scriptRunner.state != .idle {
@@ -176,21 +168,64 @@ struct TileGridView: View {
         }
     }
 
-    // Navigation breadcrumb bar — shown only when one level below home.
-    // Tapping any non-current segment navigates back to it.
-    private var breadcrumbBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+    // Combined nav bar: breadcrumbs (leading) + frequent toggle (trailing).
+    // Shares a single row of vertical space when both are active.
+    private var navBar: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ForEach(breadcrumbSteps, id: \.id) { step in
-                    breadcrumbStepView(step)
+                // Breadcrumbs — leading
+                if coordinator.navigationPath.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 0) {
+                            ForEach(breadcrumbSteps, id: \.id) { step in
+                                breadcrumbStepView(step)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                // Frequent toggle — trailing
+                if !promotedEntries.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            promotedExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                            Text("\(promotedEntries.prefix(8).count)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .rotationEffect(.degrees(promotedExpanded ? 90 : 0))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 16)
+            .frame(height: 26)
+
+            // Expanded chip strip
+            if promotedExpanded && !promotedEntries.isEmpty {
+                PromotedChipStrip(
+                    entries: Array(promotedEntries.prefix(8)),
+                    sceneKeySet: sceneKeySet,
+                    tileWordClass: tileWordClass
+                ) { entry in
+                    engine.speakPromoted(entry)
+                }
+            }
+
+            Divider()
         }
-        .frame(height: 30)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { Divider() }
-        .opacity(coordinator.navigationPath.count > 1 ? 1 : 0)
     }
 
     @ViewBuilder
@@ -252,19 +287,22 @@ struct TileGridView: View {
     /// Compute how many tiles fit on one page given the available geometry.
     private func tilesPerPage(geo: GeometryProxy, isLandscape: Bool) -> Int {
         let hPad: CGFloat = 32   // 16pt padding each side
-        let vPad: CGFloat = 32   // 16pt top + 16pt bottom within each page
-        let spacing: CGFloat = 8
+        let vPad: CGFloat = 8
+        let spacing: CGFloat = 6
         let minTile = CGFloat(tileMinSize)
-        let labelH: CGFloat = 17 // 3pt gap + 11pt font + ~3pt margin
+        let labelH: CGFloat = 13 // 11pt font line height + ~2pt margin (VStack spacing: 0)
 
         let availW = geo.size.width - hPad
         let availH = geo.size.height - vPad
 
         let cols = max(1, Int((availW + spacing) / (minTile + spacing)))
         let tileW = (availW - CGFloat(cols - 1) * spacing) / CGFloat(cols)
-        let tileH = tileW + spacing + labelH  // image is 1:1 square
+        let tileH = tileW + labelH  // image is 1:1 square + label
 
         let rows = max(1, Int((availH + spacing) / (tileH + spacing)))
+        #if DEBUG
+        print("[TileGrid] geo=\(Int(geo.size.width))×\(Int(geo.size.height)) cols=\(cols) tileW=\(Int(tileW)) tileH=\(Int(tileH)) rows=\(rows) total=\(cols * rows)")
+        #endif
         return cols * rows
     }
 
@@ -272,12 +310,13 @@ struct TileGridView: View {
     private func landscapeTabView(chunks: [[PageTileModel]]) -> some View {
         TabView(selection: $currentDisplayPage) {
             ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
-                LazyVGrid(columns: columns, spacing: 8) {
+                LazyVGrid(columns: columns, spacing: 6) {
                     ForEach(tiles) { pageTile in
                         tileCellView(for: pageTile)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .tag(index as Int?)
             }
@@ -296,18 +335,21 @@ struct TileGridView: View {
             // preventing layout artifacts on pages beyond the first.
             VStack(spacing: 0) {
                 ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
-                    LazyVGrid(columns: columns, spacing: 8) {
+                    LazyVGrid(columns: columns, spacing: 6) {
                         ForEach(tiles) { pageTile in
                             tileCellView(for: pageTile)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
                     .frame(height: pageHeight, alignment: .top)
                     .id(index)
                 }
             }
         }
         .scrollTargetBehavior(.paging)
+        .scrollClipDisabled(false)
+        .clipped()
         .scrollPosition(id: $currentDisplayPage)
         .onScrollPhaseChange { old, new in
             if old != .idle && new == .idle {
@@ -361,7 +403,8 @@ struct TileGridView: View {
 
 // MARK: - Promoted Tile Strip
 
-private struct PromotedTileStrip: View {
+/// Horizontal scroll of promoted chips — shown when expanded from the nav bar.
+private struct PromotedChipStrip: View {
     let entries: [SentenceCache]
     let sceneKeySet: Set<String>
     let tileWordClass: [String: String]
@@ -375,48 +418,33 @@ private struct PromotedTileStrip: View {
     private var outOfScene: [SentenceCache] { entries.filter { !isInScene($0) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                Image(systemName: "star.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-                Text("Frequent")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(inScene) { entry in
+                    PromotedChip(entry: entry, isInScene: true,
+                                 tileWordClass: tileWordClass, onTap: onTap)
+                }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(inScene) { entry in
-                        PromotedChip(entry: entry, isInScene: true,
+                if !outOfScene.isEmpty {
+                    if !inScene.isEmpty {
+                        Rectangle()
+                            .fill(.separator)
+                            .frame(width: 1, height: 36)
+                            .padding(.horizontal, 4)
+                    }
+                    Text("other")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+
+                    ForEach(outOfScene) { entry in
+                        PromotedChip(entry: entry, isInScene: false,
                                      tileWordClass: tileWordClass, onTap: onTap)
                     }
-
-                    if !outOfScene.isEmpty {
-                        if !inScene.isEmpty {
-                            Rectangle()
-                                .fill(.separator)
-                                .frame(width: 1, height: 36)
-                                .padding(.horizontal, 4)
-                        }
-                        Text("other")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-
-                        ForEach(outOfScene) { entry in
-                            PromotedChip(entry: entry, isInScene: false,
-                                         tileWordClass: tileWordClass, onTap: onTap)
-                        }
-                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
         }
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
     }
 }
 
@@ -477,12 +505,5 @@ private extension Array {
 
 #Preview {
     TileGridView()
-        .environment(SentenceEngine(provider: MockSentenceProvider()))
-        .environment(NavigationCoordinator())
-        .environment(TileScriptRunner())
-        .environment(TileScriptRecorder())
-        .modelContainer(
-            for: [TileModel.self, PageModel.self, PageTileModel.self, BlasterScene.self],
-            inMemory: true
-        )
+        .previewEnvironment()
 }

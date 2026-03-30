@@ -342,8 +342,22 @@ final class SentenceEngine {
     }
 
     /// Play a promoted (cached) phrase directly — no API call, instant feedback.
+    /// Populates the tray with the entry's tiles so the child sees what was selected.
     func speakPromoted(_ entry: SentenceCache) {
         clearSelection()
+        // Reconstruct tile selections from cached keys
+        if let ctx = cacheManager?.context {
+            let keys = entry.tileKeys
+            let descriptor = FetchDescriptor<TileModel>()
+            if let allTiles = try? ctx.fetch(descriptor) {
+                let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+                for key in keys {
+                    if let tile = lookup[key] {
+                        selectedTiles.append(TileSelection(from: tile))
+                    }
+                }
+            }
+        }
         generatedSentence = entry.sentence
         cacheManager?.logEvent(subjectType: "promoted", subjectKey: entry.cacheKey, eventType: .hit)
         speak(entry.sentence)

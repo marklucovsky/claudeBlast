@@ -40,8 +40,11 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
 
+    @Environment(\.dismiss) private var dismiss
+
     #if DEBUG
     @AppStorage(AppSettingsKey.icloudEnabled) private var icloudEnabled: Bool = false
+    @AppStorage(AppSettingsKey.devShowNav) private var devShowNav: Bool = false
     @State private var showResetConfirmation = false
     @State private var isResetting = false
     #endif
@@ -227,6 +230,7 @@ struct AdminView: View {
                 }
                 #if DEBUG
                 Section("Developer") {
+                    Toggle("Show Nav Menu", isOn: $devShowNav)
                     if isResetting {
                         HStack {
                             ProgressView().controlSize(.small)
@@ -249,6 +253,11 @@ struct AdminView: View {
                 #endif
             }
             .navigationTitle("Admin")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .onAppear {
             // Request speech recognition permission now, while no sheet is open,
@@ -1001,4 +1010,9 @@ private struct StatBox: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
+
+#Preview {
+    AdminView()
+        .previewEnvironment()
 }
