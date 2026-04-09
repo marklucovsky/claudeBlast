@@ -210,13 +210,61 @@ Understanding how AAC is funded helps us position Blaster:
 
 **Offline capability.** Children need to communicate everywhere, including places without internet. Current architecture requires API for sentence generation. Cache helps (frequent phrases work offline), but first-use and novel combinations need connectivity. On-device models (Apple Intelligence, MLX) are the long-term answer. Direct word-level speech works offline today.
 
-**Image licensing.** ARASAAC is CC BY-NC-SA 4.0.
-- **TestFlight:** Very low risk. No money changes hands, not publicly listed. Several precedents.
-- **App Store (free):** Gray area. Multiple free AAC apps (LetMeTalk, CBoard, AraBoard) already use ARASAAC on the App Store. Worth emailing ARASAAC (arasaac@aragon.es) for explicit permission — they have a track record of supporting AAC apps.
-- **Clean path:** Generate full custom DALL-E set using existing `tools/generate_dalle.py`. 473 images at ~$0.04-0.08 each = $20-40. Zero licensing ambiguity, unique visual identity. This was always the plan.
-- **Fallback:** Mulberry Symbols (CC BY-SA 4.0, ~3,500 symbols) — no NonCommercial restriction.
+**Image sets — DECIDED.** Building two custom DALL-E sets, both fully owned (Apache 2.0):
+1. **Playful 3D** (primary) — soft clay/plasticine style, pastel-bright, Pixar-prop aesthetic. Modern, kid-friendly, "designed in 2026."
+2. **High Contrast** (accessibility) — white on black, Sclera-inspired. For children with visual impairments.
+- 473 tiles × 2 sets = 946 images. Cost: ~$38 total. Generation pipeline: `tools/generate_sets.py`.
+- Review workflow: `tools/review_tiles.py` — generates contact sheets for manual visual review, reject/regen cycle for tiles with unwanted text or visual issues.
+- Image set is a **per-scene attribute** on BlasterScene. A therapist can assign different visual styles to different children's scenes. Switching scenes auto-switches the image set.
+- Architecture: `TileImageResolver` service with fallback chain (requested set → ARASAAC → placeholder). `TileImageView` wrapper replaces 20 scattered image resolution calls.
+- **ARASAAC retained** as the bundled fallback set (already in Assets.xcassets). No licensing concern for fallback role.
+- **Sclera** evaluated and downloaded (11,495 B&W PNGs) but only 66% actual coverage of our vocabulary — gaps in basic adjectives, verbs, and social phrases. Not viable as a standalone set. Our custom High Contrast set replaces its role.
+- **Mulberry** evaluated: ~74% coverage, CC BY-SA license. Superseded by custom sets.
+- Previous ARASAAC licensing concern (CC BY-NC-SA 4.0) is now moot for primary display — custom sets ship first. ARASAAC remains as a development/fallback asset.
 
 **SLP gatekeeping.** If SLPs don't endorse Blaster, adoption will be limited regardless of how good it is. The TestFlight pilot (Phase 1) directly addresses this.
+
+---
+
+### Surveys & User Research
+
+**Lead:** Kurt Yalcin (UI/UX research, clinical trials expertise)
+
+Before the TestFlight pilot, we need structured data to validate our assumptions about the AAC market, user pain points, and Blaster's positioning. Two primary audiences: **parents/caregivers** and **SLPs/educators**.
+
+**Key research questions:**
+- What do families actually struggle with most in current AAC apps? (cost, complexity, setup time, aesthetics, lock-in?)
+- What do SLPs want from AAC tools that they don't have today?
+- How much is API key friction a real barrier vs. a perceived one?
+- How do families and therapists feel about AI-generated sentences vs. direct word output?
+- What does the scene sharing / collaboration workflow look like in practice?
+
+**Research methods (phased):**
+1. **Form-based surveys** — distributed via Facebook AAC groups, ASHA forums, PrAACtical AAC, Reddit r/AAC. Separate instruments for parents and SLPs.
+2. **Verbal interviews** — structured and semi-structured interviews with parents, SLPs, and educators. Deeper qualitative insights that surveys can't capture.
+3. **Meetups & focus groups** — in-person or virtual sessions with small groups. Especially valuable for observing group dynamics and surfacing unexpected needs.
+
+**Claude's role in research:**
+- Develop survey instruments and interview guides (question design, flow, bias review)
+- Analyze survey results (quantitative summary, cross-tabulation, key findings)
+- Transcribe and analyze verbal interviews (thematic coding, sentiment analysis, pattern extraction)
+- Synthesize findings into actionable recommendations for product and GTM decisions
+
+**Status:** Not yet started. Kurt onboarding as research lead.
+
+---
+
+### UX Studies & Validation
+
+**Lead:** Kurt Yalcin
+
+**UI/UX readiness is a GTM gate.** The app must demonstrate polished, validated UX before broader distribution. Specifically:
+
+- **Minimum two distinct UX models** ready for demo — demonstrating the flexibility and extensibility of the codebase. This proves Blaster isn't locked into a single interaction paradigm and can adapt to different children's needs, motor abilities, and therapeutic approaches.
+- **University SLP program partnerships** — formal UX studies with structured protocols. "Open-source AI-powered AAC" is a publishable research topic, and UX study data makes it compelling. University partnerships provide both rigor and a pipeline of future SLP advocates.
+- **Recorded usability sessions** during TestFlight pilot — lightweight but structured screen recordings with families and therapists.
+
+**Status:** Not yet started. Kurt onboarding as research lead. University outreach to follow after survey instruments are drafted.
 
 ---
 
@@ -245,6 +293,18 @@ Proposal: Yes, but minimal. A single-page landing site: what Blaster is, link to
 ### Appendix: Discussion Log
 
 *(Newest first)*
+
+**2026-03-30 — Surveys, UX studies, image sets decided**
+- Added Surveys & User Research section. Kurt Yalcin (Mark's son-in-law, UI/UX research & clinical trials expert) onboarding as research lead.
+- Research methods: form-based surveys → verbal interviews → meetups/focus groups. Claude develops survey instruments and analyzes results (especially verbal interview transcription and thematic analysis).
+- Added UX Studies & Validation section. UI/UX readiness designated as a GTM gate — must demo at least two distinct UX models to prove codebase flexibility.
+- University SLP program partnerships identified as the venue for formal UX studies (publishable research angle).
+- Both workstreams led by Kurt Yalcin.
+- **Image set strategy decided:** Two custom DALL-E sets — Playful 3D (primary) + High Contrast (accessibility). Per-scene switching via `BlasterScene.imageSetID`.
+- Evaluated alternatives: Sclera (downloaded 11,495 PNGs, only 66% actual coverage — too many gaps in core AAC vocab), Mulberry (~74% coverage, superseded), ARASAAC (retained as fallback only).
+- Built generation pipeline (`tools/generate_sets.py`) and review workflow (`tools/review_tiles.py`). Generation of both 473-tile sets kicked off.
+- Prototyped 3 style directions (Playful 3D, Bold Flat, Soft Watercolor) + High Contrast. Playful 3D and High Contrast selected.
+- *GTM impact: Image licensing risk eliminated. Custom visual identity established. Multi-set architecture designed.*
 
 **2026-03-13 — GTM doc iteration, research deep-dives**
 - Added annual incidence data: ~50,000-75,000 new children/year enter the AAC pipeline in the US, growing 5-8% annually (driven by autism diagnosis rates).
