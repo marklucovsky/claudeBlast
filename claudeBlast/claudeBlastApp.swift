@@ -65,6 +65,8 @@ struct claudeBlastApp: App {
         #endif
     }
 
+    @State private var importCoordinator = ImportCoordinator()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -80,6 +82,11 @@ struct claudeBlastApp: App {
                         modelContext: modelContainer.mainContext
                     )
                     scriptRecorder.configure(engine: sentenceEngine, runner: scriptRunner, coordinator: navigationCoordinator)
+                }
+                .environment(importCoordinator)
+                .onOpenURL { url in
+                    guard url.pathExtension == BlasterSceneFormat.fileExtension else { return }
+                    importCoordinator.pendingURL = url
                 }
         }
         .modelContainer(modelContainer)

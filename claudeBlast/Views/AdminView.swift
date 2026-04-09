@@ -51,6 +51,10 @@ struct AdminView: View {
 
     @State private var navigateToNewScene: BlasterScene?
     @State private var isCreatingScene = false
+    @State private var isImporting = false
+    @State private var importError: String?
+    @State private var importWarning: String?
+    @State private var sceneToExport: BlasterSceneFile?
 
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
@@ -137,8 +141,22 @@ struct AdminView: View {
                                     .tint(.green)
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if !scene.isDefault {
+                                Button(role: .destructive) {
+                                    deleteScene(scene)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            Button {
+                                exportScene(scene)
+                            } label: {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            .tint(.blue)
+                        }
                     }
-                    .onDelete(perform: deleteScenes)
                 }
 
                 Section {
@@ -146,6 +164,14 @@ struct AdminView: View {
                         isCreatingScene = true
                     } label: {
                         Label("New Scene", systemImage: "plus.circle")
+                    }
+                }
+
+                Section {
+                    Button {
+                        isImporting = true
+                    } label: {
+                        Label("Import Scene", systemImage: "square.and.arrow.down")
                     }
                 }
                 .navigationDestination(item: $navigateToNewScene) { scene in
@@ -264,6 +290,32 @@ struct AdminView: View {
             // so the system dialog is never occluded by a presented sheet.
             SFSpeechRecognizer.requestAuthorization { _ in }
         }
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.blasterScene, .json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result)
+        }
+        .alert("Import Error", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+        .alert("Import Complete", isPresented: Binding(
+            get: { importWarning != nil },
+            set: { if !$0 { importWarning = nil } }
+        )) {
+            Button("OK") { importWarning = nil }
+        } message: {
+            Text(importWarning ?? "")
+        }
+        .sheet(item: $sceneToExport) { file in
+            ActivityView(items: [file.temporaryFileURL()])
+        }
     }
 
     // MARK: - Tile Lookup
@@ -349,6 +401,18 @@ struct AdminView: View {
         try? modelContext.save()
     }
 
+    private func deleteScene(_ scene: BlasterScene) {
+        guard !scene.isDefault else { return }
+        let wasActive = scene.isActive
+        modelContext.delete(scene)
+        if wasActive {
+            if let defaultScene = scenes.first(where: { $0.isDefault }) {
+                defaultScene.isActive = true
+            }
+        }
+        try? modelContext.save()
+    }
+
     private func deleteCacheEntries(at offsets: IndexSet) {
         for index in offsets {
             modelContext.delete(cacheEntries[index])
@@ -388,6 +452,56 @@ struct AdminView: View {
         let scene = BlasterScene(name: name.isEmpty ? "New Scene" : name)
         modelContext.insert(scene)
         navigateToNewScene = scene
+    }
+
+    /// Set of tile keys from the default vocabulary (used to determine which tiles need exporting).
+    private var defaultTileKeys: Set<String> {
+        Set(allTiles.filter { UIImage(named: $0.bundleImage) != nil }.map(\.key))
+    }
+
+    private func exportScene(_ scene: BlasterScene) {
+        do {
+            let data = try SceneExporter.exportJSON(scene, defaultTileKeys: defaultTileKeys)
+            sceneToExport = BlasterSceneFile(
+                data: data,
+                filename: scene.name.sanitizedFilename + "." + BlasterSceneFormat.fileExtension
+            )
+        } catch {
+            importError = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let importResult = try SceneImporter.importJSON(data, context: modelContext)
+                navigateToNewScene = importResult.scene
+
+                var warnings: [String] = []
+                if !importResult.skippedKeys.isEmpty {
+                    warnings.append("\(importResult.skippedKeys.count) tile(s) not found: \(importResult.skippedKeys.joined(separator: ", "))")
+                }
+                if importResult.newTileCount > 0 {
+                    warnings.append("\(importResult.newTileCount) new tile(s) added to vocabulary")
+                }
+                if !importResult.oversizedImages.isEmpty {
+                    warnings.append("\(importResult.oversizedImages.count) image(s) exceeded size limit")
+                }
+                if !warnings.isEmpty {
+                    importWarning = warnings.joined(separator: "\n")
+                }
+            } catch {
+                importError = error.localizedDescription
+            }
+        case .failure(let error):
+            importError = error.localizedDescription
+        }
     }
 
     #if DEBUG
@@ -563,8 +677,17 @@ struct SceneRow: View {
                             .background(Capsule().fill(.blue.opacity(0.15)))
                             .foregroundStyle(.blue)
                     }
+                    if scene.isImported {
+                        Text("Imported")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(.orange.opacity(0.15)))
+                            .foregroundStyle(.orange)
+                    }
                 }
-                Text("\(scene.pages.count) pages")
+                Text("\(scene.pages.count) pages · \(scene.lastModified, style: .date)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !scene.descriptionText.isEmpty {

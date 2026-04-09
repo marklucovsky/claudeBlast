@@ -16,7 +16,11 @@ final class BlasterScene {
     var homePageKey: String = "home"
     var isDefault: Bool = false
     var isActive: Bool = false
+    var isImported: Bool = false
     var created: Date = Date.now
+    var lastModified: Date = Date.now
+    /// Source URL if the scene was imported from a web link.
+    var sourceURL: String = ""
 
     @Relationship(deleteRule: .nullify) var pages: [PageModel] = []
 

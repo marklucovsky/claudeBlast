@@ -13,12 +13,14 @@ import SwiftData
 struct ContentView: View {
     @Environment(TileScriptRunner.self) private var scriptRunner
     @Environment(TileScriptRecorder.self) private var scriptRecorder
+    @Environment(ImportCoordinator.self) private var importCoordinator
     @AppStorage(AppSettingsKey.devShowNav) private var devShowNav: Bool = false
 
     @State private var hamburgerVisible = false
     @State private var hideTask: Task<Void, Never>?
     @State private var showMenuSheet = false
     @State private var activeDestination: Destination?
+    @State private var pendingImportSheet: ImportSheetURL?
 
     private enum Destination: Identifiable {
         case admin, tileScript
@@ -57,6 +59,25 @@ struct ContentView: View {
                 }
                 scriptRecorder.onSwitchToScript = {
                     activeDestination = .tileScript
+                }
+            }
+            .onChange(of: importCoordinator.pendingURL) { _, url in
+                guard let url else { return }
+                importCoordinator.pendingURL = nil
+                // Dismiss any active fullScreenCover first, then present import
+                if activeDestination != nil {
+                    activeDestination = nil
+                    showMenuSheet = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        pendingImportSheet = ImportSheetURL(url: url)
+                    }
+                } else {
+                    pendingImportSheet = ImportSheetURL(url: url)
+                }
+            }
+            .sheet(item: $pendingImportSheet) { wrapper in
+                SceneImportSheet(url: wrapper.url) {
+                    pendingImportSheet = nil
                 }
             }
     }
