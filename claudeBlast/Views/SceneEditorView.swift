@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct SceneEditorView: View {
     @Bindable var scene: BlasterScene
@@ -20,6 +21,7 @@ struct SceneEditorView: View {
     @State private var isAddingPage = false
     @State private var navigateToNewPage: PageModel? = nil
     @State private var pickerKeysForNewPage: Set<String> = []
+    @State private var sceneToExport: BlasterSceneFile?
 
     var body: some View {
         List {
@@ -76,6 +78,18 @@ struct SceneEditorView: View {
         }
         .navigationTitle(scene.name.isEmpty ? "New Scene" : scene.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    exportScene()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
+        .sheet(item: $sceneToExport) { file in
+            ActivityView(items: [file.temporaryFileURL()])
+        }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { page, preSelectedKeys in
                 pickerKeysForNewPage = preSelectedKeys
@@ -85,6 +99,15 @@ struct SceneEditorView: View {
         .navigationDestination(item: $navigateToNewPage) { page in
             PageEditorView(page: page, scene: scene, autoOpenPickerWithKeys: pickerKeysForNewPage)
         }
+    }
+
+    private func exportScene() {
+        let defaultKeys = Set(allTiles.filter { UIImage(named: $0.bundleImage) != nil }.map(\.key))
+        guard let data = try? SceneExporter.exportJSON(scene, defaultTileKeys: defaultKeys) else { return }
+        sceneToExport = BlasterSceneFile(
+            data: data,
+            filename: scene.name.sanitizedFilename + "." + BlasterSceneFormat.fileExtension
+        )
     }
 
     private func deletePages(at offsets: IndexSet) {

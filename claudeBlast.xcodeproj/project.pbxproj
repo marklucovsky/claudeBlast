@@ -340,6 +340,7 @@
 				DEVELOPMENT_TEAM = 7JZT5T9J25;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone is used for dictating session goals.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition is used to let therapists dictate AAC session goals by voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -379,6 +380,7 @@
 				DEVELOPMENT_TEAM = 7JZT5T9J25;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone is used for dictating session goals.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition is used to let therapists dictate AAC session goals by voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
