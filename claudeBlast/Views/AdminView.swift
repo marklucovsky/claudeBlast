@@ -39,6 +39,8 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
+    @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.arasaac.rawValue
+    @Environment(TileImageResolver.self) private var imageResolver
 
     @Environment(\.dismiss) private var dismiss
 
@@ -101,6 +103,20 @@ struct AdminView: View {
                         in: 56...140,
                         step: 4
                     )
+
+                    Picker("Image Set", selection: $imageSetRaw) {
+                        ForEach(ImageSetID.allCases) { setID in
+                            VStack(alignment: .leading) {
+                                Text(setID.displayName)
+                            }
+                            .tag(setID.rawValue)
+                        }
+                    }
+                }
+                .onChange(of: imageSetRaw) {
+                    if let setID = ImageSetID(rawValue: imageSetRaw) {
+                        imageResolver.activeSet = setID
+                    }
                 }
                 .onChange(of: providerChoice) { applyProvider() }
                 .onChange(of: apiKey) { applyProvider() }
@@ -456,7 +472,7 @@ struct AdminView: View {
 
     /// Set of tile keys from the default vocabulary (used to determine which tiles need exporting).
     private var defaultTileKeys: Set<String> {
-        Set(allTiles.filter { UIImage(named: $0.bundleImage) != nil }.map(\.key))
+        Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
     }
 
     private func exportScene(_ scene: BlasterScene) {
@@ -992,22 +1008,7 @@ private struct GeneratedTileCell: View {
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                Group {
-                    if UIImage(named: tile.bundleImage) != nil {
-                        Image(tile.bundleImage)
-                            .resizable()
-                            .scaledToFit()
-                            .padding(4)
-                            .background(wordClassColor(tile.wordClass).opacity(0.12))
-                    } else {
-                        wordClassColor(tile.wordClass)
-                            .overlay {
-                                Text(String(tile.displayName.prefix(1)).uppercased())
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                            }
-                    }
-                }
+                TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(

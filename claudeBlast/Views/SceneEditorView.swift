@@ -13,6 +13,7 @@ struct SceneEditorView: View {
     @Bindable var scene: BlasterScene
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.modelContext) private var modelContext
+    @Environment(TileImageResolver.self) private var imageResolver
     @AppStorage("openai_api_key") private var storedAPIKey: String = ""
     private var resolvedAPIKey: String {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? storedAPIKey
@@ -102,7 +103,7 @@ struct SceneEditorView: View {
     }
 
     private func exportScene() {
-        let defaultKeys = Set(allTiles.filter { UIImage(named: $0.bundleImage) != nil }.map(\.key))
+        let defaultKeys = Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
         guard let data = try? SceneExporter.exportJSON(scene, defaultTileKeys: defaultKeys) else { return }
         sceneToExport = BlasterSceneFile(
             data: data,
@@ -432,22 +433,7 @@ private struct GeneratedTileCell: View {
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                Group {
-                    if UIImage(named: tile.bundleImage) != nil {
-                        Image(tile.bundleImage)
-                            .resizable()
-                            .scaledToFit()
-                            .padding(4)
-                            .background(wordClassColor(tile.wordClass).opacity(0.12))
-                    } else {
-                        wordClassColor(tile.wordClass)
-                            .overlay {
-                                Text(String(tile.displayName.prefix(1)).uppercased())
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                            }
-                    }
-                }
+                TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(

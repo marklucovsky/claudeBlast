@@ -62,20 +62,7 @@ struct SentenceTrayView: View {
                                     onTileTap(index)
                                 } label: {
                                     HStack(spacing: 4) {
-                                        ZStack {
-                                            wordClassColor(tile.wordClass).opacity(0.12)
-                                            if UIImage(named: tile.key) != nil {
-                                                Image(tile.key)
-                                                    .resizable()
-                                                    .scaledToFit()
-                                                    .padding(2)
-                                            } else {
-                                                Text(String(tile.value.prefix(1)).uppercased())
-                                                    .font(.caption2)
-                                                    .fontWeight(.bold)
-                                                    .foregroundStyle(wordClassColor(tile.wordClass))
-                                            }
-                                        }
+                                        TileImageView(key: tile.key, wordClass: tile.wordClass)
                                         .frame(width: 28, height: 28)
                                         .clipShape(RoundedRectangle(cornerRadius: 4))
                                         Text(tile.value)
@@ -276,20 +263,7 @@ struct TileGridIcon: View {
     @ViewBuilder
     private func cell(_ tile: TileSelection?) -> some View {
         if let tile {
-            ZStack {
-                wordClassColor(tile.wordClass).opacity(0.12)
-                if UIImage(named: tile.key) != nil {
-                    Image(tile.key)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(2)
-                } else {
-                    wordClassColor(tile.wordClass)
-                    Text(String(tile.value.prefix(1)).uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-            }
+            TileImageView(key: tile.key, wordClass: tile.wordClass)
             .frame(width: cellSize, height: cellSize)
         } else {
             Color(.secondarySystemBackground)

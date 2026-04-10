@@ -141,22 +141,8 @@ struct ArrangeTileCell: View {
     var body: some View {
         let tile = pageTile.tile
         VStack(spacing: 3) {
-            Group {
-                if UIImage(named: tile.bundleImage) != nil {
-                    Image(tile.bundleImage)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(5)
-                        .background(wordClassColor(tile.wordClass).opacity(0.12))
-                } else {
-                    Text(String(tile.displayName.prefix(1)).uppercased())
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(wordClassColor(tile.wordClass))
-                }
-            }
+            TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
+                .padding(5)
             .aspectRatio(1, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.1), radius: 2, y: 1)

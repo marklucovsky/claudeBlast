@@ -136,21 +136,7 @@ struct TilePickerView: View {
         } label: {
             VStack(spacing: 3) {
                 ZStack(alignment: .topTrailing) {
-                    Group {
-                        if UIImage(named: tile.bundleImage) != nil {
-                            Image(tile.bundleImage)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(4)
-                                .background(wordClassColor(tile.wordClass).opacity(0.12))
-                        } else {
-                            Text(String(tile.displayName.prefix(1)).uppercased())
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(wordClassColor(tile.wordClass))
-                        }
-                    }
+                    TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
