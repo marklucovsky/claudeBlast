@@ -18,6 +18,7 @@ struct claudeBlastApp: App {
     @State private var navigationCoordinator = NavigationCoordinator()
     @State private var scriptRunner = TileScriptRunner()
     @State private var scriptRecorder = TileScriptRecorder()
+    @State private var imageResolver = TileImageResolver()
 
     init() {
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
@@ -55,6 +56,14 @@ struct claudeBlastApp: App {
         engine.voiceIdentifier = UserDefaults.standard.string(forKey: AppSettingsKey.speechVoiceIdentifier) ?? ""
         self._sentenceEngine = State(initialValue: engine)
 
+        // Restore image set preference
+        let resolver = TileImageResolver()
+        if let storedSet = UserDefaults.standard.string(forKey: AppSettingsKey.imageSet),
+           let setID = ImageSetID(rawValue: storedSet) {
+            resolver.activeSet = setID
+        }
+        self._imageResolver = State(initialValue: resolver)
+
         // Configure audio session at launch so speech plays regardless of the
         // ringer/silent switch. .playback bypasses the mute switch; .spokenAudio
         // mode ducks other audio and resumes it after each utterance.
@@ -74,6 +83,7 @@ struct claudeBlastApp: App {
                 .environment(navigationCoordinator)
                 .environment(scriptRunner)
                 .environment(scriptRecorder)
+                .environment(imageResolver)
                 .onAppear {
                     sentenceEngine.configure(modelContext: modelContainer.mainContext)
                     scriptRunner.configure(

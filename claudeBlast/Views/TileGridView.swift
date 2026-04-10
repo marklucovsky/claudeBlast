@@ -468,19 +468,7 @@ private struct PromotedChip: View {
             HStack(spacing: 3) {
                 ForEach(entry.tileKeys.prefix(4), id: \.self) { key in
                     let wordClass = tileWordClass[key] ?? "default"
-                    ZStack {
-                        wordClassColor(wordClass).opacity(0.15)
-                        if UIImage(named: key) != nil {
-                            Image(key)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(3)
-                        } else {
-                            Text(String(key.prefix(1)).uppercased())
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(wordClassColor(wordClass))
-                        }
-                    }
+                    TileImageView(key: key, wordClass: wordClass)
                     .frame(width: iconSize, height: iconSize)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
                 }

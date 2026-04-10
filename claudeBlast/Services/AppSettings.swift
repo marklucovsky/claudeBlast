@@ -19,6 +19,7 @@ enum AppSettingsKey {
     static let tileMinSize           = "tile_min_size"
     static let compareProviders      = "compare_providers"
     static let devShowNav            = "dev_show_nav"
+    static let imageSet              = "image_set"
 }
 
 /// Version stamp written to UserDefaults after bootstrap completes.

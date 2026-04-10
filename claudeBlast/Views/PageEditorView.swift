@@ -84,21 +84,7 @@ struct PageEditorView: View {
     @ViewBuilder
     private func tileRow(_ pageTile: PageTileModel) -> some View {
         HStack(spacing: 12) {
-            Group {
-                if UIImage(named: pageTile.tile.bundleImage) != nil {
-                    Image(pageTile.tile.bundleImage)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(4)
-                        .background(wordClassColor(pageTile.tile.wordClass).opacity(0.12))
-                } else {
-                    Text(String(pageTile.tile.displayName.prefix(1)).uppercased())
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(wordClassColor(pageTile.tile.wordClass))
-                }
-            }
+            TileImageView(key: pageTile.tile.bundleImage, wordClass: pageTile.tile.wordClass)
             .frame(width: 44, height: 44)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
@@ -156,19 +142,7 @@ struct TilePropertiesSheet: View {
                 Section {
                     HStack(spacing: 14) {
                         Group {
-                            if UIImage(named: pageTile.tile.bundleImage) != nil {
-                                Image(pageTile.tile.bundleImage)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .padding(4)
-                                    .background(wordClassColor(pageTile.tile.wordClass).opacity(0.12))
-                            } else {
-                                Text(String(pageTile.tile.displayName.prefix(1)).uppercased())
-                                    .font(.title)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .background(wordClassColor(pageTile.tile.wordClass))
-                            }
+                            TileImageView(key: pageTile.tile.bundleImage, wordClass: pageTile.tile.wordClass)
                         }
                         .frame(width: 56, height: 56)
                         .clipShape(RoundedRectangle(cornerRadius: 10))

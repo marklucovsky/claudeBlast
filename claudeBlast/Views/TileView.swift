@@ -42,23 +42,9 @@ struct TileView: View {
             colorForWordClass(tile.wordClass).opacity(0.12)
                 .aspectRatio(1, contentMode: .fit)
 
-            if UIImage(named: tile.bundleImage) != nil {
-                Image(tile.bundleImage)
-                    .resizable()
-                    .scaledToFit()
-                    .aspectRatio(1, contentMode: .fit)
-                    .padding(6)
-            } else {
-                Rectangle()
-                    .fill(colorForWordClass(tile.wordClass))
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay {
-                        Text(String(tile.displayName.prefix(1)).uppercased())
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                    }
-            }
+            TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
+                .aspectRatio(1, contentMode: .fit)
+                .padding(6)
 
             if isNavigation {
                 Image(systemName: "arrow.right.circle.fill")
@@ -79,26 +65,7 @@ struct TileView: View {
         .opacity(isSelected ? 0.8 : 1.0)
     }
 
-    private func colorForWordClass(_ wordClass: String) -> Color {
-        switch wordClass {
-        case "actions": return .orange
-        case "describe": return .green
-        case "people": return .purple
-        case "food", "meals", "fruit", "veggie", "snacks": return .red
-        case "places": return .blue
-        case "social", "feeling", "question": return .pink
-        case "navigation": return .indigo
-        case "drinks": return .cyan
-        case "weather": return Color(red: 0.3, green: 0.6, blue: 0.9)
-        case "colors": return .mint
-        case "shape": return .teal
-        case "body", "health": return Color(red: 0.9, green: 0.5, blue: 0.5)
-        case "toy", "games", "sports": return .yellow
-        case "art": return Color(red: 0.7, green: 0.4, blue: 0.8)
-        case "play": return .yellow
-        default: return .gray
-        }
-    }
+    // colorForWordClass is now a shared function in TileImageView.swift
 }
 
 #Preview("Audible tile") {
