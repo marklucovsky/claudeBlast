@@ -24,6 +24,21 @@ enum BootstrapLoader {
         UserDefaults.standard.set(currentBootstrapVersion, forKey: AppSettingsKey.bootstrapVersion)
     }
 
+    /// Wipe all app-owned SwiftData records. Relationship-safe order matches
+    /// performFactoryReset in AdminView. Safe to call on a fresh store (no-op).
+    static func wipeAllData(context: ModelContext) {
+        do {
+            try context.delete(model: MetricEvent.self)
+            try context.delete(model: SentenceCache.self)
+            try context.delete(model: BlasterScene.self)
+            try context.delete(model: PageModel.self) // cascades PageTileModel
+            try context.delete(model: TileModel.self)
+            try context.save()
+        } catch {
+            print("BootstrapLoader.wipeAllData failed: \(error)")
+        }
+    }
+
     static func loadDefaultVocabulary(context: ModelContext) -> LoadResult {
         let startTime = CFAbsoluteTimeGetCurrent()
 
