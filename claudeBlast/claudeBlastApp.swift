@@ -26,7 +26,10 @@ struct claudeBlastApp: App {
         self.modelContainer = container
 
         // Bootstrap only on first launch (or after a forced version bump).
+        // Always wipe first — on a fresh store this is a no-op; on a version
+        // bump it prevents duplicate records when re-seeding from the bundle.
         if BootstrapLoader.needsBootstrap() {
+            BootstrapLoader.wipeAllData(context: container.mainContext)
             _ = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
             BootstrapLoader.markBootstrapComplete()
         }

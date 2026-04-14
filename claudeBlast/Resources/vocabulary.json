@@ -1812,7 +1812,7 @@
   },
   {
     "key": "don't",
-    "wordClass": "describe"
+    "wordClass": "social"
   },
   {
     "key": "between",
@@ -1901,5 +1901,17 @@
   {
     "key": "colors",
     "wordClass": "colors"
+  },
+  {
+    "key": "he",
+    "wordClass": "people"
+  },
+  {
+    "key": "how_are_you",
+    "wordClass": "social"
+  },
+  {
+    "key": "i_love_it",
+    "wordClass": "social"
   }
 ]

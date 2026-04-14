@@ -276,9 +276,10 @@ function buildGrid() {{
         card.dataset.key = t.key;
         card.dataset.wordclass = t.wordClass;
         card.dataset.modified = t.modified ? "true" : "false";
+        const k = t.key.replace(/'/g, "\\\\'");
 
         card.innerHTML = `
-            <div class="card-images" onclick="openLightbox('${{t.key}}')" style="position:relative">
+            <div class="card-images" onclick="openLightbox('${{k}}')" style="position:relative">
                 ${{t.modified ? '<span class="modified-badge">UPDATED</span>' : ''}}
                 <div class="img-col">
                     ${{t.currentImg ? `<img src="${{t.currentImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999">No current</div>'}}
@@ -294,14 +295,14 @@ function buildGrid() {{
                 <span class="tile-class">${{t.wordClass}}</span>
                 <div class="card-actions">
                     <button class="btn-approve ${{s.status === 'approved' ? 'active-approve' : ''}}"
-                            onclick="setState('${{t.key}}', {{status: getState('${{t.key}}').status === 'approved' ? 'unreviewed' : 'approved'}})">&#10003;</button>
+                            onclick="setState('${{k}}', {{status: getState('${{k}}').status === 'approved' ? 'unreviewed' : 'approved'}})">&#10003;</button>
                     <button class="btn-reject ${{s.status === 'rejected' ? 'active-reject' : ''}}"
-                            onclick="setState('${{t.key}}', {{status: getState('${{t.key}}').status === 'rejected' ? 'unreviewed' : 'rejected'}})">&#10007;</button>
+                            onclick="setState('${{k}}', {{status: getState('${{k}}').status === 'rejected' ? 'unreviewed' : 'rejected'}})">&#10007;</button>
                     <div style="position:relative;flex:1">
                         <input class="comment-input" type="text" placeholder="Comment..." style="width:100%;padding-right:24px"
                                value="${{(s.comment || '').replace(/"/g, '&quot;')}}"
-                               onchange="setState('${{t.key}}', {{comment: this.value}})" />
-                        <span onclick="this.previousElementSibling.value='';setState('${{t.key}}',{{comment:''}})"
+                               onchange="setState('${{k}}', {{comment: this.value}})" />
+                        <span onclick="this.previousElementSibling.value='';setState('${{k}}',{{comment:''}})"
                               style="position:absolute;right:6px;top:50%;transform:translateY(-50%);cursor:pointer;color:#999;font-size:14px;line-height:1">&times;</span>
                     </div>
                 </div>
