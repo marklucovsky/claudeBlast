@@ -1,71 +1,181 @@
 # Recruiting Guide
 
-**Study:** Caregiver Needs Study
-**Target:** 6–8 caregivers of non-verbal children (ages 3–12) who use AAC
+**Study:** AAC Intervention: Selection and Usage of Communication Devices
+**Target:** 3–5 Speech-Language Pathologists (Cohort A) + 3–5 Behavioral Therapists / BCBAs (Cohort B)
+**Session length:** 30 minutes
+**Incentive:** Early beta access to Blaster prior to public launch
 
 ---
 
 ## Where to Find Participants
 
-### Online Communities
-- **Facebook Groups:** Search "AAC parents", "Proloquo2Go parents", "autism AAC", "non-verbal autism support" — many have 10k+ members and welcome research posts
-- **Reddit:** r/AAC, r/autism, r/specialeducation — post in weekly threads or DM moderators for approval
-- **AAC Community (aaclanguagelab.com):** Forum with active caregiver population
+### Cohort A — Speech-Language Pathologists
 
-### Professional Networks
-- **ASHA (American Speech-Language-Hearing Association):** SLPs often connect researchers with willing families; reach out via ASHA's research participant network
-- **Special education teacher networks:** Teachers can refer families — contact local school districts' special education coordinators
-- **Therapy clinics:** Pediatric OT/SLP clinics may post flyers or share with patient families (requires IRB or clinic approval in some cases)
+- **Facebook Groups:** "SLP Support Group", "SLPs for AAC", "Autism & AAC SLP Network", "School-Based SLPs" — large professional communities that welcome research participation requests
+- **ASHA (American Speech-Language-Hearing Association):** Post in ASHA's Special Interest Groups (SIG 12 — Augmentative and Alternative Communication) and community forums
+- **AAC Language Lab community (aaclanguagelab.com):** Active SLP-facing forum with AAC focus
+- **LinkedIn:** Search SLP + AAC; direct outreach to practitioners with relevant profiles
+- **University clinical programs:** Contact supervisors at university speech-language clinics; graduate students and clinical faculty often participate
 
-### Advocacy Organizations
-- **ISAAC (International Society for Augmentative and Alternative Communication)**
-- **Autism Speaks resource directory**
-- **United Cerebral Palsy (UCP) local chapters**
+### Cohort B — Behavioral Therapists / BCBAs
+
+- **Facebook Groups:** "BCBA Support Group", "ABA Therapists Network", "BCBAs in Autism Services" — active professional communities
+- **ABAI (Association for Behavior Analysis International):** Member directory and community forums
+- **Behavior Analysis certification board (BACB):** Practitioner directories and affiliated networks
+- **LinkedIn:** Search BCBA + AAC or BCBA + non-verbal; direct outreach to practitioners
+- **ABA therapy clinic networks:** Multi-site ABA clinics (e.g. Centria, Behavioral Innovations) may have internal research interest channels
 
 ---
 
 ## Screener
 
-Use this screener before scheduling. Disqualify if any must-have is missing.
-
-**Screener questions (send via email or Google Form):**
-
-1. Are you a primary caregiver (parent, guardian, or family member) of a child aged 3–12? *(Must answer Yes)*
-2. Is your child non-verbal or minimally verbal? *(Must answer Yes)*
-3. Has your child used any form of AAC — such as an app, a dedicated device, picture cards (PECS), or a communication board? *(Must answer Yes)*
-4. What AAC tools or methods has your child used? *(Open text — for context)*
-5. Approximately how long have you been using AAC with your child? *(Open text)*
-6. Would you be comfortable with a 45-minute video call that is recorded (audio + video)? *(Must answer Yes)*
-7. What time zones and general availability work best for you? *(Open text — for scheduling)*
+Use a single screener with a branching question to route SLPs vs. behavioral therapists. Disqualify if any must-have is missing. Send via Google Form or email.
 
 ---
 
-## Outreach Message Template
+**Screener — AAC Intervention Study**
 
-Use this for social media posts, emails, or direct messages. Adapt tone for the platform.
+> **Note to participants:** If you qualify and express interest in participating, sessions will be conducted via video call and recorded for note-taking purposes only. Recordings are kept confidential within the research team and deleted within 12 months of the study's conclusion.
 
 ---
 
-**Subject (email):** Paid research study — 45 min interview for caregivers using AAC
+1. What is your primary professional role? *(Select one — routes to cohort)*
+   - Speech-Language Pathologist (SLP / CCC-SLP)
+   - Board-Certified Behavior Analyst (BCBA) or behavioral therapist
+   - Other *(thank and disqualify)*
 
-Hi [community name / first name],
+2. Do you currently work with children aged 3–12 who are non-verbal or minimally verbal? *(Must answer Yes)*
 
-I'm a UX researcher working on **Blaster**, a free, open-source AAC app being built for non-verbal children. We're in the early research phase and want to talk to caregivers — not test software, just listen and learn.
+3. Have you recommended, configured, or used an AAC tool (app, dedicated device, PECS, communication board) with a child patient or client? *(Must answer Yes)*
+
+4. What AAC tools or systems have you worked with? *(Open text — for context)*
+
+5. Approximately how many years have you been working with AAC? *(Open text)*
+
+6. What is your primary practice setting? *(Select all that apply)*
+   - School-based
+   - Clinic-based
+   - Private practice
+   - Home-based / early intervention
+   - Other
+
+7. Are you comfortable participating in a 30-minute recorded video call for research purposes? *(Must answer Yes — recording disclosed above)*
+
+8. What time zones and general availability work best for you? *(Open text — for scheduling)*
+
+---
+
+## Screener Follow-Up Emails
+
+Send these within 24 hours of reviewing a qualified screener response.
+
+---
+
+### Cohort A — SLP Follow-Up
+
+**Subject:** You're in — let's find a time to chat (Blaster AAC research)
+
+Hi [name],
+
+Thank you for filling out the screener for our AAC research study — your background is exactly what we're looking for and we'd love to include you.
+
+As a reminder, the session is a 30-minute video call where we'll ask about your clinical experience with AAC — how you evaluate and set up tools, what works, and what doesn't. There are no right or wrong answers and nothing to prepare.
+
+The call will be recorded for note-taking purposes only and kept confidential within our small research team.
+
+Please use the link below to pick a time that works for you:
+
+**[CALENDLY LINK]**
+
+If none of the available times work, just reply to this email and we'll find something that does.
+
+Looking forward to speaking with you — thank you again for making time.
+
+[Your name]
+
+---
+
+### Cohort B — Behavioral Therapist / BCBA Follow-Up
+
+**Subject:** You're in — let's find a time to chat (Blaster AAC research)
+
+Hi [name],
+
+Thank you for filling out the screener for our AAC research study — your background is exactly what we're looking for and we'd love to include you.
+
+As a reminder, the session is a 30-minute video call where we'll ask about your experience using AAC within behavioral programming — your goals, your workflow, and how you work alongside (or differ from) SLPs on shared cases. There are no right or wrong answers and nothing to prepare.
+
+The call will be recorded for note-taking purposes only and kept confidential within our small research team.
+
+Please use the link below to pick a time that works for you:
+
+**[CALENDLY LINK]**
+
+If none of the available times work, just reply to this email and we'll find something that does.
+
+Looking forward to speaking with you — thank you again for making time.
+
+[Your name]
+
+---
+
+## Outreach Message Templates
+
+Adapt tone for the platform. Use the SLP version for Cohort A channels and the BCBA version for Cohort B channels.
+
+---
+
+### Cohort A — SLP Outreach
+
+**Subject (email):** Research study — 30 min interview for SLPs working with AAC
+
+Hi [name / community],
+
+I'm a UX researcher working on **Blaster**, a free, open-source AAC app for non-verbal children. We're in the early research phase and want to learn from the clinicians who use and recommend AAC tools — not test software, just listen.
 
 **What's involved:**
-- 45-minute video call (Zoom or Google Meet)
-- We'll ask about your experience using AAC with your child — what works, what doesn't, what you wish existed
-- Sessions are recorded (with your permission) and kept confidential
+- 30-minute video call (Zoom or Google Meet)
+- We'll ask about your clinical workflow, how you approach AAC selection and vocabulary setup, and what you wish current tools did better
+- Sessions are recorded for note-taking only and kept confidential
 
 **Who we're looking for:**
-- Parent or caregiver of a non-verbal or minimally verbal child aged 3–12
-- Your child uses or has used any form of AAC (app, device, picture cards, etc.)
+- Licensed SLP currently working with non-verbal or minimally verbal children (ages 3–12)
+- Experience recommending or configuring any AAC tool (app, device, PECS, etc.)
 
-**Compensation:** $[AMOUNT] gift card (Amazon or Visa) as a thank-you for your time.
+**What you get:**
+- Early beta access to Blaster before public launch — your input directly shapes what gets built
 
-If you're interested or have questions, reply here or fill out this short screener: [LINK]
+If you're interested, fill out this short screener (2 minutes): [LINK]
 
-Thank you for considering — your experience directly shapes how this tool gets built.
+Thank you for considering — clinical expertise like yours is exactly what this project needs.
+
+[Your name]
+
+---
+
+### Cohort B — Behavioral Therapist / BCBA Outreach
+
+**Subject (email):** Research study — 30 min interview for BCBAs working with AAC
+
+Hi [name / community],
+
+I'm a UX researcher working on **Blaster**, a free, open-source AAC app for non-verbal children. We're in the early research phase and want to learn from behavioral practitioners who work with AAC — specifically how behavioral goals and communication goals intersect (and sometimes conflict) in practice.
+
+**What's involved:**
+- 30-minute video call (Zoom or Google Meet)
+- We'll ask about your approach to AAC within behavior intervention, how you collaborate with SLPs, and what you wish current tools did differently
+- Sessions are recorded for note-taking only and kept confidential
+
+**Who we're looking for:**
+- BCBA or behavioral therapist currently working with non-verbal or minimally verbal children (ages 3–12)
+- Experience incorporating AAC into behavioral programming
+
+**What you get:**
+- Early beta access to Blaster before public launch — your perspective directly shapes how the tool is built
+
+If you're interested, fill out this short screener (2 minutes): [LINK]
+
+Thank you for considering — your perspective on the behavioral side of AAC is underrepresented in how these tools get designed.
 
 [Your name]
 
@@ -74,33 +184,42 @@ Thank you for considering — your experience directly shapes how this tool gets
 ## Scheduling
 
 - Use Calendly or a shared Google Calendar link to avoid back-and-forth
-- Offer slots across mornings, afternoons, and evenings to accommodate caregivers' schedules
-- Send a confirmation email with the video link, NDA link, and a reminder 24 hours before
-- Allow for rescheduling — caregiver life is unpredictable
+- Offer slots across mornings, afternoons, and early evenings to accommodate clinical schedules
+- Send a confirmation email with the video link, NDA link, and a reminder 24 hours before the session
+- Allow for rescheduling — clinical schedules are unpredictable
 
 ---
 
-## Compensation
+## Incentive
 
-**Recommended:** $40 Amazon or Visa gift card per completed session
+**Beta access to Blaster prior to public launch**
 
-- Sent digitally immediately after the call
-- Disclose compensation in all outreach to comply with ethical research standards
-- If the participant no-shows without notice, compensation is at researcher's discretion
+- Participants who complete a session will be added to the Blaster beta list and notified when early access opens
+- Disclose the incentive in all outreach
+- If a participant no-shows without notice, beta access is at the researcher's discretion
 
-**Creator approval needed:** Confirm compensation amount before outreach begins.
+*No monetary compensation is offered at this stage.*
 
 ---
 
 ## Participant Tracker
 
-| # | First name | Screener sent | Qualified | Scheduled | Completed | Notes |
-|---|---|---|---|---|---|---|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
-| 4 | | | | | | |
-| 5 | | | | | | |
-| 6 | | | | | | |
-| 7 | | | | | | |
-| 8 | | | | | | |
+### Cohort A — Speech-Language Pathologists
+
+| # | First name | Practice setting | Screener sent | Qualified | Scheduled | Completed | Notes |
+|---|---|---|---|---|---|---|---|
+| A1 | | | | | | | |
+| A2 | | | | | | | |
+| A3 | | | | | | | |
+| A4 | | | | | | | |
+| A5 | | | | | | | |
+
+### Cohort B — Behavioral Therapists / BCBAs
+
+| # | First name | Practice setting | Screener sent | Qualified | Scheduled | Completed | Notes |
+|---|---|---|---|---|---|---|---|
+| B1 | | | | | | | |
+| B2 | | | | | | | |
+| B3 | | | | | | | |
+| B4 | | | | | | | |
+| B5 | | | | | | | |

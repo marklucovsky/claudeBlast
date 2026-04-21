@@ -43,7 +43,7 @@ This study is **generative**: we are not testing Blaster's current design. We ar
 ## Methodology
 
 - **Format:** Semi-structured remote interviews via video call (Zoom or Google Meet)
-- **Duration:** 45 minutes per session
+- **Duration:** 30 minutes per session
 - **Sessions:** 6–10 participants across two cohorts (3–5 SLPs, 3–5 behavioral therapists)
 - **Recording:** Audio + video with participant consent (NDA required — see `nda.md`)
 
@@ -151,6 +151,6 @@ Please review this plan and confirm the following before April 23:
 - [ ] Participant criteria make sense for the intended audience
 - [ ] You are comfortable with remote video interviews as the method
 - [ ] NDA template reviewed (see `nda.md`) — legal review recommended before use
-- [ ] You have approved the compensation amount (see `recruiting.md`)
+- [ ] You are comfortable with beta access as the participant incentive (no monetary compensation)
 
 Leave comments inline or reach out directly to the researcher.
