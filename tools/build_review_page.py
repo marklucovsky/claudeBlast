@@ -27,6 +27,7 @@ from pathlib import Path
 
 VOCAB_FILE = Path("claudeBlast/Resources/vocabulary.json")
 ASSETS_DIR = Path("claudeBlast/Assets.xcassets")
+TILE_IMAGE_SETS = Path("claudeBlast/TileImageSets")
 OUTPUT_BASE = Path("tools/tile_sets")
 
 
@@ -45,21 +46,33 @@ def build_page(set_name: str) -> Path:
     set_dir = OUTPUT_BASE / set_name
     html_dir = OUTPUT_BASE  # HTML lives in tools/tile_sets/
 
-    # Copy current tiles to a local directory (browser can't follow symlinks/parent paths)
-    current_dir = OUTPUT_BASE / "current"
-    if not current_dir.exists():
-        import shutil
-        current_dir.mkdir(parents=True, exist_ok=True)
-        for tile in vocab:
-            src = ASSETS_DIR / f"{tile['key']}.imageset" / f"{tile['key']}.png"
-            if src.exists():
-                shutil.copy2(src, current_dir / f"{tile['key']}.png")
+    import shutil
 
-    # Load list of tiles modified in the last regeneration pass
-    modified_file = OUTPUT_BASE / "last_modified.json"
-    modified_keys = set()
-    if modified_file.exists():
-        modified_keys = set(json.loads(modified_file.read_text()))
+    # Current p3d tiles — copy to a local dir so browsers can load them
+    current_dir = OUTPUT_BASE / "current_p3d"
+    current_dir.mkdir(parents=True, exist_ok=True)
+    for tile in vocab:
+        src = TILE_IMAGE_SETS / f"p3d_{tile['key']}.png"
+        if src.exists():
+            shutil.copy2(src, current_dir / f"{tile['key']}.png")
+
+    # ARASAAC tiles — copy for comparison toggle
+    arasaac_dir = OUTPUT_BASE / "current_arasaac"
+    arasaac_dir.mkdir(parents=True, exist_ok=True)
+    for tile in vocab:
+        src = ASSETS_DIR / f"{tile['key']}.imageset" / f"{tile['key']}.png"
+        if src.exists():
+            shutil.copy2(src, arasaac_dir / f"{tile['key']}.png")
+
+    # Load generations for this set
+    gen_file = set_dir / "generations.json"
+    generations = []
+    key_to_gen = {}
+    if gen_file.exists():
+        generations = json.loads(gen_file.read_text()).get("generations", [])
+        for g in generations:
+            for k in g.get("keys", []):
+                key_to_gen[k] = g["id"]
 
     # Build tile data with relative file paths (all within tile_sets/)
     tiles_json = []
@@ -68,6 +81,7 @@ def build_page(set_name: str) -> Path:
         wc = tile.get("wordClass", "unknown")
 
         current_path = current_dir / f"{key}.png"
+        arasaac_path = arasaac_dir / f"{key}.png"
         new_path = set_dir / f"{key}.png"
 
         tiles_json.append({
@@ -75,12 +89,14 @@ def build_page(set_name: str) -> Path:
             "wordClass": wc,
             "index": i,
             "currentImg": img_to_relative_path(current_path, html_dir),
+            "arasaacImg": img_to_relative_path(arasaac_path, html_dir),
             "newImg": img_to_relative_path(new_path, html_dir),
             "hasNew": new_path.exists(),
-            "modified": key in modified_keys,
+            "generation": key_to_gen.get(key, 0),
         })
 
     categories = sorted(set(t["wordClass"] for t in tiles_json))
+    gen_ids = sorted(set(g["id"] for g in generations)) if generations else []
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -133,7 +149,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
     width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
 }}
 .card-images .img-label {{ display: none; }}
-.card.modified {{ border-top: 3px solid #ff9500; }}
+.card[data-generation]:not([data-generation="0"]) {{ border-top: 3px solid #ff9500; }}
 .modified-badge {{
     position: absolute; top: 6px; right: 6px;
     background: #ff9500; color: white; font-size: 9px; font-weight: 600;
@@ -195,9 +211,14 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
         <option value="unreviewed">Unreviewed</option>
         <option value="approved">Approved</option>
         <option value="rejected">Rejected</option>
-        <option value="modified">Modified (this pass)</option>
+    </select>
+    <select id="filterGeneration">
+        <option value="all">All Generations</option>
+        <option value="latest">Latest Generation</option>
+        {"".join(f'<option value="{g}">Gen {g}</option>' for g in gen_ids)}
     </select>
     <input type="text" id="searchBox" placeholder="Search tiles..." />
+    <button id="toggleBaseline" onclick="toggleBaseline()">Show ARASAAC</button>
     <button class="success" onclick="approveAll()">Approve All Visible</button>
     <button class="danger" onclick="exportRejects()">Export Rejects</button>
     <button onclick="exportAll()">Export Full Review</button>
@@ -265,6 +286,20 @@ function updateStats() {{
     document.getElementById("progressFill").style.width = pct + "%";
 }}
 
+const tileMap = {{}};
+TILES.forEach(t => tileMap[t.key] = t);
+
+let showArasaac = false;
+
+function toggleBaseline() {{
+    showArasaac = !showArasaac;
+    const btn = document.getElementById("toggleBaseline");
+    btn.textContent = showArasaac ? "Show Current p3d" : "Show ARASAAC";
+    document.querySelectorAll(".baseline-img").forEach(img => {{
+        img.src = showArasaac ? (img.dataset.arasaac || "") : (img.dataset.p3d || "");
+    }});
+}}
+
 function buildGrid() {{
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
@@ -275,15 +310,20 @@ function buildGrid() {{
         card.className = "card " + s.status + (t.modified ? " modified" : "");
         card.dataset.key = t.key;
         card.dataset.wordclass = t.wordClass;
-        card.dataset.modified = t.modified ? "true" : "false";
+        card.dataset.generation = t.generation || "0";
         const k = t.key.replace(/'/g, "\\\\'");
 
         card.innerHTML = `
             <div class="card-images" onclick="openLightbox('${{k}}')" style="position:relative">
-                ${{t.modified ? '<span class="modified-badge">UPDATED</span>' : ''}}
+                ${{t.generation > 0 ? `<span class="modified-badge">GEN ${{t.generation}}</span>` : ''}}
                 <div class="img-col">
-                    ${{t.currentImg ? `<img src="${{t.currentImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999">No current</div>'}}
-                    <span class="img-label">Current</span>
+                    <img class="baseline-img" src="${{t.currentImg || ''}}"
+                         data-p3d="${{t.currentImg || ''}}"
+                         data-arasaac="${{t.arasaacImg || ''}}"
+                         loading="lazy"
+                         onerror="this.style.opacity=0"
+                         onload="this.style.opacity=1" />
+                    <span class="img-label">Current p3d</span>
                 </div>
                 <div class="img-col">
                     ${{t.newImg ? `<img src="${{t.newImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999">Missing</div>'}}
@@ -313,20 +353,27 @@ function buildGrid() {{
     updateStats();
 }}
 
+const MAX_GEN = Math.max(0, ...TILES.map(t => t.generation || 0));
+
 function applyFilters() {{
     const cat = document.getElementById("filterCategory").value;
     const status = document.getElementById("filterStatus").value;
+    const gen = document.getElementById("filterGeneration").value;
     const search = document.getElementById("searchBox").value.toLowerCase();
 
     document.querySelectorAll(".card").forEach(card => {{
         const key = card.dataset.key;
         const wc = card.dataset.wordclass;
+        const cardGen = parseInt(card.dataset.generation || "0");
         const s = getState(key);
         let show = true;
         if (cat !== "all" && wc !== cat) show = false;
-        if (status === "modified") {{
-            if (card.dataset.modified !== "true") show = false;
-        }} else if (status !== "all" && s.status !== status) show = false;
+        if (status !== "all" && s.status !== status) show = false;
+        if (gen === "latest") {{
+            if (cardGen !== MAX_GEN) show = false;
+        }} else if (gen !== "all") {{
+            if (cardGen !== parseInt(gen)) show = false;
+        }}
         if (search && !key.includes(search)) show = false;
         card.classList.toggle("hidden", !show);
     }});
@@ -374,13 +421,11 @@ function exportAll() {{
     a.click();
 }}
 
-// Lightbox
-const tileMap = {{}};
-TILES.forEach(t => tileMap[t.key] = t);
+// Lightbox — tileMap is initialized earlier (before buildGrid)
 
 function openLightbox(key) {{
     const t = tileMap[key];
-    document.getElementById("lb-current").src = t.currentImg || "";
+    document.getElementById("lb-current").src = showArasaac ? (t.arasaacImg || "") : (t.currentImg || "");
     document.getElementById("lb-new").src = t.newImg || "";
     document.getElementById("lightbox").classList.add("active");
 }}
@@ -394,6 +439,7 @@ document.addEventListener("keydown", e => {{
 // Init
 document.getElementById("filterCategory").addEventListener("change", applyFilters);
 document.getElementById("filterStatus").addEventListener("change", applyFilters);
+document.getElementById("filterGeneration").addEventListener("change", applyFilters);
 document.getElementById("searchBox").addEventListener("input", applyFilters);
 buildGrid();
 </script>
@@ -409,13 +455,13 @@ buildGrid();
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--set", required=True, choices=["playful_3d", "high_contrast", "both"])
+    parser.add_argument("--set", required=True, help="Tile set name under tools/tile_sets/")
+    parser.add_argument("--no-open", action="store_true", help="Don't auto-open in browser")
     args = parser.parse_args()
 
-    sets = ["playful_3d", "high_contrast"] if args.set == "both" else [args.set]
-    for s in sets:
-        print(f"\nBuilding review page for {s}...")
-        path = build_page(s)
+    print(f"\nBuilding review page for {args.set}...")
+    path = build_page(args.set)
+    if not args.no_open:
         webbrowser.open(f"file://{path.resolve()}")
 
 

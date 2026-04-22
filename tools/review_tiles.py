@@ -38,8 +38,10 @@ Workflow:
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -55,6 +57,67 @@ TILES_PER_SHEET = 20  # 4 columns × 5 rows
 
 def load_vocab() -> list[dict]:
     return json.loads(VOCAB_FILE.read_text())
+
+
+# ---------------------------------------------------------------------------
+# Generation tracking
+# ---------------------------------------------------------------------------
+
+def generations_file(set_name: str) -> Path:
+    return OUTPUT_BASE / set_name / "generations.json"
+
+
+def load_generations(set_name: str) -> list[dict]:
+    gf = generations_file(set_name)
+    if gf.exists():
+        return json.loads(gf.read_text()).get("generations", [])
+    return []
+
+
+def save_generations(set_name: str, gens: list[dict]) -> None:
+    gf = generations_file(set_name)
+    gf.parent.mkdir(parents=True, exist_ok=True)
+    gf.write_text(json.dumps({"generations": gens}, indent=2) + "\n")
+
+
+def record_generation(set_name: str, keys: list[str], description: str = "") -> int:
+    """Append a new generation entry. Returns the new generation id."""
+    gens = load_generations(set_name)
+    new_id = max((g["id"] for g in gens), default=0) + 1
+    gens.append({
+        "id": new_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "description": description,
+        "keys": sorted(keys),
+    })
+    save_generations(set_name, gens)
+    return new_id
+
+
+def get_generation_keys(set_name: str, gen_id: int | None = None, latest: bool = False) -> list[str] | None:
+    """Return the keys for a specific generation, or None if no filter."""
+    if gen_id is None and not latest:
+        return None
+    gens = load_generations(set_name)
+    if not gens:
+        return []
+    if latest:
+        return gens[-1]["keys"]
+    for g in gens:
+        if g["id"] == gen_id:
+            return g["keys"]
+    print(f"WARNING: generation {gen_id} not found. Available: {[g['id'] for g in gens]}")
+    return []
+
+
+def open_path(path: Path) -> None:
+    """Open a file or directory in the OS default handler."""
+    if platform.system() == "Darwin":
+        subprocess.run(["open", str(path)])
+    elif platform.system() == "Linux":
+        subprocess.run(["xdg-open", str(path)])
+    else:
+        print(f"Open manually: {path}")
 
 
 def reject_file(set_name: str) -> Path:
@@ -236,6 +299,13 @@ def cmd_compare_sheet(args):
         wanted = {k.strip() for k in args.keys.split(",")}
         vocab = [t for t in vocab if t["key"] in wanted]
 
+    # Generation filter
+    gen_id = getattr(args, "generation", None)
+    is_latest = getattr(args, "latest", False)
+    gen_keys = get_generation_keys(args.set, gen_id, is_latest)
+    if gen_keys is not None:
+        vocab = [t for t in vocab if t["key"] in gen_keys]
+
     if not vocab:
         print("No matching tiles.")
         return
@@ -310,6 +380,9 @@ def cmd_compare_sheet(args):
 
     print(f"\n{total} tiles compared across {sheets_n} sheet(s).")
     print(f"Output: {out_dir}/")
+
+    if getattr(args, "open", False):
+        open_path(out_dir)
 
 
 def _paste_or_placeholder(sheet, draw, path, x, y, cell, font):
@@ -405,16 +478,24 @@ def main():
 
     p_csheet = sub.add_parser(
         "compare-sheet",
-        help="v1-vs-v2 contact sheet, filterable by wordClass or keys",
+        help="v1-vs-v2 contact sheet, filterable by wordClass, keys, or generation",
     )
     p_csheet.add_argument("--set", required=True, help="v2 set under tools/tile_sets/")
     p_csheet.add_argument("--category", help="Filter by wordClass")
     p_csheet.add_argument("--keys", help="Comma-separated tile keys")
+    p_csheet.add_argument("--generation", type=int, help="Filter to a specific generation id")
+    p_csheet.add_argument("--latest", action="store_true", help="Filter to the most recent generation")
+    p_csheet.add_argument("--open", action="store_true", help="Open the review folder after building")
     p_csheet.add_argument(
         "--v1-dir",
         default="../claudeBlast/claudeBlast/TileImageSets",
         help="Directory containing v1 p3d_*.png files",
     )
+
+    p_gen = sub.add_parser("gen", help="Record a new generation of changed tiles")
+    p_gen.add_argument("--set", required=True, help="Tile set name")
+    p_gen.add_argument("--keys", required=True, help="Comma-separated tile keys in this generation")
+    p_gen.add_argument("--description", default="", help="What changed in this generation")
 
     args = parser.parse_args()
 
@@ -432,6 +513,11 @@ def main():
         cmd_compare(args)
     elif args.command == "compare-sheet":
         cmd_compare_sheet(args)
+    elif args.command == "gen":
+        keys = [k.strip() for k in args.keys.split(",")]
+        gen_id = record_generation(args.set, keys, args.description)
+        print(f"Recorded generation {gen_id}: {len(keys)} keys")
+        print(f"  {generations_file(args.set)}")
 
 
 if __name__ == "__main__":
