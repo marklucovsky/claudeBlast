@@ -27,7 +27,7 @@ from pathlib import Path
 
 VOCAB_FILE = Path("claudeBlast/Resources/vocabulary.json")
 ASSETS_DIR = Path("claudeBlast/Assets.xcassets")
-TILE_IMAGE_SETS = Path("claudeBlast/TileImageSets")
+TILE_IMAGE_SETS = Path("../claudeBlast/claudeBlast/TileImageSets")
 OUTPUT_BASE = Path("tools/tile_sets")
 
 
@@ -84,14 +84,18 @@ def build_page(set_name: str) -> Path:
         arasaac_path = arasaac_dir / f"{key}.png"
         new_path = set_dir / f"{key}.png"
 
+        new_img = img_to_relative_path(new_path, html_dir)
+        current_img = img_to_relative_path(current_path, html_dir)
+        has_new = new_path.exists()
+
         tiles_json.append({
             "key": key,
             "wordClass": wc,
             "index": i,
-            "currentImg": img_to_relative_path(current_path, html_dir),
+            "currentImg": current_img,
             "arasaacImg": img_to_relative_path(arasaac_path, html_dir),
-            "newImg": img_to_relative_path(new_path, html_dir),
-            "hasNew": new_path.exists(),
+            "newImg": new_img if has_new else current_img,
+            "hasNew": has_new,
             "generation": key_to_gen.get(key, 0),
         })
 
