@@ -34,14 +34,16 @@ Once the plan is approved, Claude performs every step of the lifecycle:
 
 ## Opening Xcode on the worktree
 
-When you need to run the app, drive SwiftUI previews, or use the simulator against your in-progress branch, open Xcode on the **worktree's checkout**, not the main checkout:
+When you need to run the app, drive SwiftUI previews, or use the simulator against your in-progress branch, just **ask Claude to open Xcode**: "open Xcode on this worktree" or "launch the project in Xcode." Claude runs `open claudeBlast.xcodeproj` from inside the worktree directory (`Bash(open:*)` is allowed in the project's Claude permissions). Xcode opens the worktree's checkout, not main.
+
+If you'd rather do it yourself from a terminal:
 
 ```sh
-cd .claude/worktrees/<name>
+cd ~/src/claudeBlast/.claude/worktrees/<name>
 open claudeBlast.xcodeproj
 ```
 
-Or ask Claude — `open` is allowed in the project's Claude permissions, so Claude can launch Xcode for you. Both windows can be open at once (worktree branch + main), which is fine; just make sure you're running the right scheme.
+Both Xcode windows (worktree branch + main) can be open at once, which is fine; just make sure you're running the right scheme.
 
 ## Reviewing and merging
 
@@ -55,8 +57,10 @@ If you want changes instead of a merge, leave PR comments on GitHub and tell Cla
 
 When you say "PR merged, clean up", Claude runs:
 
-1. `ExitWorktree action: "remove"` — deletes the worktree directory and its branch (the branch is already merged into main on GitHub, so this is safe).
+1. `ExitWorktree action: "remove"` — deletes **two things**: the worktree directory under `.claude/worktrees/<name>` and the **local** branch. The branch was already merged on GitHub, so dropping the local copy is safe.
 2. `git pull` on main — fast-forwards your local main to include the merged PR.
+
+What about the **remote** branch on origin? GitHub deletes it automatically if the repo's "Automatically delete head branches" setting is on (Settings → General → Pull Requests). If that setting is off, the remote branch lingers as a stale ref — harmless, but you can prune with `git fetch --prune` or delete it from the GitHub PR page. Ask Claude to prune if you want it gone.
 
 You're back to a clean main checkout, ready for the next feature.
 
