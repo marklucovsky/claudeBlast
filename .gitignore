@@ -40,16 +40,19 @@ fastlane/test_output
 # Python
 tools/__pycache__/
 
-# Tile image sets — all generated images (regenerable from prompts.json + scripts)
-# Masters will move to LFS when Kurt joins; optimized committed only when wired into app
-tools/tile_sets/playful_3d/*.png
-tools/tile_sets/high_contrast/*.png
+# Tile image sets
+# Masters (playful_3d, high_contrast) are tracked via Git LFS — see .gitattributes
+# and the "Working on tile image sets" section of docs/collaborator-workflow.md.
+# Optimized + current_* directories are regenerable intermediates from the masters.
 tools/tile_sets/optimized/
 tools/tile_sets/current/
+tools/tile_sets/current_p3d/
+tools/tile_sets/current_arasaac/
 
 # Review tool artifacts (regenerable)
 tools/tile_sets/playful_3d/review/
 tools/tile_sets/high_contrast/review/
+tools/tile_sets/playful_3d_v2/review/
 tools/tile_sets/review_*.html
 tools/tile_sets/*_failed.txt
 tools/tile_sets/assets_link

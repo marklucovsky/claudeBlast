@@ -14,6 +14,45 @@ This is the workflow for anyone using Claude Code as their primary contribution 
   Verify with `gh auth status` — you should see your account and a token with `repo` scope.
 - The repo cloned at `~/src/claudeBlast`.
 
+## Working on tile image sets (optional, tile collaborators only)
+
+Most contributors don't need this section. The app's runtime tile images live in regular git and check out automatically with a normal `git clone`. Skip ahead to **Starting a feature**.
+
+You only need the steps below if you're going to **edit, regenerate, or create new tile image sets** — the 1024×1024 master PNGs under `tools/tile_sets/playful_3d/` and `tools/tile_sets/high_contrast/`. Those masters total ~800MB and are tracked via Git LFS so app-only contributors don't pay the cost.
+
+### One-time setup
+
+```sh
+brew install git-lfs        # macOS
+git lfs install             # registers LFS hooks in your git config (per-machine, once)
+```
+
+### After cloning
+
+If you ran `git lfs install` **before** cloning, masters check out as real PNGs automatically — no extra step.
+
+If you cloned earlier and only just installed LFS, the master files in your working tree are tiny pointer text files instead of PNGs. Convert them:
+
+```sh
+cd ~/src/claudeBlast
+git lfs pull
+```
+
+Verify:
+```sh
+file tools/tile_sets/playful_3d/eat.png   # should say "PNG image data", not "ASCII text"
+git lfs ls-files | wc -l                  # ~940 files tracked by LFS
+```
+
+### Disk and bandwidth impact
+
+- ~800MB additional pull on top of the ~140MB regular-git checkout
+- Counts against the repo's GitHub LFS bandwidth budget (currently a Pro plan with 10GB/month) — well within limits for normal use, but back-to-back clones across multiple machines in a single month is worth noting
+
+### Tooling
+
+The review tool (`python3 tools/build_review_page.py`), the generation pipeline (`generate_sets.py`), and the optimize/sync scripts all read and write to these LFS-tracked directories transparently — no special invocation needed once LFS is set up. See `tools/tile_sets/README.md` for the full pipeline.
+
 ## Starting a feature
 
 1. Open a terminal, `cd ~/src/claudeBlast`.

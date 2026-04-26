@@ -2,19 +2,23 @@
 
 This directory contains the image set pipeline for Blaster's AAC tile artwork.
 
+**Working with masters requires Git LFS** — see the "Working on tile image sets" section of `docs/collaborator-workflow.md` for one-time setup. App-only contributors can ignore this directory entirely; the runtime tiles bundled into the app live in `claudeBlast/Assets.xcassets/` and `claudeBlast/TileImageSets/` (regular git, no LFS needed).
+
 ## Directory Structure
 
 ```
 tile_sets/
-├── current/              # ARASAAC baseline (master reference, committed)
-│   └── {key}.png         # 473 tiles, original ARASAAC images
-├── playful_3d/           # Playful 3D set — full-res DALL-E masters (gitignored)
-│   └── {key}.png         # 1024×1024 source images
-├── high_contrast/        # High Contrast set — full-res DALL-E masters (gitignored)
-│   └── {key}.png         # 1024×1024 source images
-├── optimized/            # Resized for app bundle (committed)
+├── playful_3d/           # Playful 3D set — full-res DALL-E masters (LFS)
+│   ├── {key}.png         # 1024×1024 source images, ~470 tiles
+│   ├── generations.json  # Per-tile generation history
+│   └── rejected.json     # Tiles flagged for regeneration
+├── high_contrast/        # High Contrast set — full-res DALL-E masters (LFS)
+│   └── {key}.png         # 1024×1024 source images, ~470 tiles
+├── optimized/            # Resized for app bundle (gitignored — regenerable)
 │   ├── playful_3d/       # 512×512 optimized PNGs
 │   └── high_contrast/    # 512×512 optimized PNGs
+├── current_p3d/          # Sync staging snapshot of bundled p3d tiles (gitignored)
+├── current_arasaac/      # Sync staging snapshot of ARASAAC tiles (gitignored)
 ├── review_*.html         # Interactive review pages (gitignored, regenerable)
 ├── last_modified.json    # Tracks which tiles changed in last regen pass
 └── README.md             # This file
@@ -22,8 +26,8 @@ tile_sets/
 
 ## Master Images
 
-- **`current/`** — ARASAAC originals. This is the committed baseline used for side-by-side comparison in the review tool. These are the images currently shipping in the app via `Assets.xcassets`.
-- **`playful_3d/`** and **`high_contrast/`** — Full-resolution (1024×1024) DALL-E generated masters. These are gitignored because they total ~500MB+ per set. They are regenerable from `tools/prompts.json` using the generation scripts.
+- **`playful_3d/`** and **`high_contrast/`** — Full-resolution (1024×1024) DALL-E generated masters, tracked via **Git LFS**. ~550MB and ~263MB respectively. They check out as real PNGs automatically once `git lfs install` has been run on your machine. See `docs/collaborator-workflow.md` for setup.
+- The ARASAAC baseline used for side-by-side comparison in the review tool comes from the app's bundled assets at `claudeBlast/Assets.xcassets/` (regular git).
 
 ## How to Generate an Image Set
 
@@ -109,7 +113,7 @@ python3 tools/review_tiles.py status --set playful_3d
 python3 tools/optimize_tiles.py --set playful_3d
 ```
 
-Optimized tiles go to `tools/tile_sets/optimized/{set_name}/` and are committed to git.
+Optimized tiles go to `tools/tile_sets/optimized/{set_name}/`. This directory is gitignored — the optimized output is fully regenerable from the LFS-tracked masters, so there's no reason to commit it. Run `sync_to_app.py` afterward to copy the optimized PNGs into `claudeBlast/TileImageSets/`, which **is** committed (regular git) so the app bundle picks them up.
 
 ## Programmatic Tiles
 

@@ -38,8 +38,10 @@ Workflow:
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -55,6 +57,67 @@ TILES_PER_SHEET = 20  # 4 columns × 5 rows
 
 def load_vocab() -> list[dict]:
     return json.loads(VOCAB_FILE.read_text())
+
+
+# ---------------------------------------------------------------------------
+# Generation tracking
+# ---------------------------------------------------------------------------
+
+def generations_file(set_name: str) -> Path:
+    return OUTPUT_BASE / set_name / "generations.json"
+
+
+def load_generations(set_name: str) -> list[dict]:
+    gf = generations_file(set_name)
+    if gf.exists():
+        return json.loads(gf.read_text()).get("generations", [])
+    return []
+
+
+def save_generations(set_name: str, gens: list[dict]) -> None:
+    gf = generations_file(set_name)
+    gf.parent.mkdir(parents=True, exist_ok=True)
+    gf.write_text(json.dumps({"generations": gens}, indent=2) + "\n")
+
+
+def record_generation(set_name: str, keys: list[str], description: str = "") -> int:
+    """Append a new generation entry. Returns the new generation id."""
+    gens = load_generations(set_name)
+    new_id = max((g["id"] for g in gens), default=0) + 1
+    gens.append({
+        "id": new_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "description": description,
+        "keys": sorted(keys),
+    })
+    save_generations(set_name, gens)
+    return new_id
+
+
+def get_generation_keys(set_name: str, gen_id: int | None = None, latest: bool = False) -> list[str] | None:
+    """Return the keys for a specific generation, or None if no filter."""
+    if gen_id is None and not latest:
+        return None
+    gens = load_generations(set_name)
+    if not gens:
+        return []
+    if latest:
+        return gens[-1]["keys"]
+    for g in gens:
+        if g["id"] == gen_id:
+            return g["keys"]
+    print(f"WARNING: generation {gen_id} not found. Available: {[g['id'] for g in gens]}")
+    return []
+
+
+def open_path(path: Path) -> None:
+    """Open a file or directory in the OS default handler."""
+    if platform.system() == "Darwin":
+        subprocess.run(["open", str(path)])
+    elif platform.system() == "Linux":
+        subprocess.run(["xdg-open", str(path)])
+    else:
+        print(f"Open manually: {path}")
 
 
 def reject_file(set_name: str) -> Path:
@@ -222,6 +285,119 @@ def cmd_regen(args):
     print(f"\nDone. Run 'review_tiles.py sheets --set {args.set}' to re-review.")
 
 
+def cmd_compare_sheet(args):
+    """Side-by-side contact sheet: v1 (current p3d) vs v2 (new candidate set).
+
+    Filterable by --category (wordClass) or --keys (comma-separated).
+    Default v1 source is ../claudeBlast main worktree's TileImageSets/p3d_*.png.
+    Default v2 source is tools/tile_sets/{--set}/{key}.png.
+    """
+    vocab = load_vocab()
+    if args.category:
+        vocab = [t for t in vocab if t.get("wordClass") == args.category]
+    if args.keys:
+        wanted = {k.strip() for k in args.keys.split(",")}
+        vocab = [t for t in vocab if t["key"] in wanted]
+
+    # Generation filter
+    gen_id = getattr(args, "generation", None)
+    is_latest = getattr(args, "latest", False)
+    gen_keys = get_generation_keys(args.set, gen_id, is_latest)
+    if gen_keys is not None:
+        vocab = [t for t in vocab if t["key"] in gen_keys]
+
+    if not vocab:
+        print("No matching tiles.")
+        return
+
+    v1_dir = Path(args.v1_dir)
+    v2_dir = OUTPUT_BASE / args.set
+    out_dir = OUTPUT_BASE / args.set / "review"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 22)
+        font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 16)
+        font_header = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 28)
+    except Exception:
+        font = ImageFont.load_default()
+        font_small = font
+        font_header = font
+
+    cell = 320
+    label_w = 220
+    label_h = 36
+    margin = 10
+    rows_per_sheet = 8
+    row_h = cell + margin
+    header_h = 60
+
+    sheet_w = label_w + 2 * (cell + margin) + margin
+    sheet_h = header_h + rows_per_sheet * row_h + margin
+
+    keys = [t["key"] for t in vocab]
+    total = len(keys)
+    sheets_n = (total + rows_per_sheet - 1) // rows_per_sheet
+
+    cat_suffix = f"_{args.category}" if args.category else ""
+
+    for sheet_i in range(sheets_n):
+        page_keys = keys[sheet_i * rows_per_sheet : (sheet_i + 1) * rows_per_sheet]
+        actual_h = header_h + len(page_keys) * row_h + margin
+        sheet = Image.new("RGB", (sheet_w, actual_h), "white")
+        draw = ImageDraw.Draw(sheet)
+
+        # Header row
+        draw.text((label_w + margin + cell // 2, 18),
+                  "v1 (current p3d)", fill="black", font=font_header, anchor="mt")
+        draw.text((label_w + 2 * margin + cell + cell // 2, 18),
+                  f"v2 ({args.set})", fill="black", font=font_header, anchor="mt")
+
+        for i, tile in enumerate([t for t in vocab if t["key"] in page_keys]):
+            key = tile["key"]
+            wc = tile.get("wordClass", "")
+            y = header_h + i * row_h
+
+            # Label
+            draw.text((margin, y + cell // 2 - 12), key, fill="black",
+                      font=font, anchor="lm")
+            draw.text((margin, y + cell // 2 + 14), wc, fill="#666",
+                      font=font_small, anchor="lm")
+
+            # v1 image
+            v1_path = v1_dir / f"p3d_{key}.png"
+            x = label_w + margin
+            _paste_or_placeholder(sheet, draw, v1_path, x, y, cell, font)
+
+            # v2 image
+            v2_path = v2_dir / f"{key}.png"
+            x = label_w + 2 * margin + cell
+            _paste_or_placeholder(sheet, draw, v2_path, x, y, cell, font)
+
+        out_path = out_dir / f"compare{cat_suffix}_{sheet_i + 1:03d}.png"
+        sheet.save(out_path)
+        print(f"  {out_path}")
+
+    print(f"\n{total} tiles compared across {sheets_n} sheet(s).")
+    print(f"Output: {out_dir}/")
+
+    if getattr(args, "open", False):
+        open_path(out_dir)
+
+
+def _paste_or_placeholder(sheet, draw, path, x, y, cell, font):
+    if path.exists():
+        try:
+            thumb = Image.open(path).convert("RGB").resize((cell, cell), Image.LANCZOS)
+            sheet.paste(thumb, (x, y))
+            return
+        except Exception:
+            pass
+    draw.rectangle([x, y, x + cell, y + cell], fill="#f0f0f0", outline="#ccc")
+    draw.text((x + cell // 2, y + cell // 2), "MISSING", fill="#999",
+              font=font, anchor="mm")
+
+
 def cmd_compare(args):
     """Build a comparison strip for one tile across all sets + ARASAAC."""
     key = args.key
@@ -300,6 +476,27 @@ def main():
     p_compare = sub.add_parser("compare", help="Compare one tile across all sets")
     p_compare.add_argument("--key", required=True)
 
+    p_csheet = sub.add_parser(
+        "compare-sheet",
+        help="v1-vs-v2 contact sheet, filterable by wordClass, keys, or generation",
+    )
+    p_csheet.add_argument("--set", required=True, help="v2 set under tools/tile_sets/")
+    p_csheet.add_argument("--category", help="Filter by wordClass")
+    p_csheet.add_argument("--keys", help="Comma-separated tile keys")
+    p_csheet.add_argument("--generation", type=int, help="Filter to a specific generation id")
+    p_csheet.add_argument("--latest", action="store_true", help="Filter to the most recent generation")
+    p_csheet.add_argument("--open", action="store_true", help="Open the review folder after building")
+    p_csheet.add_argument(
+        "--v1-dir",
+        default="../claudeBlast/claudeBlast/TileImageSets",
+        help="Directory containing v1 p3d_*.png files",
+    )
+
+    p_gen = sub.add_parser("gen", help="Record a new generation of changed tiles")
+    p_gen.add_argument("--set", required=True, help="Tile set name")
+    p_gen.add_argument("--keys", required=True, help="Comma-separated tile keys in this generation")
+    p_gen.add_argument("--description", default="", help="What changed in this generation")
+
     args = parser.parse_args()
 
     if args.command == "sheets":
@@ -314,6 +511,13 @@ def main():
         cmd_regen(args)
     elif args.command == "compare":
         cmd_compare(args)
+    elif args.command == "compare-sheet":
+        cmd_compare_sheet(args)
+    elif args.command == "gen":
+        keys = [k.strip() for k in args.keys.split(",")]
+        gen_id = record_generation(args.set, keys, args.description)
+        print(f"Recorded generation {gen_id}: {len(keys)} keys")
+        print(f"  {generations_file(args.set)}")
 
 
 if __name__ == "__main__":
