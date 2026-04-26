@@ -22,8 +22,19 @@ See `reference/` for the original Blaster models, screenshots, vocabulary, and l
 - SwiftUI + SwiftData. Target iOS 26+.
 - Privacy: no external backend. SwiftData + iCloud only. API calls (OpenAI) are stateless.
 - Never commit API keys or secrets.
-- You commit, I push to GitHub.
-- Always start new features in a feature branch, always off main.
+- Workflow: Claude manages worktrees, commits, and PRs end-to-end. See `## Workflow` below and `docs/collaborator-workflow.md` for the collaborator-facing version.
+
+## Workflow
+
+Feature work is collaborator-driven via a fresh Claude session. The collaborator-facing version of this lives in `docs/collaborator-workflow.md`; this section is the rules Claude itself follows.
+
+- **Starting work.** A feature begins with the collaborator launching Claude in `~/src/claudeBlast`, on `main`, in a fresh session. Plan mode is the default for non-trivial features — write the plan, get approval, then execute.
+- **Worktrees.** Use `EnterWorktree` to create the branch + checkout (placed under `.claude/worktrees/`). Prefer a descriptive name like `cb-<short-feature>`. Never switch branches in the main checkout. Never run `git checkout -b` or `git switch -c`.
+- **Xcode.** When the collaborator wants to run the app, drive previews, or use the simulator against the in-progress branch, run `open claudeBlast.xcodeproj` from inside the worktree directory (`Bash(open:*)` is allowed). That opens the worktree's checkout, not main.
+- **Commits and PRs are Claude's job.** Claude stages specific files, commits, pushes (`git push -u origin <branch>`), and opens the PR via `gh pr create`. Always confirm with the collaborator before the first push and before `gh pr create`. Never `git add -A`. Never force-push without explicit instruction. Never push to `main` directly from a worktree.
+- **PR iteration.** On review comments, read with `gh pr view --comments`, apply fixes in the same worktree, commit, push — the existing PR updates.
+- **Cleanup after merge.** When the collaborator says "PR merged, clean up", run `ExitWorktree action: "remove"` (deletes worktree + branch), then `git pull` on `main`. Don't run cleanup proactively — wait for the collaborator's signal.
+- **Direct commits to `main`** (no worktree, no PR) are reserved for trivial single-file fixes — typo edits, README tweaks. Anything else uses the worktree+PR flow.
 
 ## Current Architecture
 
@@ -110,11 +121,6 @@ actions=orange, describe=green, people=purple, food/meals/fruit/veggie/snacks=re
 12 pages after merging continuation pages:
 home(35), people(20), social(36), actions(108), describe(114), food(48), drinks(11), places(36), play_activities(27), body_health(16), colors_shapes(24), weather(16)
 No next_page/previous_page tiles — app's built-in grid paging handles overflow.
-
-### Branches
-**RULE: this project uses git worktrees. Do not switch branches or create new branches — work on the branch that's already checked out in this directory.**
-
-- `main` — stable, direct commits only for trivial single-file fixes
 
 ### Known deferred items
 - `isStoredInMemoryOnly: true` — intentional, persistence is next planned chunk
