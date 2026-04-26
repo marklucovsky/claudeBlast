@@ -1,0 +1,6 @@
+# Master tile images — large 1024×1024 originals, only tile collaborators need them.
+# App-runtime PNGs in claudeBlast/Assets.xcassets and claudeBlast/TileImageSets stay in
+# regular git so anyone building the app gets them transparently (no LFS required).
+# See docs/collaborator-workflow.md for the LFS setup steps tile collaborators need.
+tools/tile_sets/playful_3d/*.png       filter=lfs diff=lfs merge=lfs -text
+tools/tile_sets/high_contrast/*.png    filter=lfs diff=lfs merge=lfs -text
