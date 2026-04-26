@@ -57,10 +57,10 @@ If you want changes instead of a merge, leave PR comments on GitHub and tell Cla
 
 When you say "PR merged, clean up", Claude runs:
 
-1. `ExitWorktree action: "remove"` — deletes **two things**: the worktree directory under `.claude/worktrees/<name>` and the **local** branch. The branch was already merged on GitHub, so dropping the local copy is safe.
+1. `ExitWorktree action: "remove"` — deletes both the worktree directory under `.claude/worktrees/<name>` and the **local** branch. The PR is already merged on GitHub, so the local copy is redundant.
 2. `git pull` on main — fast-forwards your local main to include the merged PR.
 
-What about the **remote** branch on origin? GitHub deletes it automatically if the repo's "Automatically delete head branches" setting is on (Settings → General → Pull Requests). If that setting is off, the remote branch lingers as a stale ref — harmless, but you can prune with `git fetch --prune` or delete it from the GitHub PR page. Ask Claude to prune if you want it gone.
+The **remote** branch on origin is auto-deleted by GitHub on merge (this repo has "Automatically delete head branches" enabled). The local remote-tracking ref `origin/<branch>` clears the next time `git fetch` runs, which `git pull` does — so no manual prune is ever needed.
 
 You're back to a clean main checkout, ready for the next feature.
 
@@ -77,10 +77,15 @@ You're back to a clean main checkout, ready for the next feature.
 - Claude **always** confirms before:
   - Pushing a branch for the first time
   - Creating a PR
+  - Committing directly to `main` (every time, even for one-line doc fixes)
   - Removing a worktree with `discard_changes: true`
   - Force-pushing (rarely needed; only on explicit request)
-- Claude **never** force-pushes to `main` or commits API keys/secrets.
-- Direct commits to `main` (no worktree, no PR) are reserved for trivial single-file fixes — typo edits, README tweaks. Anything else uses the worktree+PR flow above.
+- Claude **never** force-pushes to `main`, commits API keys/secrets, or commits to `main` from inside a worktree.
+- Direct commits to `main` (no worktree, no PR) are allowed only for:
+  - **Documentation and comment edits** — typos, clarifications, link fixes, README tweaks
+  - **Coordinated doc-only changes across multiple files** when they must stay in sync (e.g. updating `CLAUDE.md` and `docs/collaborator-workflow.md` together)
+
+  Anything that touches Swift source, build config, assets, or `Resources/*.json` must go through the worktree + PR flow. When in doubt, use a worktree — the overhead is small and the audit trail is worth it.
 
 ## Quick reference card
 

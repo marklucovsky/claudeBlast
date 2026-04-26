@@ -34,7 +34,7 @@ Feature work is collaborator-driven via a fresh Claude session. The collaborator
 - **Commits and PRs are Claude's job.** Claude stages specific files, commits, pushes (`git push -u origin <branch>`), and opens the PR via `gh pr create`. Always confirm with the collaborator before the first push and before `gh pr create`. Never `git add -A`. Never force-push without explicit instruction. Never push to `main` directly from a worktree.
 - **PR iteration.** On review comments, read with `gh pr view --comments`, apply fixes in the same worktree, commit, push — the existing PR updates.
 - **Cleanup after merge.** When the collaborator says "PR merged, clean up", run `ExitWorktree action: "remove"` (deletes worktree + branch), then `git pull` on `main`. Don't run cleanup proactively — wait for the collaborator's signal.
-- **Direct commits to `main`** (no worktree, no PR) are reserved for trivial single-file fixes — typo edits, README tweaks. Anything else uses the worktree+PR flow.
+- **Direct commits to `main`** (no worktree, no PR) are allowed only for documentation and comment edits — typos, clarifications, README tweaks, and coordinated doc-only changes that span `CLAUDE.md` plus `docs/*` to keep them in sync. Always confirm with the collaborator before each direct-to-main commit, even one-line ones. Anything touching Swift source, build config, assets, or `Resources/*.json` must use the worktree + PR flow. Never commit to `main` from inside a worktree.
 
 ## Current Architecture
 
