@@ -73,25 +73,9 @@ npm install -g @anthropic-ai/claude-code
 
 ### Worktree-based workflow (recommended)
 
-Claude Code works best with git worktrees, especially when running multiple Claude sessions on different features simultaneously. Each worktree gets its own working directory and branch, so sessions don't conflict.
+Claude manages git worktrees, commits, and pull requests end-to-end on your behalf — you describe features in conversation, Claude handles the lifecycle. Run multiple Claude sessions on different features in parallel; each session gets its own worktree and branch under `.claude/worktrees/`, so sessions don't conflict.
 
-```bash
-# Start a new feature (from the main repo directory)
-git worktree add ../cb-feelings -b feature/feelings
-cd ../cb-feelings
-claude   # launch Claude Code in the worktree
-
-# Start another feature in parallel
-git worktree add ../cb-import-fix -b fix/import-error
-cd ../cb-import-fix
-claude
-
-# When done, merge and clean up
-cd ../claudeBlast          # back to main repo
-git worktree remove ../cb-feelings
-```
-
-Each worktree shares the same git history but has an independent working tree and branch. This is how we run multiple Claude sessions without stepping on each other.
+See **[docs/collaborator-workflow.md](docs/collaborator-workflow.md)** for the full flow: prerequisites (`gh auth login` once), starting a feature, opening Xcode on a worktree, reviewing PRs, iterating on review comments, and post-merge cleanup.
 
 ---
 
@@ -280,5 +264,7 @@ Tile images have separate licensing terms as described above and in [NOTICE](NOT
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, PR process, and guidelines.
+
+See [docs/collaborator-workflow.md](docs/collaborator-workflow.md) for the Claude-managed worktree + PR workflow.
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture reference.
