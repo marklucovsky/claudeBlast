@@ -16,6 +16,7 @@ import Observation
 enum ImageSetID: String, CaseIterable, Identifiable {
     case arasaac = "arasaac"
     case playful3D = "playful_3d"
+    case highContrast = "high_contrast"
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum ImageSetID: String, CaseIterable, Identifiable {
         switch self {
         case .arasaac: return "Classic (ARASAAC)"
         case .playful3D: return "Playful 3D"
+        case .highContrast: return "High Contrast"
         }
     }
 
@@ -30,6 +32,7 @@ enum ImageSetID: String, CaseIterable, Identifiable {
         switch self {
         case .arasaac: return "Original pictogram style"
         case .playful3D: return "Modern clay/plasticine 3D style"
+        case .highContrast: return "Bold white-on-black accessibility style"
         }
     }
 }
@@ -65,6 +68,9 @@ final class TileImageResolver {
 
         case .playful3D:
             return prefixedBundleImage(for: key, prefix: "p3d")
+
+        case .highContrast:
+            return prefixedBundleImage(for: key, prefix: "hc")
         }
     }
 
