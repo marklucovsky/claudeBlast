@@ -54,19 +54,68 @@ STYLE_PLAYFUL_3D = (
 )
 
 STYLE_HIGH_CONTRAST = (
-    "High-contrast pictogram on a solid black background. "
-    "White bold figures and objects as the primary elements. "
-    "Bold accent colors (bright red, blue, green, yellow, orange) may be used sparingly "
-    "to highlight key elements or convey meaning — but white on black remains dominant. "
-    "Simple, clean, minimal detail, maximum clarity and readability. "
-    "CRITICAL: Absolutely no text, no letters, no numbers, no words, no labels, no signs, "
-    "no symbols, no icons, no WiFi arcs, no wheelchair symbols, no app elements, no writing of any kind. "
-    "Pure visual illustration only. Square format. Single clear subject centered."
+    "High-contrast accessibility pictogram for non-verbal children. "
+    "The entire image is a pure solid #000000 black canvas that bleeds seamlessly "
+    "from center to all four edges and corners. There is NO frame, NO border, NO "
+    "rounded rectangle inset, NO white outline around the canvas, NO inner panel — "
+    "the black is one continuous flat field touching every edge. "
+    "ONE giant subject is centered and fills most of the canvas (roughly 80% of "
+    "the area), drawn in bold white with thick clean lines and generous filled "
+    "shapes. Bold accent colors (bright red, blue, green, yellow, orange) are "
+    "encouraged on meaningful parts (e.g. red apple, golden bread, red heart, red "
+    "roof) — white on black remains dominant. Simple flat shapes, maximum clarity. "
+    "ABSOLUTELY FORBIDDEN, the image MUST NOT contain any of these: any frame or "
+    "border around the subject; any rounded rectangle inset; any white outline "
+    "around the canvas; any text, letters, numbers, or words; any secondary icons; "
+    "any scattered small symbols, stars, sparkles, dots, snowflakes, asterisks, "
+    "circles, triangles, or shape clusters in the background; any second copy of "
+    "the subject; any wheelchair symbols, WiFi arcs, app/UI elements, currency "
+    "symbols, medical accessory icons (clipboards, ambulances, EKG lines), or any "
+    "decorative motifs anywhere. The black background is completely uniform and "
+    "empty everywhere except for the one centered subject. Square format."
 )
 
 STYLES = {
     "playful_3d": STYLE_PLAYFUL_3D,
     "high_contrast": STYLE_HIGH_CONTRAST,
+}
+
+# Per-tile subject overrides for tiles where the shared cross-style subject
+# (extracted from prompts.json) doesn't translate well to high_contrast — e.g.
+# abstract concepts where DALL-E improvises with secondary icons, or cases
+# where the shared subject says "clay" / "pastel". Looked up by lowercase key.
+HC_SUBJECT_OVERRIDES: dict[str, str] = {
+    # next_page / previous_page / question — rendered deterministically by
+    # render_hc_basics.py; DALL-E reliably hallucinates frames around the canvas
+    # or surrounds the subject with a grid of unrelated icons.
+    "food": (
+        "A clean white plate seen from a slight angle, holding exactly three "
+        "iconic food items: a bright red apple, a golden bread roll, and a "
+        "chicken drumstick. Just these three items on the plate, nothing else "
+        "anywhere in the image"
+    ),
+    "body_health": (
+        "A single bold white silhouette of a standing person, front view, with "
+        "a bright red heart shape on the center of the chest. Just the "
+        "silhouette and the red heart, nothing else"
+    ),
+    "snack": (
+        "A simple bold white bowl viewed from the front in profile, with three "
+        "or four white twisted pretzel shapes resting inside the bowl. Just "
+        "the bowl and the pretzels, nothing else inside the bowl, nothing "
+        "around the bowl"
+    ),
+    "home": (
+        "A single iconic house shape: a bold white square base with a triangular "
+        "roof on top in bright red, one centered door, and one square window. "
+        "Just the one house, nothing else"
+    ),
+    "popsicle": (
+        "ONE single popsicle on a wooden stick, centered. The popsicle body has "
+        "three horizontal stripes — bright red on top, bright orange in the "
+        "middle, bright yellow on the bottom — with a small white wooden stick "
+        "below. Just the one popsicle, nothing else"
+    ),
 }
 
 
@@ -132,7 +181,8 @@ def run_set(style_name: str, keys: list[str], prompts: dict[str, str],
     failed: list[str] = []
 
     for i, key in enumerate(keys):
-        if key not in prompts:
+        override = HC_SUBJECT_OVERRIDES.get(key.lower()) if style_name == "high_contrast" else None
+        if not override and key not in prompts:
             print(f"  ✗ {key:40s} no prompt — skipping")
             failed.append(key)
             continue
@@ -150,7 +200,7 @@ def run_set(style_name: str, keys: list[str], prompts: dict[str, str],
                 print(f"  → {key:40s} (exists, {dest.stat().st_size // 1024} KB)")
             continue
 
-        subject = extract_subject(prompts[key])
+        subject = override if override else extract_subject(prompts[key])
         prompt = build_prompt(subject, style_name)
 
         if dry_run:
@@ -179,7 +229,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Blaster tile image sets")
     parser.add_argument("--set", required=True, choices=["playful_3d", "high_contrast", "both"])
     parser.add_argument("--skip-existing", action="store_true")
-    parser.add_argument("--key", metavar="KEY", help="Process only this tile key")
+    parser.add_argument("--key", metavar="KEY", action="append", default=None,
+                        help="Process only this tile key (repeatable)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--batch", type=int, default=0,
                         help="Process only N tiles (for testing)")
@@ -201,9 +252,10 @@ def main() -> None:
     keys = [tile["key"] for tile in vocab]
 
     if args.key:
-        if args.key not in keys:
-            sys.exit(f"Key '{args.key}' not in vocabulary")
-        keys = [args.key]
+        missing = [k for k in args.key if k not in keys]
+        if missing:
+            sys.exit(f"Keys not in vocabulary: {missing}")
+        keys = list(args.key)
     elif args.batch > 0:
         keys = keys[:args.batch]
 

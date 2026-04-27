@@ -27,7 +27,7 @@ from pathlib import Path
 
 VOCAB_FILE = Path("claudeBlast/Resources/vocabulary.json")
 ASSETS_DIR = Path("claudeBlast/Assets.xcassets")
-TILE_IMAGE_SETS = Path("../claudeBlast/claudeBlast/TileImageSets")
+TILE_IMAGE_SETS = Path("claudeBlast/TileImageSets")
 OUTPUT_BASE = Path("tools/tile_sets")
 
 
@@ -64,16 +64,6 @@ def build_page(set_name: str) -> Path:
         if src.exists():
             shutil.copy2(src, arasaac_dir / f"{tile['key']}.png")
 
-    # Load generations for this set
-    gen_file = set_dir / "generations.json"
-    generations = []
-    key_to_gen = {}
-    if gen_file.exists():
-        generations = json.loads(gen_file.read_text()).get("generations", [])
-        for g in generations:
-            for k in g.get("keys", []):
-                key_to_gen[k] = g["id"]
-
     # Build tile data with relative file paths (all within tile_sets/)
     tiles_json = []
     for i, tile in enumerate(vocab):
@@ -96,11 +86,9 @@ def build_page(set_name: str) -> Path:
             "arasaacImg": img_to_relative_path(arasaac_path, html_dir),
             "newImg": new_img if has_new else current_img,
             "hasNew": has_new,
-            "generation": key_to_gen.get(key, 0),
         })
 
     categories = sorted(set(t["wordClass"] for t in tiles_json))
-    gen_ids = sorted(set(g["id"] for g in generations)) if generations else []
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -153,12 +141,6 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
     width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
 }}
 .card-images .img-label {{ display: none; }}
-.card[data-generation]:not([data-generation="0"]) {{ border-top: 3px solid #ff9500; }}
-.modified-badge {{
-    position: absolute; top: 6px; right: 6px;
-    background: #ff9500; color: white; font-size: 9px; font-weight: 600;
-    padding: 2px 6px; border-radius: 4px; z-index: 1;
-}}
 
 .progress-bar {{
     height: 4px; background: #e5e5e5; border-radius: 2px; overflow: hidden; flex: 1; min-width: 100px;
@@ -216,13 +198,11 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
         <option value="approved">Approved</option>
         <option value="rejected">Rejected</option>
     </select>
-    <select id="filterGeneration">
-        <option value="all">All Generations</option>
-        <option value="latest">Latest Generation</option>
-        {"".join(f'<option value="{g}">Gen {g}</option>' for g in gen_ids)}
-    </select>
     <input type="text" id="searchBox" placeholder="Search tiles..." />
-    <button id="toggleBaseline" onclick="toggleBaseline()">Show ARASAAC</button>
+    <select id="baselineSource" title="What appears on the left side of each card">
+        <option value="p3d">LHS: latest p3d</option>
+        <option value="arasaac">LHS: ARASAAC</option>
+    </select>
     <button class="success" onclick="approveAll()">Approve All Visible</button>
     <button class="danger" onclick="exportRejects()">Export Rejects</button>
     <button onclick="exportAll()">Export Full Review</button>
@@ -295,10 +275,8 @@ TILES.forEach(t => tileMap[t.key] = t);
 
 let showArasaac = false;
 
-function toggleBaseline() {{
-    showArasaac = !showArasaac;
-    const btn = document.getElementById("toggleBaseline");
-    btn.textContent = showArasaac ? "Show Current p3d" : "Show ARASAAC";
+function setBaselineSource(value) {{
+    showArasaac = value === "arasaac";
     document.querySelectorAll(".baseline-img").forEach(img => {{
         img.src = showArasaac ? (img.dataset.arasaac || "") : (img.dataset.p3d || "");
     }});
@@ -311,15 +289,13 @@ function buildGrid() {{
         const s = getState(t.key);
         const card = document.createElement("div");
         card.id = "card-" + t.key;
-        card.className = "card " + s.status + (t.modified ? " modified" : "");
+        card.className = "card " + s.status;
         card.dataset.key = t.key;
         card.dataset.wordclass = t.wordClass;
-        card.dataset.generation = t.generation || "0";
         const k = t.key.replace(/'/g, "\\\\'");
 
         card.innerHTML = `
             <div class="card-images" onclick="openLightbox('${{k}}')" style="position:relative">
-                ${{t.generation > 0 ? `<span class="modified-badge">GEN ${{t.generation}}</span>` : ''}}
                 <div class="img-col">
                     <img class="baseline-img" src="${{t.currentImg || ''}}"
                          data-p3d="${{t.currentImg || ''}}"
@@ -357,27 +333,18 @@ function buildGrid() {{
     updateStats();
 }}
 
-const MAX_GEN = Math.max(0, ...TILES.map(t => t.generation || 0));
-
 function applyFilters() {{
     const cat = document.getElementById("filterCategory").value;
     const status = document.getElementById("filterStatus").value;
-    const gen = document.getElementById("filterGeneration").value;
     const search = document.getElementById("searchBox").value.toLowerCase();
 
     document.querySelectorAll(".card").forEach(card => {{
         const key = card.dataset.key;
         const wc = card.dataset.wordclass;
-        const cardGen = parseInt(card.dataset.generation || "0");
         const s = getState(key);
         let show = true;
         if (cat !== "all" && wc !== cat) show = false;
         if (status !== "all" && s.status !== status) show = false;
-        if (gen === "latest") {{
-            if (cardGen !== MAX_GEN) show = false;
-        }} else if (gen !== "all") {{
-            if (cardGen !== parseInt(gen)) show = false;
-        }}
         if (search && !key.includes(search)) show = false;
         card.classList.toggle("hidden", !show);
     }});
@@ -443,8 +410,8 @@ document.addEventListener("keydown", e => {{
 // Init
 document.getElementById("filterCategory").addEventListener("change", applyFilters);
 document.getElementById("filterStatus").addEventListener("change", applyFilters);
-document.getElementById("filterGeneration").addEventListener("change", applyFilters);
 document.getElementById("searchBox").addEventListener("input", applyFilters);
+document.getElementById("baselineSource").addEventListener("change", e => setBaselineSource(e.target.value));
 buildGrid();
 </script>
 </body>
