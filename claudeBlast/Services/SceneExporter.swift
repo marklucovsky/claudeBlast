@@ -61,7 +61,7 @@ enum SceneExporter {
     static func exportJSON(_ scene: BlasterScene, defaultTileKeys: Set<String> = []) throws -> Data {
         let exportable = export(scene, defaultTileKeys: defaultTileKeys)
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(exportable)
     }
 
