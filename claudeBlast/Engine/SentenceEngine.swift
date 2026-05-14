@@ -199,8 +199,9 @@ final class SentenceEngine {
 
         let tilesSnapshot = activeGroup.tiles
         let repetition = updateRepetitionState(for: tilesSnapshot)
-        debounceTask = Task {
-            await generate(tiles: tilesSnapshot, repetition: repetition)
+        debounceTask = Task { [weak self] in
+            guard let self else { return }
+            await self.generate(tiles: tilesSnapshot, repetition: repetition)
         }
     }
 
@@ -246,8 +247,9 @@ final class SentenceEngine {
         repetitionCount += 1
         let tilesSnapshot = activeGroup.tiles
         let repetition = repetitionCount
-        Task {
-            await generate(tiles: tilesSnapshot, repetition: repetition)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.generate(tiles: tilesSnapshot, repetition: repetition)
         }
     }
 
@@ -366,15 +368,16 @@ final class SentenceEngine {
 
         if hitCap {
             // Hit cap: auto-generate immediately (no debounce wait).
-            debounceTask = Task {
-                await generate(tiles: tilesSnapshot, repetition: repetition)
+            debounceTask = Task { [weak self] in
+                guard let self else { return }
+                await self.generate(tiles: tilesSnapshot, repetition: repetition)
             }
         } else {
             let wait = idleDebounceDuration
-            debounceTask = Task {
+            debounceTask = Task { [weak self] in
                 do { try await Task.sleep(for: wait) } catch { return }
-                guard !Task.isCancelled else { return }
-                await generate(tiles: tilesSnapshot, repetition: repetition)
+                guard !Task.isCancelled, let self else { return }
+                await self.generate(tiles: tilesSnapshot, repetition: repetition)
             }
         }
     }
