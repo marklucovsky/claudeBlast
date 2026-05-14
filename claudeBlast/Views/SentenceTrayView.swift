@@ -21,17 +21,26 @@ struct SentenceTrayView: View {
     let comparisonSentence: String?
     let isThinking: Bool
     let isWaiting: Bool
+    /// True when the active group is locked and replay-with-escalation is available.
     let canReplay: Bool
-    let recentHistory: [HistoryEntry]
     let onTileTap: (Int) -> Void
-    let onClear: () -> Void
+    let onGo: () -> Void
     let onReplay: () -> Void
-    let onReplayHistory: (HistoryEntry) -> Void
 
-    @State private var showHistory: Bool = false
-
+    /// "Play" affordance: replay the locked group's spoken sentence (with escalation).
     private var showReplay: Bool {
-        canReplay && !isThinking && !isWaiting && generatedSentence != nil
+        canReplay && !isThinking && !isWaiting
+    }
+
+    /// "Go" affordance: commit the in-progress group immediately, skipping the debounce wait.
+    /// Visible during the debounce window too — that's its whole point. Hidden once generation
+    /// is actually in flight (isThinking) or after the group locks (showReplay takes over).
+    private var showGo: Bool {
+        !showReplay && selectedTiles.count >= 2 && !isThinking
+    }
+
+    private var showCommit: Bool {
+        showReplay || showGo
     }
 
     private var hasComparison: Bool {
@@ -126,43 +135,17 @@ struct SentenceTrayView: View {
             }
             .frame(maxWidth: .infinity)
 
-            // Replay column — vertically centered between the right-column buttons
-            Button(action: onReplay) {
-                Image(systemName: "arrow.trianglehead.2.counterclockwise")
+            // Commit column — Play (locked group) or Go (editable group, ≥2 tiles).
+            Button(action: showReplay ? onReplay : onGo) {
+                Image(systemName: showReplay ? "arrow.trianglehead.2.counterclockwise" : "play.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(showReplay ? .orange : .blue)
             }
             .buttonStyle(.plain)
-            .opacity(showReplay ? 1 : 0)
-            .allowsHitTesting(showReplay)
+            .opacity(showCommit ? 1 : 0)
+            .allowsHitTesting(showCommit)
             .frame(width: kColumnWidth)
-            .animation(.easeInOut(duration: 0.2), value: showReplay)
-
-            // Right column — clear (top) + history (bottom)
-            VStack {
-                Button(action: onClear) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .opacity(selectedTiles.isEmpty ? 0 : 1)
-                .allowsHitTesting(!selectedTiles.isEmpty)
-                .animation(.easeInOut(duration: 0.15), value: selectedTiles.isEmpty)
-
-                Spacer()
-
-                Button { showHistory = true } label: {
-                    Image(systemName: "clock")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .opacity(recentHistory.isEmpty ? 0 : 1)
-                .allowsHitTesting(!recentHistory.isEmpty)
-                .animation(.easeInOut(duration: 0.15), value: recentHistory.isEmpty)
-            }
-            .frame(width: kColumnWidth, height: totalContentHeight)
+            .animation(.easeInOut(duration: 0.2), value: showCommit)
         }
         .frame(height: totalContentHeight)
         .animation(.easeInOut(duration: 0.2), value: hasComparison)
@@ -173,37 +156,6 @@ struct SentenceTrayView: View {
                 .fill(.ultraThinMaterial)
         )
         .padding(.horizontal)
-        .sheet(isPresented: $showHistory) {
-            NavigationStack {
-                List(recentHistory) { entry in
-                    Button {
-                        onReplayHistory(entry)
-                        showHistory = false
-                    } label: {
-                        HStack(spacing: 12) {
-                            TileGridIcon(tiles: entry.tiles)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.sentence)
-                                    .font(.body)
-                                    .foregroundStyle(.primary)
-                                Text(entry.timestamp, style: .relative)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                .navigationTitle("History")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showHistory = false }
-                    }
-                }
-            }
-        }
     }
 }
 

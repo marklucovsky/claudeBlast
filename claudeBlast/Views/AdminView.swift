@@ -40,6 +40,12 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
     @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.arasaac.rawValue
+
+    // Sentence tray timeline settings
+    @AppStorage(AppSettingsKey.tileCapPerGroup) private var tileCapPerGroup: Int = 4
+    @AppStorage(AppSettingsKey.idleDebounceMs) private var idleDebounceMs: Int = 2500
+    @AppStorage(AppSettingsKey.trayBufferSize) private var trayBufferSize: Int = 100
+
     @Environment(TileImageResolver.self) private var imageResolver
 
     @Environment(\.dismiss) private var dismiss
@@ -132,6 +138,37 @@ struct AdminView: View {
                     VoiceSectionHeader()
                 }
                 .onChange(of: voiceIdentifier) { sentenceEngine.voiceIdentifier = voiceIdentifier }
+
+                Section {
+                    Stepper(
+                        "Tiles per group: \(tileCapPerGroup)",
+                        value: $tileCapPerGroup,
+                        in: 2...8,
+                        step: 1
+                    )
+                    Stepper(
+                        "Idle timeout: \(idleDebounceMs) ms",
+                        value: $idleDebounceMs,
+                        in: 500...5000,
+                        step: 250
+                    )
+                    Stepper(
+                        "Tray buffer: \(trayBufferSize) groups",
+                        value: $trayBufferSize,
+                        in: 50...500,
+                        step: 50
+                    )
+                    Button(role: .destructive) {
+                        sentenceEngine.resetSession()
+                    } label: {
+                        Label("Reset Session", systemImage: "arrow.counterclockwise")
+                    }
+                } header: {
+                    Text("Sentence Tray")
+                } footer: {
+                    Text("Tile cap auto-generates a sentence when reached. Idle timeout fires generation when paused. Tray buffer caps how many past groups are kept.")
+                        .font(.caption)
+                }
 
                 #if DEBUG
                 Section("Storage") {

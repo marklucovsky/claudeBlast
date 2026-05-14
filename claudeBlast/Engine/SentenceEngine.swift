@@ -21,16 +21,35 @@ struct HistoryEntry: Identifiable {
 final class SentenceEngine {
     // MARK: - Published state
 
-    private(set) var selectedTiles: [TileSelection] = []
-    private(set) var generatedSentence: String?
+    /// The rightmost (in-progress or just-spoken) group. Always present, may be empty.
+    private(set) var activeGroup: TileGroup = TileGroup()
+
+    /// Newest-first rolling buffer of closed groups (newest at index 0). Capped by trayBufferSize.
+    private(set) var groupHistory: [TileGroup] = []
+
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
-    private(set) var recentHistory: [HistoryEntry] = []
     private(set) var comparisonSentence: String?
     var sessionNotes: String = ""
 
-    /// Called with the current generatedSentence just before clearSelection() wipes state.
-    /// Used by TileScriptRecorder to capture sentence text and finalize the current row.
+    // MARK: - Backwards-compatible accessors
+
+    /// The active group's tiles. Used by views built before the timeline refactor.
+    var selectedTiles: [TileSelection] { activeGroup.tiles }
+
+    /// The active group's generated sentence (or single-tile preview).
+    var generatedSentence: String? { activeGroup.sentence }
+
+    /// Closed groups exposed as legacy HistoryEntry items for the (soon-to-be-retired) history sheet.
+    var recentHistory: [HistoryEntry] {
+        groupHistory.prefix(maxHistorySheetEntries).compactMap { group in
+            guard let sentence = group.sentence else { return nil }
+            return HistoryEntry(tiles: group.tiles, sentence: sentence, timestamp: group.createdAt)
+        }
+    }
+
+    /// Called with the active group's generatedSentence just before the group is flushed to history
+    /// or the engine is reset. Used by TileScriptRecorder to finalize the current row.
     var onWillClear: ((String?) -> Void)?
 
     /// Called when a real multi-tile sentence is generated (from cache or API, 2+ tiles).
@@ -52,7 +71,25 @@ final class SentenceEngine {
     var audioEnabled: Bool = true
     var voiceIdentifier: String = ""
     var compareProviders: Bool = false
-    let maxTiles: Int = 4
+
+    /// Max tiles per group; backed by AppStorage. Read on every check so live setting changes apply.
+    var maxTilesPerGroup: Int {
+        let stored = UserDefaults.standard.integer(forKey: AppSettingsKey.tileCapPerGroup)
+        return (2...8).contains(stored) ? stored : 4
+    }
+
+    /// Idle debounce before auto-generation; backed by AppStorage.
+    var idleDebounceDuration: Duration {
+        let ms = UserDefaults.standard.integer(forKey: AppSettingsKey.idleDebounceMs)
+        let clamped = (500...5000).contains(ms) ? ms : 2500
+        return .milliseconds(clamped)
+    }
+
+    /// Max number of closed groups retained in groupHistory; backed by AppStorage.
+    var trayBufferSize: Int {
+        let stored = UserDefaults.standard.integer(forKey: AppSettingsKey.trayBufferSize)
+        return (50...500).contains(stored) ? stored : 100
+    }
 
     // MARK: - Dependencies
 
@@ -63,14 +100,20 @@ final class SentenceEngine {
     // MARK: - Internal state
 
     private var debounceTask: Task<Void, Never>?
-    private var idleTask: Task<Void, Never>?
-    private var conversationHistory: [String] = []
     private var repetitionCount: Int = 0
     private var lastTileKey: String?
     private let maxConversationHistory = 5
-    private let debounceDuration: Duration = .milliseconds(350)
-    private let idleTimeout: Duration = .seconds(30)
-    private let maxHistory = 10
+    private let maxHistorySheetEntries = 10
+
+    /// Last N generated sentences fed back as conversational context to the model.
+    private var conversationHistory: [String] {
+        Array(
+            groupHistory
+                .compactMap { $0.sentence }
+                .prefix(maxConversationHistory)
+                .reversed()
+        )
+    }
 
     // MARK: - Init
 
@@ -87,145 +130,255 @@ final class SentenceEngine {
 
     func switchProvider(_ newProvider: any SentenceProvider) {
         resetAll()
-        conversationHistory.removeAll()
         provider = newProvider
     }
 
     // MARK: - Tile management
 
+    /// Add a tile in response to a grid tap.
+    /// - If the tile is already in the active group, this toggles it off (same as removeTile).
+    /// - If the active group is locked, it is flushed to history and a new active group is seeded.
+    /// - Otherwise the tile is appended to the active group; cap or debounce triggers generation.
     func addTile(_ tile: TileModel) {
-        guard selectedTiles.count < maxTiles else { return }
         let selection = TileSelection(from: tile)
-        guard !selectedTiles.contains(where: { $0.key == selection.key }) else { return }
-        idleTask?.cancel()
-        selectedTiles.append(selection)
+
+        // Toggle-off if tile is already in the active group.
+        if let index = activeGroup.tiles.firstIndex(where: { $0.key == selection.key }) {
+            removeTile(at: index)
+            return
+        }
+
+        // Locked group: flush to history, then start a fresh active group with this tile.
+        if activeGroup.state == .locked {
+            flushActiveToHistory()
+        }
+
+        guard activeGroup.tiles.count < maxTilesPerGroup else { return }
+
+        activeGroup.tiles.append(selection)
         cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
         scheduleGeneration()
     }
 
+    /// Remove a tile from the active group.
+    /// - From a locked group: transitions to .unlockedEditable; the stale sentence stays visible
+    ///   until the next generation completes.
+    /// - From an editable group: simply removes and reschedules generation.
     func removeTile(at index: Int) {
-        guard selectedTiles.indices.contains(index) else { return }
-        idleTask?.cancel()
-        selectedTiles.remove(at: index)
-        if selectedTiles.isEmpty {
-            clearSelection()
+        guard activeGroup.tiles.indices.contains(index) else { return }
+
+        let wasLocked = activeGroup.state == .locked
+        activeGroup.tiles.remove(at: index)
+
+        if wasLocked {
+            activeGroup.state = .unlockedEditable
+        }
+
+        if activeGroup.tiles.isEmpty {
+            debounceTask?.cancel()
+            debounceTask = nil
+            activeGroup.sentence = nil
+            activeGroup.state = .building
+            comparisonSentence = nil
+            isThinking = false
+            isWaiting = false
+            speechSynthesizer.stop()
         } else {
             scheduleGeneration()
         }
     }
 
+    /// Explicit "Go" tap — generate immediately, skipping the debounce wait.
+    /// No-op if there aren't enough tiles or the group is already locked.
+    func triggerGo() {
+        guard activeGroup.tiles.count >= 2 else { return }
+        guard activeGroup.state != .locked else { return }
+
+        debounceTask?.cancel()
+        isWaiting = false
+
+        let tilesSnapshot = activeGroup.tiles
+        let repetition = updateRepetitionState(for: tilesSnapshot)
+        debounceTask = Task { [weak self] in
+            guard let self else { return }
+            await self.generate(tiles: tilesSnapshot, repetition: repetition)
+        }
+    }
+
+    /// Clear the active group (no history change). Used by scene switching and by speakPromoted
+    /// to overwrite the active slot. Fires onWillClear so script recording can finalize the row.
     func clearSelection() {
-        onWillClear?(generatedSentence)
+        onWillClear?(activeGroup.sentence)
         debounceTask?.cancel()
         debounceTask = nil
-        idleTask?.cancel()
-        idleTask = nil
-        selectedTiles.removeAll()
-        generatedSentence = nil
+        activeGroup = TileGroup()
         comparisonSentence = nil
         isThinking = false
         isWaiting = false
-        // Preserve repetitionCount and lastTileKey so escalation
-        // works across clear cycles (e.g., TileScript rows).
-        // They reset naturally in scheduleGeneration() when a
-        // different combo is selected.
+        // Preserve repetitionCount and lastTileKey so escalation works across clear cycles
+        // (e.g., TileScript rows). They reset naturally when a different combo is selected.
         speechSynthesizer.stop()
     }
 
-    /// Full reset including escalation state. Used when switching
-    /// providers or contexts where repetition history should not carry over.
+    /// Full reset: clear active group AND history AND escalation state.
+    /// Used by AdminView "Reset session" and by switchProvider.
     func resetAll() {
         clearSelection()
+        groupHistory.removeAll()
         repetitionCount = 0
         lastTileKey = nil
+    }
+
+    /// Admin-only: reset the visible session (active + history).
+    func resetSession() {
+        resetAll()
     }
 
     // MARK: - Replay
 
     var canReplay: Bool {
-        selectedTiles.count >= 2 && !isThinking && generatedSentence != nil
+        activeGroup.state == .locked && activeGroup.sentence != nil && !isThinking
     }
 
+    /// Replay the active group's sentence using escalation (repetition increments, cache bypassed).
+    /// Only valid when the active group is locked.
     func replay() {
         guard canReplay else { return }
-        idleTask?.cancel()
         repetitionCount += 1
-        let tilesSnapshot = selectedTiles
+        let tilesSnapshot = activeGroup.tiles
         let repetition = repetitionCount
-        Task {
-            await generate(tiles: tilesSnapshot, repetition: repetition)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.generate(tiles: tilesSnapshot, repetition: repetition)
         }
     }
 
-    // MARK: - History
+    // MARK: - History group interactions
 
+    /// Speak + reopen an older history group. The current active group flushes to history first,
+    /// then the target group is promoted to the active slot as .unlockedEditable so it can be
+    /// further edited. Not yet wired into PR1 UI; here so PR2 can call it.
+    func reopenHistoryGroup(id: UUID) {
+        guard let index = groupHistory.firstIndex(where: { $0.id == id }) else { return }
+        flushActiveToHistory()
+
+        var target = groupHistory.remove(at: index)
+        target.state = .unlockedEditable
+        activeGroup = target
+
+        if let sentence = target.sentence {
+            speak(sentence)
+        }
+    }
+
+    /// Delete a history group. Power-user gesture, surfaced in PR2 UI.
+    func deleteHistoryGroup(id: UUID) {
+        groupHistory.removeAll { $0.id == id }
+    }
+
+    /// Legacy history-sheet replay path. Reconstructs an old utterance into the active group.
+    /// Kept for any callers that still bind to HistoryEntry; will be removed when the sheet is
+    /// fully retired in PR3.
     func replayFromHistory(_ entry: HistoryEntry) {
+        if let match = groupHistory.first(where: {
+            $0.tiles.map(\.key) == entry.tiles.map(\.key) && $0.sentence == entry.sentence
+        }) {
+            reopenHistoryGroup(id: match.id)
+            return
+        }
+        // Fallback: synthesize an active group from the legacy entry.
         clearSelection()
-        selectedTiles = entry.tiles
-        Task {
-            await generate(tiles: entry.tiles, repetition: 0)
-        }
+        activeGroup.tiles = entry.tiles
+        activeGroup.sentence = entry.sentence
+        activeGroup.state = .unlockedEditable
+        speak(entry.sentence)
     }
 
-    private func recordHistory(tiles: [TileSelection], sentence: String) {
-        recentHistory.removeAll { Set($0.tiles.map(\.key)) == Set(tiles.map(\.key)) }
-        recentHistory.insert(HistoryEntry(tiles: tiles, sentence: sentence, timestamp: .now), at: 0)
-        if recentHistory.count > maxHistory { recentHistory.removeLast() }
-    }
+    // MARK: - Idle timer (no-op shim)
 
-    // MARK: - Idle timer
-
+    /// Retained for callers that used to cancel the 30s idle clear. The idle clear is gone in
+    /// the timeline model, so this is now a no-op. Kept to avoid touching every call site.
     func cancelIdleTimer() {
-        idleTask?.cancel()
-        idleTask = nil
+        // Intentionally no-op.
     }
 
-    private func startIdleTimer() {
-        idleTask?.cancel()
-        idleTask = Task {
-            do { try await Task.sleep(for: idleTimeout) } catch { return }
-            clearSelection()
+    // MARK: - Flush
+
+    /// Move the active group into history (newest-first) and reset the active slot.
+    /// Only flushes groups that produced a sentence; empty or in-flight groups are discarded.
+    private func flushActiveToHistory() {
+        onWillClear?(activeGroup.sentence)
+        debounceTask?.cancel()
+        debounceTask = nil
+
+        if let _ = activeGroup.sentence, !activeGroup.tiles.isEmpty {
+            var finalized = activeGroup
+            finalized.state = .locked
+            groupHistory.insert(finalized, at: 0)
+            // Trim to configured buffer size.
+            let limit = trayBufferSize
+            if groupHistory.count > limit {
+                groupHistory.removeLast(groupHistory.count - limit)
+            }
         }
+
+        activeGroup = TileGroup()
+        comparisonSentence = nil
+        isThinking = false
+        isWaiting = false
+        speechSynthesizer.stop()
     }
 
     // MARK: - Generation pipeline
 
-    private func scheduleGeneration() {
-        debounceTask?.cancel()
-        generatedSentence = nil
-        isThinking = false
-
-        // Single tile: show display name immediately, no API call
-        if selectedTiles.count == 1 {
-            generatedSentence = selectedTiles[0].value
-            isWaiting = false
-            recordHistory(tiles: selectedTiles, sentence: selectedTiles[0].value)
-            return
-        }
-
-        isWaiting = true
-
-        // Track repetition
-        let currentKey = SentenceCacheManager.cacheKey(for: selectedTiles)
+    private func updateRepetitionState(for tiles: [TileSelection]) -> Int {
+        let currentKey = SentenceCacheManager.cacheKey(for: tiles)
         if currentKey == lastTileKey {
             repetitionCount += 1
         } else {
             repetitionCount = 0
             lastTileKey = currentKey
         }
+        return repetitionCount
+    }
 
-        let tilesSnapshot = selectedTiles
-        let repetition = repetitionCount
+    private func scheduleGeneration() {
+        debounceTask?.cancel()
+        activeGroup.sentence = nil
+        comparisonSentence = nil
+        isThinking = false
 
-        debounceTask = Task {
-            do {
-                try await Task.sleep(for: debounceDuration)
-            } catch {
-                return // cancelled
+        // Single tile: show display name immediately, no API call, no lock.
+        if activeGroup.tiles.count == 1 {
+            activeGroup.sentence = activeGroup.tiles[0].value
+            isWaiting = false
+            return
+        }
+
+        guard activeGroup.tiles.count >= 2 else {
+            isWaiting = false
+            return
+        }
+
+        isWaiting = true
+
+        let tilesSnapshot = activeGroup.tiles
+        let repetition = updateRepetitionState(for: tilesSnapshot)
+        let hitCap = tilesSnapshot.count >= maxTilesPerGroup
+
+        if hitCap {
+            // Hit cap: auto-generate immediately (no debounce wait).
+            debounceTask = Task { [weak self] in
+                guard let self else { return }
+                await self.generate(tiles: tilesSnapshot, repetition: repetition)
             }
-
-            guard !Task.isCancelled else { return }
-            await generate(tiles: tilesSnapshot, repetition: repetition)
+        } else {
+            let wait = idleDebounceDuration
+            debounceTask = Task { [weak self] in
+                do { try await Task.sleep(for: wait) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                await self.generate(tiles: tilesSnapshot, repetition: repetition)
+            }
         }
     }
 
@@ -240,20 +393,18 @@ final class SentenceEngine {
 
         // Cache lookup (skip for replay/escalation requests)
         if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles) {
-            guard tiles == selectedTiles else {
+            guard tiles == activeGroup.tiles else {
                 isThinking = false
                 return
             }
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             Self.logger.info("generate: source=cache tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\"")
             cacheManager?.logEvent(subjectType: "cache", subjectKey: cached.cacheKey, eventType: .hit)
-            generatedSentence = cached.sentence
-            appendToHistory(cached.sentence)
-            recordHistory(tiles: tiles, sentence: cached.sentence)
+            activeGroup.sentence = cached.sentence
+            activeGroup.state = .locked
             onSentenceReady?(cached.sentence)
             speak(cached.sentence)
             isThinking = false
-            startIdleTimer()
             return
         }
 
@@ -297,15 +448,14 @@ final class SentenceEngine {
                 cacheManager?.logEvent(subjectType: "sentence", subjectKey: usedKey, eventType: .used)
             }
 
-            guard tiles == selectedTiles else {
+            guard tiles == activeGroup.tiles else {
                 isThinking = false
                 return
             }
 
-            generatedSentence = result.text
+            activeGroup.sentence = result.text
+            activeGroup.state = .locked
             comparisonSentence = comparisonText
-            appendToHistory(result.text)
-            recordHistory(tiles: tiles, sentence: result.text)
             onSentenceReady?(result.text)
 
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
@@ -324,17 +474,16 @@ final class SentenceEngine {
             }
 
             speak(result.text)
-            startIdleTimer()
         } catch {
             let elapsed = apiStart.duration(to: .now)
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             let secs = String(format: "%.3f", elapsed.timeInterval)
             Self.logger.error("generate: source=api elapsed=\(secs)s tiles=[\(tileKeys)] error=\"\(error.localizedDescription)\"")
-            guard tiles == selectedTiles else {
+            guard tiles == activeGroup.tiles else {
                 isThinking = false
                 return
             }
-            generatedSentence = nil
+            activeGroup.sentence = nil
             comparisonSentence = nil
         }
 
@@ -342,7 +491,7 @@ final class SentenceEngine {
     }
 
     /// Play a promoted (cached) phrase directly — no API call, instant feedback.
-    /// Populates the tray with the entry's tiles so the child sees what was selected.
+    /// Populates the active group with the entry's tiles so the child sees what was selected.
     func speakPromoted(_ entry: SentenceCache) {
         clearSelection()
         // Reconstruct tile selections from cached keys
@@ -353,15 +502,15 @@ final class SentenceEngine {
                 let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
                 for key in keys {
                     if let tile = lookup[key] {
-                        selectedTiles.append(TileSelection(from: tile))
+                        activeGroup.tiles.append(TileSelection(from: tile))
                     }
                 }
             }
         }
-        generatedSentence = entry.sentence
+        activeGroup.sentence = entry.sentence
+        activeGroup.state = .locked
         cacheManager?.logEvent(subjectType: "promoted", subjectKey: entry.cacheKey, eventType: .hit)
         speak(entry.sentence)
-        startIdleTimer()
     }
 
     func speakTile(_ text: String) {
@@ -372,13 +521,6 @@ final class SentenceEngine {
         guard audioEnabled else { return }
         let vid = voiceIdentifier.isEmpty ? nil : voiceIdentifier
         speechSynthesizer.speak(text, voiceIdentifier: vid)
-    }
-
-    private func appendToHistory(_ sentence: String) {
-        conversationHistory.append(sentence)
-        if conversationHistory.count > maxConversationHistory {
-            conversationHistory.removeFirst()
-        }
     }
 
     // MARK: - Comparison helpers

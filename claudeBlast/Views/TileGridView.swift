@@ -76,21 +76,17 @@ struct TileGridView: View {
                 isThinking: engine.isThinking,
                 isWaiting: engine.isWaiting,
                 canReplay: engine.canReplay,
-                recentHistory: engine.recentHistory,
                 onTileTap: { index in
                     engine.removeTile(at: index)
                 },
-                onClear: {
-                    engine.clearSelection()
+                onGo: {
+                    engine.triggerGo()
                 },
                 onReplay: {
                     if recorder.state == .recording {
                         recorder.recordReplay()
                     }
                     engine.replay()
-                },
-                onReplayHistory: { entry in
-                    engine.replayFromHistory(entry)
                 }
             )
             .padding(.top, 8)
