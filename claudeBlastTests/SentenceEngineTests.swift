@@ -151,7 +151,10 @@ struct SentenceEngineTests {
 
     // MARK: - SentenceEngine
 
-    @Test func singleTileShowsValueImmediately() throws {
+    @Test func singleTileDoesNotKickGeneration() throws {
+        // Single-tile preview is now derived in the tray view from activeGroup.tiles, so the
+        // engine no longer sets activeGroup.sentence for a single tile and never enters the
+        // waiting/thinking/idle-nudge states until a 2nd tile lands.
         let engine = SentenceEngine(provider: MockSentenceProvider(minLatency: 0, maxLatency: 0))
         let container = try makeTestContainer()
         engine.configure(modelContext: container.mainContext)
@@ -160,9 +163,10 @@ struct SentenceEngineTests {
         engine.addTile(tile)
 
         #expect(engine.selectedTiles.count == 1)
-        #expect(engine.generatedSentence == "happy")
+        #expect(engine.generatedSentence == nil)
         #expect(!engine.isThinking)
         #expect(!engine.isWaiting)
+        #expect(!engine.isIdleNudge)
     }
 
     @Test func clearResetsAllState() throws {
@@ -191,7 +195,10 @@ struct SentenceEngineTests {
         #expect(engine.selectedTiles.count == 4)
     }
 
-    @Test func multipleTilesStartDebounce() throws {
+    @Test func multipleTilesDoNotAutoGenerate() throws {
+        // Pre-cap: idle no longer fires generation automatically. After the idle wait, the engine
+        // sets isIdleNudge so the tray pulses the play button — the user explicitly fires Go.
+        // Right after the 2nd tile lands (synchronously), neither state has been entered yet.
         let engine = SentenceEngine(provider: MockSentenceProvider(minLatency: 0, maxLatency: 0))
         let container = try makeTestContainer()
         engine.configure(modelContext: container.mainContext)
@@ -199,9 +206,10 @@ struct SentenceEngineTests {
         engine.addTile(TileModel(key: "eat", wordClass: "actions"))
         engine.addTile(TileModel(key: "pizza", wordClass: "food"))
 
-        // After adding 2 tiles, should be in waiting state (debounce active)
         #expect(engine.selectedTiles.count == 2)
-        #expect(engine.isWaiting)
+        #expect(!engine.isWaiting)
+        #expect(!engine.isThinking)
+        #expect(engine.generatedSentence == nil)
     }
 
     @Test func removeTileAtValidIndex() throws {

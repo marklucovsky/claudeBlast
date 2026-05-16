@@ -25,6 +25,9 @@ enum AppSettingsKey {
     static let tileCapPerGroup       = "tile_cap_per_group"
     static let idleDebounceMs        = "idle_debounce_ms"
     static let trayBufferSize        = "tray_buffer_size"
+    /// Long idle timeout (ms) after which the active group is auto-committed to history (the
+    /// equivalent of the Done button firing on its own). 0 disables auto-Done.
+    static let autoDoneMs            = "auto_done_ms"
 }
 
 /// Version stamp written to UserDefaults after bootstrap completes.

@@ -29,6 +29,15 @@ final class SentenceEngine {
 
     private(set) var isThinking: Bool = false
     private(set) var isWaiting: Bool = false
+    /// True after the idle wait has elapsed AND the active group is not yet locked. Drives the
+    /// play-button rainbow pulse — only nags the user when tiles have changed and a sentence
+    /// hasn't been generated. Cleared when the user adds/removes a tile, taps Go, or generates.
+    private(set) var isIdleNudge: Bool = false
+    /// Fires `doneAttentionLead` seconds after the active group locks (post-Play). Resets on any
+    /// tile add/remove or fresh Play, since those re-arm the idle timer task and reset the
+    /// flag. The Done button drives its own escalating animation (blue → green → red, ramping
+    /// in border / weight / shadow) internally once this flips true.
+    private(set) var isDoneNudge: Bool = false
     private(set) var comparisonSentence: String?
     var sessionNotes: String = ""
 
@@ -91,6 +100,15 @@ final class SentenceEngine {
         return (50...500).contains(stored) ? stored : 100
     }
 
+    /// Long idle timeout that auto-commits the active group to history (auto-Done). 0 disables.
+    /// Default 30s if no value stored, clamped to 5s..2min when set.
+    var autoDoneDuration: Duration {
+        let ms = UserDefaults.standard.integer(forKey: AppSettingsKey.autoDoneMs)
+        if ms == 0 { return .seconds(0) }
+        let clamped = (5000...120000).contains(ms) ? ms : 30000
+        return .milliseconds(clamped)
+    }
+
     // MARK: - Dependencies
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "claudeBlast", category: "SentenceEngine")
@@ -137,8 +155,10 @@ final class SentenceEngine {
 
     /// Add a tile in response to a grid tap.
     /// - If the tile is already in the active group, this toggles it off (same as removeTile).
-    /// - If the active group is locked, it is flushed to history and a new active group is seeded.
-    /// - Otherwise the tile is appended to the active group; cap or debounce triggers generation.
+    /// - If there's room under the cap the tile is appended. A locked active group transitions to
+    ///   `.unlockedEditable` (its sentence is now stale); the idle timers restart and the next
+    ///   generation reflects the updated tile set.
+    /// - At cap the tap is ignored. Use Done (commitActiveAndStartNew) to commit and start fresh.
     func addTile(_ tile: TileModel) {
         let selection = TileSelection(from: tile)
 
@@ -148,12 +168,12 @@ final class SentenceEngine {
             return
         }
 
-        // Locked group: flush to history, then start a fresh active group with this tile.
-        if activeGroup.state == .locked {
-            flushActiveToHistory()
-        }
-
         guard activeGroup.tiles.count < maxTilesPerGroup else { return }
+
+        // Locked → unlocked: the stale sentence will be cleared by scheduleGeneration().
+        if activeGroup.state == .locked {
+            activeGroup.state = .unlockedEditable
+        }
 
         activeGroup.tiles.append(selection)
         cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
@@ -182,20 +202,24 @@ final class SentenceEngine {
             comparisonSentence = nil
             isThinking = false
             isWaiting = false
+            isIdleNudge = false
+            isDoneNudge = false
             speechSynthesizer.stop()
         } else {
             scheduleGeneration()
         }
     }
 
-    /// Explicit "Go" tap — generate immediately, skipping the debounce wait.
-    /// No-op if there aren't enough tiles or the group is already locked.
+    /// Explicit "Go" tap — generate immediately. The default path now (auto-generation on idle is
+    /// disabled except at cap). No-op if there aren't enough tiles or the group is already locked.
     func triggerGo() {
         guard activeGroup.tiles.count >= 2 else { return }
         guard activeGroup.state != .locked else { return }
 
         debounceTask?.cancel()
-        isWaiting = false
+        isWaiting = true
+        isIdleNudge = false
+        isDoneNudge = false
 
         let tilesSnapshot = activeGroup.tiles
         let repetition = updateRepetitionState(for: tilesSnapshot)
@@ -205,8 +229,9 @@ final class SentenceEngine {
         }
     }
 
-    /// Clear the active group (no history change). Used by scene switching and by speakPromoted
-    /// to overwrite the active slot. Fires onWillClear so script recording can finalize the row.
+    /// Clear the active group (no history change). Used by scene switching, the bubble's "×"
+    /// dismiss, and speakPromoted's overwrite path. Fires onWillClear so script recording can
+    /// finalize the row.
     func clearSelection() {
         onWillClear?(activeGroup.sentence)
         debounceTask?.cancel()
@@ -215,6 +240,8 @@ final class SentenceEngine {
         comparisonSentence = nil
         isThinking = false
         isWaiting = false
+        isIdleNudge = false
+        isDoneNudge = false
         // Preserve repetitionCount and lastTileKey so escalation works across clear cycles
         // (e.g., TileScript rows). They reset naturally when a different combo is selected.
         speechSynthesizer.stop()
@@ -257,19 +284,35 @@ final class SentenceEngine {
 
     /// Speak + reopen an older history group. The current active group flushes to history first,
     /// then the target group is promoted to the active slot as .unlockedEditable so it can be
-    /// further edited. Not yet wired into PR1 UI; here so PR2 can call it.
+    /// further edited.
     func reopenHistoryGroup(id: UUID) {
-        guard let index = groupHistory.firstIndex(where: { $0.id == id }) else { return }
+        // Verify target exists before doing any work — but DON'T cache its index here.
+        // flushActiveToHistory() may prepend the current active to history and shift indices.
+        guard groupHistory.contains(where: { $0.id == id }) else { return }
         flushActiveToHistory()
 
+        guard let index = groupHistory.firstIndex(where: { $0.id == id }) else { return }
         var target = groupHistory.remove(at: index)
-        target.state = .unlockedEditable
-        activeGroup = target
 
         if let sentence = target.sentence {
+            // Reopening a group with a sentence is equivalent to a fresh Play: lock the group
+            // and speak it. The startIdleTimers task below will see state == .locked, skip the
+            // play-button pulse (no nag — the user just heard it), and fire the Done attention
+            // ramp + auto-Done as if the user had just tapped Play. Adding a new tile later
+            // unlocks and clears the sentence as usual via addTile().
+            target.state = .locked
+            activeGroup = target
             speak(sentence)
+        } else {
+            // No sentence on the history entry (defensive — current code always assigns one).
+            // Treat as editable so the user can keep building.
+            target.state = .unlockedEditable
+            activeGroup = target
         }
+
+        startIdleTimers()
     }
+
 
     /// Delete a history group. Power-user gesture, surfaced in PR2 UI.
     func deleteHistoryGroup(id: UUID) {
@@ -305,15 +348,26 @@ final class SentenceEngine {
     // MARK: - Flush
 
     /// Move the active group into history (newest-first) and reset the active slot.
-    /// Only flushes groups that produced a sentence; empty or in-flight groups are discarded.
-    private func flushActiveToHistory() {
+    /// By default only flushes groups that produced a sentence — empty or in-flight groups are
+    /// discarded. Pass `allowWithoutSentence: true` (used by the tray's explicit clear/Done
+    /// button) to commit a partially-built group; the spelled-out tile values are stored as the
+    /// sentence so the history chip and conversation context both have text to show.
+    private func flushActiveToHistory(allowWithoutSentence: Bool = false) {
         onWillClear?(activeGroup.sentence)
         debounceTask?.cancel()
         debounceTask = nil
+        isIdleNudge = false
+        isDoneNudge = false
 
-        if let _ = activeGroup.sentence, !activeGroup.tiles.isEmpty {
+        let shouldFlush = !activeGroup.tiles.isEmpty
+            && (activeGroup.sentence != nil || allowWithoutSentence)
+
+        if shouldFlush {
             var finalized = activeGroup
             finalized.state = .locked
+            if finalized.sentence == nil {
+                finalized.sentence = activeGroup.tiles.map(\.value).joined(separator: " ")
+            }
             groupHistory.insert(finalized, at: 0)
             // Trim to configured buffer size.
             let limit = trayBufferSize
@@ -327,6 +381,12 @@ final class SentenceEngine {
         isThinking = false
         isWaiting = false
         speechSynthesizer.stop()
+    }
+
+    /// Explicit commit: flush the active group to history (even without a generated sentence)
+    /// and reset. Wired to the tray's Done/clear button under the play control.
+    func commitActiveAndStartNew() {
+        flushActiveToHistory(allowWithoutSentence: true)
     }
 
     // MARK: - Generation pipeline
@@ -347,44 +407,96 @@ final class SentenceEngine {
         activeGroup.sentence = nil
         comparisonSentence = nil
         isThinking = false
+        isIdleNudge = false
+        isDoneNudge = false
 
-        // Single tile: show display name immediately, no API call, no lock.
-        if activeGroup.tiles.count == 1 {
-            activeGroup.sentence = activeGroup.tiles[0].value
-            isWaiting = false
-            return
-        }
-
+        // Single tile: no preview on the group; the view derives a spelled-out preview from
+        // activeGroup.tiles. No API call, no idle timers.
         guard activeGroup.tiles.count >= 2 else {
             isWaiting = false
             return
         }
 
-        isWaiting = true
-
-        let tilesSnapshot = activeGroup.tiles
-        let repetition = updateRepetitionState(for: tilesSnapshot)
-        let hitCap = tilesSnapshot.count >= maxTilesPerGroup
+        let hitCap = activeGroup.tiles.count >= maxTilesPerGroup
 
         if hitCap {
-            // Hit cap: auto-generate immediately (no debounce wait).
+            // Hit cap: auto-generate immediately, no idle nudge needed.
+            isWaiting = true
+            let tilesSnapshot = activeGroup.tiles
+            let repetition = updateRepetitionState(for: tilesSnapshot)
             debounceTask = Task { [weak self] in
                 guard let self else { return }
                 await self.generate(tiles: tilesSnapshot, repetition: repetition)
             }
         } else {
-            let wait = idleDebounceDuration
-            debounceTask = Task { [weak self] in
-                do { try await Task.sleep(for: wait) } catch { return }
-                guard !Task.isCancelled, let self else { return }
-                await self.generate(tiles: tilesSnapshot, repetition: repetition)
+            // Pre-cap: do NOT auto-generate. Run the two-stage idle timer (pulse → auto-Done).
+            isWaiting = false
+            startIdleTimers()
+        }
+    }
+
+    /// Idle-timeline staging anchored to T=0 = "user just did something tile-related" — either
+    /// added/removed a tile (state is building or unlocked-editable) or tapped Play and locked
+    /// the group. Stages fire in time order:
+    ///
+    ///   1. Play-button pulse at `idleDebounceDuration` (~2.5s) — only for non-locked groups
+    ///      (locked groups have already been spoken; no nag).
+    ///   2. Done-button attention at `doneAttentionLead` (~5s post-lock) — only for locked
+    ///      groups. Once true, the Done button owns its own internal escalation animation; the
+    ///      engine just provides the binary trigger.
+    ///   3. Auto-Done at `autoDoneWait` — `commitActiveAndStartNew()`.
+    ///
+    /// Auto-Done is skipped when `autoDoneDuration == .seconds(0)`. The Done attention stage is
+    /// skipped when its trigger time falls behind a prior stage (e.g. user picked a very short
+    /// pulse or auto-Done that overlaps).
+    private static let doneAttentionLead: Duration = .seconds(5)
+
+    private func startIdleTimers() {
+        debounceTask?.cancel()
+        guard activeGroup.tiles.count >= 2 else { return }
+
+        let pulseWait = idleDebounceDuration
+        let autoDoneWait = autoDoneDuration
+        debounceTask = Task { [weak self] in
+            // Stage 1: play-button pulse (only when not yet locked).
+            do { try await Task.sleep(for: pulseWait) } catch { return }
+            guard !Task.isCancelled, let self else { return }
+            if self.activeGroup.state != .locked {
+                self.isIdleNudge = true
             }
+
+            // Auto-Done disabled → stop here.
+            guard autoDoneWait > pulseWait else { return }
+
+            var elapsed = pulseWait
+
+            // Stage 2: Done attention at T=doneAttentionLead. Only for locked groups; the Done
+            // button handles its own ramp from here.
+            let attentionAt = Self.doneAttentionLead
+            if attentionAt > elapsed && attentionAt < autoDoneWait {
+                let until = attentionAt - elapsed
+                do { try await Task.sleep(for: until) } catch { return }
+                guard !Task.isCancelled else { return }
+                if self.activeGroup.state == .locked {
+                    self.isDoneNudge = true
+                }
+                elapsed = attentionAt
+            }
+
+            // Stage 3: auto-Done.
+            let remaining = autoDoneWait - elapsed
+            guard remaining > .seconds(0) else { return }
+            do { try await Task.sleep(for: remaining) } catch { return }
+            guard !Task.isCancelled else { return }
+            self.commitActiveAndStartNew()
         }
     }
 
     private func generate(tiles: [TileSelection], repetition: Int) async {
         isWaiting = false
         isThinking = true
+        isIdleNudge = false
+        isDoneNudge = false
 
         // Escalation: still count the hit even though we bypass the cached sentence
         if repetition > 0 {
@@ -405,6 +517,7 @@ final class SentenceEngine {
             onSentenceReady?(cached.sentence)
             speak(cached.sentence)
             isThinking = false
+            startIdleTimers()
             return
         }
 
@@ -474,6 +587,9 @@ final class SentenceEngine {
             }
 
             speak(result.text)
+            isThinking = false
+            startIdleTimers()
+            return
         } catch {
             let elapsed = apiStart.duration(to: .now)
             let tileKeys = tiles.map(\.key).joined(separator: ", ")

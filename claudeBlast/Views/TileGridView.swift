@@ -70,12 +70,6 @@ struct TileGridView: View {
     var body: some View {
         VStack(spacing: 0) {
             SentenceTrayView(
-                selectedTiles: engine.selectedTiles,
-                generatedSentence: engine.generatedSentence,
-                comparisonSentence: engine.comparisonSentence,
-                isThinking: engine.isThinking,
-                isWaiting: engine.isWaiting,
-                canReplay: engine.canReplay,
                 onTileTap: { index in
                     engine.removeTile(at: index)
                 },
@@ -87,6 +81,18 @@ struct TileGridView: View {
                         recorder.recordReplay()
                     }
                     engine.replay()
+                },
+                onReopenHistory: { id in
+                    engine.reopenHistoryGroup(id: id)
+                },
+                onDeleteHistory: { id in
+                    engine.deleteHistoryGroup(id: id)
+                },
+                onDismissActive: {
+                    engine.clearSelection()
+                },
+                onCommitActive: {
+                    engine.commitActiveAndStartNew()
                 }
             )
             .padding(.top, 8)
