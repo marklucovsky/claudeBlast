@@ -57,17 +57,18 @@ struct TileScriptView: View {
                 }
             }
         }
+        .onAppear {
+            // When stopRecording fires from the TileGrid tab and switches to TileScript, this
+            // view is freshly constructed with `recorder.lastRecordedScript` already non-nil.
+            // Populate the modal state on appear so the Save button enables on first show.
+            if let script = recorder.lastRecordedScript {
+                populateSaveModal(for: script)
+            }
+        }
         .onChange(of: recorder.lastRecordedScript != nil) { _, hasScript in
+            // Covers subsequent recordings while the view stays mounted.
             if hasScript, let script = recorder.lastRecordedScript {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd HH:mm"
-                saveName = "Recording \(formatter.string(from: .now))"
-                saveYaml = TileScriptSerializer.serialize(script)
-                // Defer sheet presentation to next run loop so saveName
-                // state is committed before the sheet reads it.
-                DispatchQueue.main.async {
-                    showSaveSheet = true
-                }
+                populateSaveModal(for: script)
             }
         }
         .sheet(isPresented: $showSaveSheet, onDismiss: {
@@ -191,6 +192,18 @@ struct TileScriptView: View {
                     .disabled(saveName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+    }
+
+    private func populateSaveModal(for script: TileScript) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        saveName = "Recording \(formatter.string(from: .now))"
+        saveYaml = TileScriptSerializer.serialize(script)
+        // Defer sheet presentation to next run loop so saveName state is committed before
+        // the sheet reads it.
+        DispatchQueue.main.async {
+            showSaveSheet = true
         }
     }
 

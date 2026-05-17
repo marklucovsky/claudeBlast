@@ -7,16 +7,14 @@ sentenceWait: .human
 script:
   - comment: Starting with a simple request
   - tiles:
-    - <home>, <food>, pizza             # Just pizza to start
-  - comment: Adding more items
-  - tiles:
-    - <food>, pizza, fries              # Pizza and fries combo
+    - <home>, mom, <food>, pizza, <tilescript:noclose>   # Play, but keep the group open
+    - fries                                                # Extends the open group, then Play + Done
   - comment: Wants a drink too
   - tiles:
-    - <home>, <drinks>, water           # Thirsty!
-  - comment: Back to food — escalation begins
+    - <home>, <actions>, drink, <home>, <drinks>, water
+  - comment: Back to food — escalation builds across consecutive replays
   - tiles:
-    - <food>, pizza, fries              # First repeat
-    - <food>, pizza, fries              # Getting impatient
-    - <food>, pizza, fries              # Really wants it now
+    - <home>, mom, <food>, pizza, fries                   # First request after the detour
+    - <tilescript:replay>                                  # Getting impatient
+    - <tilescript:replay>                                  # Really wants it now
   - comment: Food ordering demo complete

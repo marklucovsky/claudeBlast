@@ -74,6 +74,9 @@ struct TileGridView: View {
                     engine.removeTile(at: index)
                 },
                 onGo: {
+                    if recorder.state == .recording {
+                        recorder.recordPlay()
+                    }
                     engine.triggerGo()
                 },
                 onReplay: {
@@ -83,6 +86,9 @@ struct TileGridView: View {
                     engine.replay()
                 },
                 onReopenHistory: { id in
+                    if recorder.state == .recording {
+                        recorder.recordReplay()
+                    }
                     engine.reopenHistoryGroup(id: id)
                 },
                 onDeleteHistory: { id in
@@ -376,28 +382,44 @@ struct TileGridView: View {
     }
 
     private func handleTileTap(_ pageTile: PageTileModel) {
+        let key = pageTile.tile.key
+        // An "audible nav tile" is a single gesture that both adds a tile to the active group
+        // AND navigates. We treat it as such in recordings only when the tile key matches the
+        // link key (the conventional case for nav tiles like <drinks isAudible=t/>).
+        let isAudibleNavTile = pageTile.isAudible
+            && !pageTile.link.isEmpty
+            && pageTile.link == key
+
+        var alreadySelected = false
         if pageTile.isAudible {
-            let alreadySelected = engine.selectedTiles.contains { $0.key == pageTile.tile.key }
+            alreadySelected = engine.selectedTiles.contains { $0.key == key }
             if alreadySelected {
-                if let index = engine.selectedTiles.firstIndex(where: { $0.key == pageTile.tile.key }) {
+                if let index = engine.selectedTiles.firstIndex(where: { $0.key == key }) {
                     engine.removeTile(at: index)
                 }
             } else {
-                // Only speak when adding to the tray
                 if tileSpeechEnabled {
                     engine.speakTile(pageTile.tile.displayName)
                 }
                 engine.addTile(pageTile.tile)
                 if recorder.state == .recording {
-                    recorder.recordTap(tileKey: pageTile.tile.key)
+                    if isAudibleNavTile {
+                        recorder.recordAudibleNavigate(pageKey: pageTile.link)
+                    } else {
+                        recorder.recordTap(tileKey: key)
+                    }
                 }
             }
         }
         if !pageTile.link.isEmpty {
-            engine.cancelIdleTimer()
             coordinator.navigate(to: pageTile.link)
             if recorder.state == .recording {
-                recorder.recordNavigate(pageKey: pageTile.link)
+                // Skip a separate navigate record if we already recorded an audible-nav for
+                // this gesture (it covers both the tile and the navigation).
+                let recordedAsAudibleNav = isAudibleNavTile && !alreadySelected
+                if !recordedAsAudibleNav {
+                    recorder.recordNavigate(pageKey: pageTile.link)
+                }
             }
         }
     }

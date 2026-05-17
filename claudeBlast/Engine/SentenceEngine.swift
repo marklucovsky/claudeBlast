@@ -274,6 +274,11 @@ final class SentenceEngine {
         repetitionCount += 1
         let tilesSnapshot = activeGroup.tiles
         let repetition = repetitionCount
+        // Set isThinking synchronously so external observers (notably TileScriptRunner.waitFor-
+        // Sentence) can race-freely detect that generation is in flight. generate() will also set
+        // it at its top; the redundant assignment is harmless.
+        isThinking = true
+        isIdleNudge = false
         Task { [weak self] in
             guard let self else { return }
             await self.generate(tiles: tilesSnapshot, repetition: repetition)
@@ -532,7 +537,17 @@ final class SentenceEngine {
         let shouldCompare = compareProviders && repetition == 0
         let comparisonProvider: (any SentenceProvider)? = shouldCompare ? makeAppleProviderIfAvailable() : nil
 
-        let context = conversationHistory + [userPrompt]
+        // Provider treats the conversation context as a sequence of prior assistant turns, with
+        // the last entry replaced as the user prompt. For escalation/replay we want the model to
+        // see the exact sentence it is escalating from — but `conversationHistory` (derived from
+        // `groupHistory`) doesn't include it (the group was popped by `reopenHistoryGroup`, or
+        // the active group's sentence simply hasn't been flushed). Splice it in here so escalation
+        // requests carry the prior turn explicitly.
+        var contextWithPrior = conversationHistory
+        if repetition > 0, let prior = activeGroup.sentence {
+            contextWithPrior.append(prior)
+        }
+        let context = contextWithPrior + [userPrompt]
         let apiStart = ContinuousClock.now
         do {
             let result: SentenceResult

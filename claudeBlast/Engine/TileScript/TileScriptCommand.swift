@@ -7,10 +7,23 @@
 
 import Foundation
 
-/// A single action within a tile row: either navigate to a page or tap a tile.
-enum TileAction: Sendable {
+/// A single action within a tile row.
+/// - `navigate`: switch to a page.
+/// - `tap`: tap a tile in the grid (engine.addTile).
+/// - `audibleNavigate`: shorthand for a PageTileModel where both `isAudible` and `link` are set
+///   AND the link key matches the tile key — i.e. tapping the nav tile also adds it to the
+///   active group. Runner expands this to a tile-add followed by a navigation; serializer
+///   renders it as `<key isAudible=t/>`.
+/// - `replay`: standalone control marker. A TileRow containing exactly `[.replay]` triggers
+///   replay-with-escalation (reopening the most recent history group first if necessary).
+/// - `noclose`: inline trailing marker on a tiles row. Suppresses the auto-Done at row end so
+///   the active group stays locked for the next row to extend.
+enum TileAction: Sendable, Equatable {
     case navigate(pageKey: String)
     case tap(tileKey: String)
+    case audibleNavigate(pageKey: String)
+    case replay
+    case noclose
 }
 
 /// Parsed tile row: a sequence of actions that form one utterance.
@@ -27,8 +40,28 @@ struct TileRow: Sendable {
             switch action {
             case .navigate(let key): return "<\(key)>"
             case .tap(let key): return key
+            case .audibleNavigate(let key): return "<\(key) isAudible=t/>"
+            case .replay: return "<tilescript:replay>"
+            case .noclose: return "<tilescript:noclose>"
             }
         }
+    }
+
+    /// True when this row is a standalone `<tilescript:replay>` control marker.
+    var isReplay: Bool {
+        actions.count == 1 && actions[0] == .replay
+    }
+
+    /// True when this row ends with `<tilescript:noclose>` — the runner should skip the
+    /// auto-Done at row end so the active group stays locked for the next row to extend.
+    var hasNoclose: Bool {
+        actions.contains(.noclose)
+    }
+
+    /// Actions that should actually be executed at row run time (i.e. excluding control markers
+    /// like `.noclose` which are metadata for the row itself, not user actions).
+    var executableActions: [TileAction] {
+        actions.filter { $0 != .noclose }
     }
 }
 
