@@ -71,6 +71,12 @@ final class TileScriptRunner {
     }
     private var stepMode: StepMode?
 
+    /// Set by the tail of a tiles row that ended with `<tilescript:noclose>`. The next tiles
+    /// row will skip its pre-action commit so its tile-adds extend the still-locked active
+    /// group (matching the "add a tile to an existing row" demo pattern). Replay rows reset
+    /// this back to false.
+    private var skipNextPreCommit: Bool = false
+
     /// Tab switching callback — runner sets this to switch to Home tab on play.
     var onSwitchToHome: (() -> Void)?
 
@@ -228,6 +234,13 @@ final class TileScriptRunner {
         }
 
         if !Task.isCancelled {
+            // End-of-script cleanup: a tiles or replay row leaves the active group locked. Commit
+            // it to history so the tray ends in a clean state (and the final sentence is
+            // preserved for inspection / further replays).
+            if let engine, !engine.activeGroup.tiles.isEmpty {
+                engine.commitActiveAndStartNew()
+            }
+            skipNextPreCommit = false
             currentRow = nil
             currentRowCount = 0
             state = .finished
@@ -344,40 +357,53 @@ final class TileScriptRunner {
 
     /// Execute a row action-by-action, pausing after each for step-into.
     private func executeRowStepInto(_ row: TileRow) async {
-        while actionIndex < row.actions.count {
+        if row.isReplay {
+            await executeReplayRow()
+            if stepMode == .stepInto {
+                state = .paused
+                stepMode = nil
+            }
+            return
+        }
+
+        await preCommitIfNeeded()
+
+        let executable = row.executableActions
+        while actionIndex < executable.count {
             guard !Task.isCancelled else { return }
 
-            await executeAction(row.actions[actionIndex])
+            await executeAction(executable[actionIndex])
             actionIndex += 1
 
             // If more actions in this row, pause to show next action highlighted
-            if actionIndex < row.actions.count && stepMode == .stepInto {
+            if actionIndex < executable.count && stepMode == .stepInto {
                 state = .paused
                 stepMode = nil
-                engine?.cancelIdleTimer()
                 await waitForResume()
                 if Task.isCancelled { return }
             }
         }
 
-        // All actions done — sentence + speech + clear
-        await waitForSentence()
-        await waitForSpeech()
-        if sentenceWait.duration > .zero {
-            do { try await Task.sleep(for: sentenceWait.duration) } catch { return }
-        }
-        engine?.clearSelection()
+        await playTilesRow()
+        skipNextPreCommit = row.hasNoclose
 
         // After the row completes, pause
         if stepMode == .stepInto {
             state = .paused
             stepMode = nil
-            engine?.cancelIdleTimer()
         }
     }
 
     private func executeRow(_ row: TileRow) async {
-        for (i, action) in row.actions.enumerated() {
+        if row.isReplay {
+            await executeReplayRow()
+            return
+        }
+
+        await preCommitIfNeeded()
+
+        let executable = row.executableActions
+        for (i, action) in executable.enumerated() {
             guard !Task.isCancelled else { return }
             actionIndex = i
             await executeAction(action)
@@ -386,16 +412,79 @@ final class TileScriptRunner {
                 do { try await Task.sleep(for: tileWait.duration) } catch { return }
             }
         }
-        actionIndex = row.actions.count
+        actionIndex = executable.count
 
-        await waitForSentence()
-        await waitForSpeech()
+        await playTilesRow()
+        skipNextPreCommit = row.hasNoclose
+    }
+
+    /// Commit the active group from a previous row to history before building a fresh tiles
+    /// row, so each script-level tiles row produces its own history entry. Skipped when the
+    /// previous row ended with `<tilescript:noclose>` (the demo's "extend the open group"
+    /// pattern), in which case the new row's tile-adds will extend the still-locked active
+    /// group via the engine's locked→unlocked-editable+append path.
+    private func preCommitIfNeeded() async {
+        guard !skipNextPreCommit, let engine, !engine.activeGroup.tiles.isEmpty else {
+            skipNextPreCommit = false
+            return
+        }
+        engine.commitActiveAndStartNew()
+        skipNextPreCommit = false
+    }
+
+    /// Tail of a tiles row. Waits `sentenceWait` (the play-button pulse plays during this), then
+    /// fires Play (`triggerGo`), waits for the sentence + speech, pauses `tileWait`. The active
+    /// group stays locked — it will be committed either by the next tiles row's `preCommit` or
+    /// by the end-of-script cleanup.
+    private func playTilesRow() async {
+        guard let engine else { return }
 
         if sentenceWait.duration > .zero {
             do { try await Task.sleep(for: sentenceWait.duration) } catch { return }
         }
 
-        engine?.clearSelection()
+        // Single-tile rows never trigger generation, so skip the Play. The next pre-commit
+        // (or end-of-script cleanup) will flush the single tile to history with the spelled-out
+        // fallback sentence.
+        if engine.activeGroup.tiles.count >= 2 {
+            engine.triggerGo()
+            await waitForSentence()
+            await waitForSpeech()
+        }
+
+        if tileWait.duration > .zero {
+            do { try await Task.sleep(for: tileWait.duration) } catch { return }
+        }
+    }
+
+    /// Replay row (`<tilescript:replay>`). Mirrors the user "smashing the Play button on a
+    /// locked active group" — just calls `engine.replay()` to escalate the active sentence in
+    /// place. No reopen, no extra speech. Active stays locked with the new (escalated) sentence;
+    /// the next tiles row's pre-commit (or end-of-script cleanup) will flush it to history.
+    private func executeReplayRow() async {
+        guard let engine else { return }
+
+        guard engine.canReplay else {
+            Self.logger.warning("TileScript: <tilescript:replay> with no locked active group; skipping")
+            return
+        }
+
+        if tileWait.duration > .zero {
+            do { try await Task.sleep(for: tileWait.duration) } catch { return }
+        }
+
+        engine.replay()
+        await waitForSentence()
+        await waitForSpeech()
+
+        if tileWait.duration > .zero {
+            do { try await Task.sleep(for: tileWait.duration) } catch { return }
+        }
+
+        // Replay leaves the active group locked with the escalated sentence. The next tiles row
+        // will pre-commit it; we explicitly reset the noclose carry-over because a replay row
+        // doesn't propagate the previous tiles row's noclose intent.
+        skipNextPreCommit = false
     }
 
     private func executeAction(_ action: TileAction) async {
@@ -403,25 +492,46 @@ final class TileScriptRunner {
 
         switch action {
         case .navigate(let pageKey):
-            if pageKey == "home" {
-                coordinator.navigateToRoot()
-            } else {
-                coordinator.navigate(to: pageKey)
-            }
-            engine.cancelIdleTimer()
+            navigateTo(pageKey, coordinator: coordinator)
 
         case .tap(let tileKey):
-            guard let modelContext else { return }
-            var descriptor = FetchDescriptor<TileModel>(
-                predicate: #Predicate { $0.key == tileKey }
-            )
-            descriptor.fetchLimit = 1
-            guard let tile = try? modelContext.fetch(descriptor).first else {
-                Self.logger.warning("TileScript: tile '\(tileKey)' not found, skipping")
-                return
-            }
-            engine.addTile(tile)
+            addTile(tileKey, engine: engine)
+
+        case .audibleNavigate(let pageKey):
+            // Audible nav tile: add the tile to the active group AND navigate. The TileModel
+            // key matches the page key by convention.
+            addTile(pageKey, engine: engine)
+            navigateTo(pageKey, coordinator: coordinator)
+
+        case .replay:
+            // Dispatched at the row level (executeReplayRow); ignore at action level.
+            break
+
+        case .noclose:
+            // Metadata marker handled by finishTilesRow; not executed as an action.
+            break
         }
+    }
+
+    private func navigateTo(_ pageKey: String, coordinator: NavigationCoordinator) {
+        if pageKey == "home" {
+            coordinator.navigateToRoot()
+        } else {
+            coordinator.navigate(to: pageKey)
+        }
+    }
+
+    private func addTile(_ tileKey: String, engine: SentenceEngine) {
+        guard let modelContext else { return }
+        var descriptor = FetchDescriptor<TileModel>(
+            predicate: #Predicate { $0.key == tileKey }
+        )
+        descriptor.fetchLimit = 1
+        guard let tile = try? modelContext.fetch(descriptor).first else {
+            Self.logger.warning("TileScript: tile '\(tileKey)' not found, skipping")
+            return
+        }
+        engine.addTile(tile)
     }
 
     // MARK: - Sentence / Speech Wait

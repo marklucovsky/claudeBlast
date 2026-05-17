@@ -45,6 +45,7 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.tileCapPerGroup) private var tileCapPerGroup: Int = 4
     @AppStorage(AppSettingsKey.idleDebounceMs) private var idleDebounceMs: Int = 2500
     @AppStorage(AppSettingsKey.trayBufferSize) private var trayBufferSize: Int = 100
+    @AppStorage(AppSettingsKey.autoDoneMs) private var autoDoneMs: Int = 30000
 
     @Environment(TileImageResolver.self) private var imageResolver
 
@@ -147,10 +148,18 @@ struct AdminView: View {
                         step: 1
                     )
                     Stepper(
-                        "Idle timeout: \(idleDebounceMs) ms",
+                        "Pulse after: \(idleDebounceMs) ms",
                         value: $idleDebounceMs,
                         in: 500...5000,
                         step: 250
+                    )
+                    Stepper(
+                        autoDoneMs == 0
+                            ? "Auto-Done: off"
+                            : "Auto-Done: \(autoDoneMs / 1000) s",
+                        value: $autoDoneMs,
+                        in: 0...120000,
+                        step: 5000
                     )
                     Stepper(
                         "Tray buffer: \(trayBufferSize) groups",
@@ -166,7 +175,7 @@ struct AdminView: View {
                 } header: {
                     Text("Sentence Tray")
                 } footer: {
-                    Text("Tile cap auto-generates a sentence when reached. Idle timeout fires generation when paused. Tray buffer caps how many past groups are kept.")
+                    Text("Pulse signals when the play button is ready to fire. Auto-Done commits the active group to history after a longer idle (set to 0 to disable). Tap the cap and the sentence auto-generates.")
                         .font(.caption)
                 }
 

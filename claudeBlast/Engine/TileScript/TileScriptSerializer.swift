@@ -96,6 +96,9 @@ struct TileScriptSerializer {
             switch action {
             case .navigate(let key): return "<\(key)>"
             case .tap(let key): return key
+            case .audibleNavigate(let key): return "<\(key) isAudible=t/>"
+            case .replay: return "<tilescript:replay>"
+            case .noclose: return "<tilescript:noclose>"
             }
         }.joined(separator: ", ")
     }

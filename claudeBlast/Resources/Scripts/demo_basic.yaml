@@ -7,8 +7,8 @@ sentenceWait: .human
 script:
   - comment: Basic AAC interaction flow
   - tiles:
-    - <home>, mom, <food>, pizza       # Mom, I want pizza!
-    - pizza, fries                      # Same page — combo order
-    - pizza, fries                      # Repeat triggers escalation
-    - <home>, mom, <places>, playground # Let's go to the playground
+    - <home>, mom, <food>, pizza        # Mom, I want pizza!
+    - pizza, fries                       # Same page — combo order
+    - <tilescript:replay>                # Repeat triggers escalation
+    - <home>, mom, <places>, playground  # Let's go to the playground
   - comment: Demo complete

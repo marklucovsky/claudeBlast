@@ -173,7 +173,14 @@ struct TileScriptParser {
         throw ParseError.invalidCommand("tiles value must be a list of strings or a bulk spec")
     }
 
-    /// Parse a single tile row string like "<home>, mom, <food>, pizza"
+    /// Parse a single tile row string.
+    ///
+    /// Supported token forms:
+    /// - `tile_key`                    → `.tap(tileKey:)`
+    /// - `<page_key>`                  → `.navigate(pageKey:)`
+    /// - `<page_key isAudible=t/>`     → `.audibleNavigate(pageKey:)` (tile-add + nav in one)
+    /// - `<tilescript:replay>`         → `.replay` (standalone control row)
+    /// - `<tilescript:noclose>`        → `.noclose` (suppresses auto-Done at row end)
     static func parseTileRow(_ row: String, lineComments: [String: String] = [:]) -> TileRow {
         let rawText = row.trimmingCharacters(in: .whitespaces)
         let comment = lineComments[rawText]
@@ -182,12 +189,59 @@ struct TileScriptParser {
         let actions: [TileAction] = parts.compactMap { part in
             guard !part.isEmpty else { return nil }
             if part.hasPrefix("<") && part.hasSuffix(">") {
-                let pageKey = String(part.dropFirst().dropLast())
-                return .navigate(pageKey: pageKey)
+                return parseAngleToken(part)
             }
             return .tap(tileKey: part)
         }
         return TileRow(actions: actions, rawText: rawText, comment: comment)
+    }
+
+    /// Parse a `<...>` token. Inner content may include attributes (e.g. `<drinks isAudible=t/>`).
+    /// Trailing `/` is treated as a self-closing marker and stripped.
+    private static func parseAngleToken(_ token: String) -> TileAction? {
+        var inner = String(token.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        if inner.hasSuffix("/") {
+            inner = String(inner.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        guard !inner.isEmpty else { return nil }
+
+        // Control tokens (no attributes).
+        if inner == "tilescript:replay" { return .replay }
+        if inner == "tilescript:noclose" { return .noclose }
+
+        // Otherwise: page key plus optional attributes.
+        let pieces = inner.split(separator: " ", omittingEmptySubsequences: true).map { String($0) }
+        guard let pageKey = pieces.first else { return nil }
+
+        var isAudible = false
+        for attr in pieces.dropFirst() {
+            if let value = attributeValue(attr, name: "isaudible"), isTrueValue(value) {
+                isAudible = true
+            }
+        }
+        return isAudible ? .audibleNavigate(pageKey: pageKey) : .navigate(pageKey: pageKey)
+    }
+
+    /// Pull `value` out of `name=value` (case-insensitive on the name). Strips surrounding
+    /// single or double quotes from the value.
+    private static func attributeValue(_ token: String, name: String) -> String? {
+        guard let eqIndex = token.firstIndex(of: "=") else { return nil }
+        let key = token[..<eqIndex].lowercased()
+        guard key == name else { return nil }
+        var value = String(token[token.index(after: eqIndex)...])
+        if (value.hasPrefix("\"") && value.hasSuffix("\""))
+            || (value.hasPrefix("'") && value.hasSuffix("'")),
+            value.count >= 2 {
+            value = String(value.dropFirst().dropLast())
+        }
+        return value
+    }
+
+    private static func isTrueValue(_ value: String) -> Bool {
+        switch value.lowercased() {
+        case "t", "true", "yes", "1", "on": return true
+        default: return false
+        }
     }
 
     // MARK: - Value Parsing
