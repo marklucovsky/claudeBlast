@@ -1,18 +1,18 @@
 # AAC Intervention: Selection and Usage of Communication Devices — Research Plan
 
-**Status:** Awaiting creator review and approval
-**Researcher:** [Name]
-**Last updated:** April 21, 2026
+**Status:** Approved
+**Researcher:** Kurt Lucovsky
+**Last updated:** May 18, 2026
 
 ---
 
 ## Purpose
 
-Blaster has been built without direct input from its intended users. Before investing further in features like the scene editor, child profiles, and tile redesign, we need to understand how the professionals who recommend, configure, and use AAC tools with children actually work — their clinical and behavioral workflows, frustrations with existing tools, and what would make Blaster genuinely useful in practice.
+Blaster has been built without direct input from its intended users. Before investing further in features like the scene editor, child profiles, and tile redesign, we need to understand how the professionals who recommend, configure, and use Augmentative and Alternative Communication (AAC) tools with children actually work — their clinical and behavioral workflows, frustrations with existing tools, and what would make Blaster genuinely useful in practice.
 
-AAC is used by a wide range of people across varying degrees of speech, language, and communication difficulty — from children with autism or cerebral palsy to adults with acquired conditions like ALS or stroke. **This study focuses on two professional cohorts who work with children: Speech-Language Pathologists (SLPs) and Board-Certified Behavior Analysts (BCBAs) / behavioral therapists.** These groups often share patients but approach AAC with different theoretical frameworks and goals — a tension that directly affects how tools like Blaster should be designed.
+AAC encompasses a broad range of tools and strategies that help people with limited or no functional speech communicate (e.g. dedicated communication devices, tablet apps like Proloquo2Go or TouchChat, picture exchange systems, and low-tech communication boards). It is used by a wide range of people across varying degrees of speech, language, and communication difficulty — from children with autism or cerebral palsy to adults with acquired conditions like ALS or stroke. **This study focuses on two professional cohorts who work with children: Speech-Language Pathologists (SLPs) and Board-Certified Behavior Analysts (BCBAs) / behavioral therapists.** These groups often share patients but approach AAC with different theoretical frameworks and goals — a tension that directly affects how tools like Blaster should be designed.
 
-We are explicitly not interviewing family members, educators, or personal care assistants in this round. The assumption driving that scope decision — that SLPs are the primary AAC recommending authority — is itself a hypothesis to be tested and refined through these interviews.
+We are explicitly not interviewing family members, educators, personal care assistants, or the children who use AAC devices themselves in this round. The assumption driving that scope decision — that SLPs are the primary AAC recommending authority — is itself a hypothesis to be tested and refined through these interviews.
 
 This study is **generative**: we are not testing Blaster's current design. We are learning about the problem space so that every subsequent design decision is grounded in real clinical experience.
 
@@ -44,7 +44,10 @@ This study is **generative**: we are not testing Blaster's current design. We ar
 
 - **Format:** Semi-structured remote interviews via video call (Zoom or Google Meet)
 - **Duration:** 30 minutes per session
-- **Sessions:** 6–10 participants across two cohorts (3–5 SLPs, 3–5 behavioral therapists)
+- **Sessions:** 6–10 participants total, structured as follows:
+  - 1 parent/guardian discovery call — context only, not part of either clinical cohort
+  - 2 pilot interviews (1 SLP, 1 BCBA) — to pressure-test the script before full outreach; pilots count toward the final participant total
+  - 3–7 core interviews split across Cohort A (SLPs) and Cohort B (BCBAs)
 - **Recording:** Audio + video with participant consent (NDA required — see `nda.md`)
 
 ---
@@ -115,14 +118,14 @@ This study is **generative**: we are not testing Blaster's current design. We ar
 
 | Deliverable | Description | Due |
 |---|---|---|
-| Interview recordings | Raw session recordings (stored securely, access-controlled) | May 22 |
-| Session notes | Anonymized notes per participant | May 22 |
-| Affinity map | Synthesized themes across sessions | May 30 |
-| Insight report | Key findings + design recommendations | Jun 5 |
+| Interview recordings | Raw session recordings (stored securely, access-controlled) | Jun 13 |
+| Session notes | Anonymized notes per participant | Jun 13 |
+| Affinity map | Synthesized themes across sessions | Jun 20 |
+| Insight report | Key findings + design recommendations | Jun 27 |
 
 The insight report will include specific recommendations for:
 - Tile vocabulary and visual design
-- Scene/page editor for caregivers
+- Scene/page editor for clinicians
 - Child profile setup
 - Admin panel improvements
 
@@ -130,27 +133,26 @@ The insight report will include specific recommendations for:
 
 ## Milestone Timeline
 
-| Milestone | Owner | Due |
-|---|---|---|
-| Creator reviews & approves this plan | markl | Apr 23 |
-| NDA reviewed (legal sanity check recommended) | markl | Apr 23 |
-| Recruiting materials finalized | Researcher | Apr 25 |
-| Outreach begins | Researcher | Apr 28 |
-| Participants screened & scheduled (6–10 confirmed across both cohorts) | Researcher | May 9 |
-| Interviews conducted | Researcher | May 10–22 |
-| Synthesis complete | Researcher | May 30 |
-| Insight report delivered | Researcher | Jun 5 |
+| Milestone | Owner | Due | Status |
+|---|---|---|---|
+| Plan approved | markl | May 18 | ✓ Done |
+| NDA reviewed (legal sanity check recommended) | markl | May 18 | ✓ Done |
+| Recruiting materials finalized | Kurt Lucovsky | May 20 | |
+| Pilot interviews (1 SLP, 1 BCBA) + parent discovery call | Kurt Lucovsky | May 23 | |
+| Outreach begins | Kurt Lucovsky | May 26 | |
+| Participants screened & scheduled (6–10 confirmed across both cohorts) | Kurt Lucovsky | May 30 | |
+| Interviews conducted | Kurt Lucovsky | Jun 2–13 | |
+| Synthesis complete | Kurt Lucovsky | Jun 20 | |
+| Insight report delivered | Kurt Lucovsky | Jun 27 | |
 
 ---
 
-## Creator Action Required
+## Creator Approval
 
-Please review this plan and confirm the following before April 23:
+Approved by markl on May 18, 2026. Research lead: Kurt Lucovsky.
 
-- [ ] Research questions are aligned with your product priorities
-- [ ] Participant criteria make sense for the intended audience
-- [ ] You are comfortable with remote video interviews as the method
-- [ ] NDA template reviewed (see `nda.md`) — legal review recommended before use
-- [ ] You are comfortable with beta access as the participant incentive (no monetary compensation)
-
-Leave comments inline or reach out directly to the researcher.
+- [x] Research questions are aligned with your product priorities
+- [x] Participant criteria make sense for the intended audience
+- [x] You are comfortable with remote video interviews as the method
+- [x] NDA template reviewed (see `nda.md`) — legal review recommended before use
+- [x] You are comfortable with beta access as the participant incentive (no monetary compensation)
