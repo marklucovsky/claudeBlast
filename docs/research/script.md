@@ -1,8 +1,11 @@
-# Interview Script — Caregiver Needs Study
+# Interview Script — AAC Intervention: Selection and Usage of Communication Devices
 
-**Status:** Placeholder — questions to be developed with creator input
-**Duration:** ~45 minutes
+**Status:** Draft — ready for researcher review
+**Duration:** ~30 minutes
 **Format:** Semi-structured (follow the participant's lead; sections are guides, not a strict sequence)
+**Audience:** Speech-Language Pathologists (Cohort A) and Behavioral Therapists / BCBAs (Cohort B)
+
+> **Moderator note:** Sections marked **[SLP]** are for Cohort A only. Sections marked **[BCBA]** are for Cohort B only. Everything else applies to both cohorts. You don't need to follow the order rigidly — if a topic comes up early, go with it.
 
 ---
 
@@ -12,93 +15,121 @@
 - [ ] Recording consent confirmed
 - [ ] Zoom/Meet link tested
 - [ ] Notetaking doc open
+- [ ] Know which cohort you're interviewing (SLP or BCBA) so you can route appropriately
 - [ ] Start recording at the beginning of the session (after verbal consent)
 
 ---
 
-## Introduction (5 min)
+## Introduction (3 min)
 
 *Goal: Build rapport, set expectations, get recording consent on record.*
 
-"Hi [name], thank you so much for making time today. My name is [name] and I'm doing research for a project called Blaster — it's a free, open-source AAC app. We're in the very early stages, and today I just want to learn from you. There are no right or wrong answers, and I'm not testing anything — I'm genuinely curious about your experience.
+"Hi [name], thank you so much for making time — I know clinical schedules are unpredictable, so I really appreciate it. My name is [name] and I'm doing research for a project called Blaster. It's a free, open-source AAC app for non-verbal children, and we're at the very beginning — trying to understand how practitioners in your field actually work before we build anything else.
 
-A few things before we start: this session will be recorded for note-taking purposes only. The recording stays within our small team and won't be shared publicly. You've already signed our NDA, which covers this. Do I have your permission to record? [Wait for yes.] Great, I'm starting the recording now.
+Today is genuinely a listening session. There are no right or wrong answers, and I'm not pitching anything or testing software.
 
-You can stop at any time, skip any question, or end the session early — no problem at all. Any questions before we begin?"
+A few things before we start: this session will be recorded for note-taking purposes only. The recording stays within our small research team and won't be shared publicly. You've already signed our NDA, which covers this. Do I have your permission to record? [Wait for yes.] Great, I'm starting the recording now.
 
----
-
-## Warm-up (5 min)
-
-*Goal: Get the participant comfortable and oriented to the topic.*
-
-- Tell me a little bit about your child — how old are they, and what's their day-to-day like?
-- How long have you been involved with AAC?
+You can stop at any time, skip any question, or end the session early — no problem at all. Any questions before we dive in?"
 
 ---
 
-## Current Tools & Daily Workflow (15 min)
+## Warm-up (3–4 min)
 
-*Goal: Understand existing tools, habits, and context of use.*
+*Goal: Get the participant oriented and comfortable talking about their practice.*
 
-- [PLACEHOLDER — add questions here]
-- What AAC tools or methods does your child use right now?
-- Walk me through a typical interaction — like, what does it look like when your child wants something?
-- Where does AAC happen most? At home? School? Out in public?
-- Who else is involved in supporting your child's AAC use — therapists, teachers, other caregivers?
+- Tell me a little about your work — what does your caseload look like right now?
+- How long have you been working with non-verbal or minimally verbal clients?
+- How did AAC become part of your practice?
 
 ---
 
-## Pain Points & Workarounds (10 min)
+## Current Tools & Daily Workflow (8–10 min)
 
-*Goal: Surface frustrations, gaps, and clever adaptations.*
+*Goal: Understand which tools they use, in what context, and what the actual workflow looks like — not the idealized version.*
 
-- [PLACEHOLDER — add questions here]
-- What's the most frustrating thing about your current setup?
-- Have you ever had a situation where the tool really let you down?
-- Is there anything you've had to hack together or work around?
-- What do you wish the tool did that it doesn't?
+- What AAC tools or systems do you work with most often? *(Let them list — note device, app, PECS, low-tech, etc.)*
+- Walk me through what it looks like to set up AAC for a new client.
+- Once a tool is in place, what does ongoing support look like?
+- How much of the configuration — vocabulary, pages, settings — do you do yourself versus someone else?
 
----
+**[SLP]**
+- When a family comes to you, how much of the tool selection has already been decided?
+- How do you approach vocabulary selection for a new client?
 
-## Vocabulary & Customization (10 min)
-
-*Goal: Understand how vocabulary is chosen and maintained.*
-
-- [PLACEHOLDER — add questions here]
-- How was your child's vocabulary set up initially?
-- How often do you add or change words? Who does that?
-- Are there words or phrases that are missing or hard to express?
-- How does your child's SLP or school factor into vocabulary decisions?
+**[BCBA]**
+- When you're starting with a new client, is AAC already in place, or are you often the one introducing it?
+- How does AAC fit into a behavior intervention plan?
 
 ---
 
-## Reactions to Concepts (Optional — 5 min)
+## Pain Points & Workarounds (7–8 min)
 
-*Use only if time allows and participant seems comfortable. Do not show actual designs.*
+*Goal: Surface real frustrations, not just polished feedback. Look for adaptations — they reveal unmet needs.*
 
-- [PLACEHOLDER — add concept prompts here]
-- "Imagine an app where a child picks a few word tiles and AI assembles a full sentence for them — what's your reaction to that idea?"
-- "What would make you trust or distrust an AI-generated sentence in that context?"
+- What's the most frustrating part of your current setup — not just the tool itself, but the whole ecosystem around it?
+- Have you ever had a situation where the AAC tool really failed a child?
+- Has there been a moment where a tool really failed you as a practitioner?
+- Is there anything you've had to hack together or work around because nothing off the shelf does it?
+- What's the thing families ask you for that you can't give them right now?
+
+**[SLP]**
+- How do families typically do with customization once the device is handed off?
+- Are there vocabulary or language goals you routinely have that current tools make hard to support?
+
+**[BCBA]**
+- Do behavioral targets and AAC goals ever create friction — like when reinforcing one thing works against the other?
+- Who tends to win that tension in practice?
 
 ---
 
-## Wrap-up (5 min)
+## Decision-Making & Collaboration (4–5 min)
 
-*Goal: Capture anything missed, leave a positive impression.*
+*Goal: Understand the real drivers of tool adoption — clinical, systemic, relational — and how the two disciplines interact.*
 
-- Is there anything important about your experience that I didn't ask about?
-- If you could change one thing about AAC tools tomorrow, what would it be?
-- Is there anyone else you think I should talk to — another caregiver, an SLP, a teacher?
+- When a child ends up with a particular AAC device or app, how much of that is your recommendation versus other factors — funding, insurance, school district, family preference?
+- Who else is in the room when these decisions get made? *(Probe for: SLP, BCBA, family, school, funding coordinator — whoever shows up)*
 
-"That's everything from me. Thank you so much — this is genuinely helpful. I'll follow up with your gift card within 24 hours. Is it okay if I reach out if I have any follow-up questions? [Wait for answer.] Great. Take care."
+**[SLP]**
+- What does coordination with a BCBA or behavioral therapist look like on a shared case?
+- Are there things a behavioral therapist tends to want from AAC that create tension with what you're trying to accomplish?
+
+**[BCBA]**
+- What does coordination with an SLP look like on a shared case?
+- Are there things an SLP tends to want from AAC that create tension with what you're trying to accomplish behaviorally?
+
+---
+
+## Concept Reactions (Optional — 3–4 min)
+
+*Use only if time allows and the participant seems comfortable. Conversational, not a demo. No visuals.*
+
+"I want to run one concept by you — just your gut reaction, no right answer."
+
+- "Imagine an AAC app where a child selects a few word tiles, and AI assembles a complete, age-appropriate sentence from those words — both displayed as text and spoken aloud. What's your first reaction to that idea?"
+  - *(Follow-up)* "What would make you trust the sentence it generates?"
+  - *(Follow-up)* "Is that something you'd want the child using independently, or would you want a caregiver or therapist in the loop?"
+
+- "What about an admin panel — a separate view where a clinician or caregiver can customize vocabulary, build pages, and review what the child has been communicating? Does that map to how you work, or not really?"
+
+---
+
+## Wrap-up (3 min)
+
+*Goal: Capture anything missed, leave a warm impression, get referrals.*
+
+- Is there anything important about your experience with AAC that I didn't ask about?
+- If you could change one thing about how AAC tools work tomorrow, what would it be?
+- Is there anyone else you think I should talk to — a colleague, someone from a different discipline, someone whose perspective I'd be missing?
+
+"That's everything from me — this has been really valuable. Thank you for your time and your candor. I'll follow up to confirm your beta access once that's available. Is it okay if I reach out with any follow-up questions? [Wait for answer.] Great. Take care."
 
 ---
 
 ## After the Call
 
 - [ ] Stop recording
-- [ ] Send gift card within 24 hours
-- [ ] Write up session notes while memory is fresh (use anonymized ID, not name)
+- [ ] Write up session notes while memory is fresh (use anonymized ID, not name — A1/A2... or B1/B2...)
+- [ ] Note any direct quotes worth preserving (attribute to ID only)
 - [ ] Update participant tracker in `recruiting.md`
-- [ ] Flag any surprising themes for synthesis
+- [ ] Flag surprising themes for synthesis — especially anything that cuts against our assumptions in `plan.md`
