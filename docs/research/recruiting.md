@@ -1,7 +1,7 @@
 # Recruiting Guide
 
 **Study:** AAC Intervention: Selection and Usage of Communication Devices
-**Target:** 3–5 Speech-Language Pathologists (Cohort A) + 3–5 Behavioral Therapists / BCBAs (Cohort B)
+**Target:** 6–10 participants total — 1 parent discovery call, 2 pilot interviews (1 SLP, 1 BCBA), and 3–7 core interviews split across Cohort A (SLPs) and Cohort B (BCBAs)
 **Session length:** 30 minutes
 **Incentive:** Early beta access to Blaster prior to public launch
 
@@ -35,7 +35,7 @@ Use a single screener with a branching question to route SLPs vs. behavioral the
 
 **Screener — AAC Intervention Study**
 
-> **Note to participants:** If you qualify and express interest in participating, sessions will be conducted via video call and recorded for note-taking purposes only. Recordings are kept confidential within the research team and deleted within 12 months of the study's conclusion.
+> **Note to participants:** This screener takes less than 5 minutes to complete. If you qualify and express interest in participating, sessions will be conducted via video call and recorded for note-taking purposes only. Recordings are kept confidential within the research team.
 
 ---
 
@@ -61,8 +61,6 @@ Use a single screener with a branching question to route SLPs vs. behavioral the
 
 7. Are you comfortable participating in a 30-minute recorded video call for research purposes? *(Must answer Yes — recording disclosed above)*
 
-8. What time zones and general availability work best for you? *(Open text — for scheduling)*
-
 ---
 
 ## Screener Follow-Up Emails
@@ -73,7 +71,7 @@ Send these within 24 hours of reviewing a qualified screener response.
 
 ### Cohort A — SLP Follow-Up
 
-**Subject:** You're in — let's find a time to chat (Blaster AAC research)
+**Subject:** Thank you for your interest — scheduling your Blaster AAC research session
 
 Hi [name],
 
@@ -97,7 +95,7 @@ Looking forward to speaking with you — thank you again for making time.
 
 ### Cohort B — Behavioral Therapist / BCBA Follow-Up
 
-**Subject:** You're in — let's find a time to chat (Blaster AAC research)
+**Subject:** Thank you for your interest — scheduling your Blaster AAC research session
 
 Hi [name],
 
@@ -159,7 +157,7 @@ Thank you for considering — clinical expertise like yours is exactly what this
 
 Hi [name / community],
 
-I'm a UX researcher working on **Blaster**, a free, open-source AAC app for non-verbal children. We're in the early research phase and want to learn from behavioral practitioners who work with AAC — specifically how behavioral goals and communication goals intersect (and sometimes conflict) in practice.
+I'm a UX researcher working on **Blaster**, a free, open-source AAC app for non-verbal children. We're in the early research phase and want to learn from behavioral practitioners who work with AAC.
 
 **What's involved:**
 - 30-minute video call (Zoom or Google Meet)
@@ -196,7 +194,6 @@ Thank you for considering — your perspective on the behavioral side of AAC is 
 
 - Participants who complete a session will be added to the Blaster beta list and notified when early access opens
 - Disclose the incentive in all outreach
-- If a participant no-shows without notice, beta access is at the researcher's discretion
 
 *No monetary compensation is offered at this stage.*
 
@@ -204,11 +201,17 @@ Thank you for considering — your perspective on the behavioral side of AAC is 
 
 ## Participant Tracker
 
+### Parent Discovery Call
+
+| # | First name | Relationship | Scheduled | Completed | Notes |
+|---|---|---|---|---|---|
+| P1 | | Family contact | | | Context only — not included in synthesis |
+
 ### Cohort A — Speech-Language Pathologists
 
 | # | First name | Practice setting | Screener sent | Qualified | Scheduled | Completed | Notes |
 |---|---|---|---|---|---|---|---|
-| A1 | | | | | | | |
+| A1 (pilot) | | | | | | | |
 | A2 | | | | | | | |
 | A3 | | | | | | | |
 | A4 | | | | | | | |
@@ -218,7 +221,7 @@ Thank you for considering — your perspective on the behavioral side of AAC is 
 
 | # | First name | Practice setting | Screener sent | Qualified | Scheduled | Completed | Notes |
 |---|---|---|---|---|---|---|---|
-| B1 | | | | | | | |
+| B1 (pilot) | | | | | | | |
 | B2 | | | | | | | |
 | B3 | | | | | | | |
 | B4 | | | | | | | |
