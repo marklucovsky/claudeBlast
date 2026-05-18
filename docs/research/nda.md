@@ -6,8 +6,8 @@
 
 ## Non-Disclosure and Consent Agreement
 
-**Project:** Blaster — Caregiver Needs Research Study
-**Researcher:** [Researcher name and contact]
+**Project:** Blaster — AAC Intervention: Selection and Usage of Communication Devices
+**Researcher:** Kurt Lucovsky
 **Project contact:** [Creator name and contact]
 **Date:** [DATE]
 
@@ -15,7 +15,7 @@
 
 ### 1. Purpose
 
-This agreement is between **[Researcher / Blaster Project]** ("we") and the participant named below ("you"). It covers your participation in a research interview about your experience as a caregiver using AAC (Augmentative and Alternative Communication) tools.
+This agreement is between **[Researcher / Blaster Project]** ("we") and the participant named below ("you"). It covers your participation in a research interview about your professional experience recommending, configuring, and supporting Augmentative and Alternative Communication (AAC) tools for children.
 
 ---
 
@@ -23,7 +23,9 @@ This agreement is between **[Researcher / Blaster Project]** ("we") and the part
 
 You agree that the interview session may be recorded (audio and/or video). Recordings are used solely for note-taking and internal research analysis. They will not be published, shared publicly, or used in any marketing or promotional materials without your separate written consent.
 
-Recordings will be stored securely and accessible only to the core research team. They will be deleted within **[12 months / specify]** of the study's conclusion.
+Recordings and transcripts may be anonymized and uploaded into AI analysis tools (including Claude by Anthropic) for the purposes of research synthesis. All personally identifiable information will be removed prior to upload.
+
+Recordings will be stored securely and accessible only to the core research team. We reserve the right to retain recordings and transcripts for as long as necessary to support the research and product development goals of this project.
 
 ---
 
@@ -31,7 +33,7 @@ Recordings will be stored securely and accessible only to the core research team
 
 Information you share during the interview — including your words, experiences, and opinions — may be used to inform the design of the Blaster application. This information will be:
 
-- **Anonymized** before use in any reports or presentations (your name and your child's name will not appear)
+- **Anonymized** before use in any reports or presentations (your name and any patient or client details will not appear)
 - Used only for the purposes of improving Blaster's design and functionality
 - Not sold, licensed, or shared with third parties
 
@@ -39,7 +41,7 @@ Information you share during the interview — including your words, experiences
 
 ### 4. Confidentiality
 
-We will keep your personal information (name, contact details, your child's details) confidential. You will be referred to by a participant ID or pseudonym in all research documents.
+We will keep your personal information (name, contact details, employer, and any patient or client details you share) confidential. You will be referred to by a participant ID or pseudonym in all research documents.
 
 ---
 
@@ -57,7 +59,7 @@ Withdrawing does not affect your eligibility for compensation.
 
 ### 6. Compensation
 
-As a thank-you for your time, you will receive a **$[AMOUNT] [Amazon / Visa] gift card** sent digitally within 24 hours of completing the session.
+As a thank-you for your time, you will receive **early beta access to Blaster** prior to its public launch. You will be notified when access becomes available.
 
 ---
 
