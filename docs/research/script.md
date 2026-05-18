@@ -1,11 +1,81 @@
 # Interview Script — AAC Intervention: Selection and Usage of Communication Devices
 
-**Status:** Draft — ready for researcher review
-**Duration:** ~30 minutes
+**Status:** Active
+**Duration:** See per-session notes below
 **Format:** Semi-structured (follow the participant's lead; sections are guides, not a strict sequence)
-**Audience:** Speech-Language Pathologists (Cohort A) and Behavioral Therapists / BCBAs (Cohort B)
+**Audience:** This script covers two session types:
+- **Part 1** — Parent Discovery Call (15–20 min, family contact, informal)
+- **Part 2** — SLP / BCBA Interviews (30 min, Cohort A and Cohort B)
 
-> **Moderator note:** Sections marked **[SLP]** are for Cohort A only. Sections marked **[BCBA]** are for Cohort B only. Everything else applies to both cohorts. You don't need to follow the order rigidly — if a topic comes up early, go with it.
+> **Moderator note (Part 2):** Sections marked **[SLP]** are for Cohort A only. Sections marked **[BCBA]** are for Cohort B only. Everything else applies to both cohorts. You don't need to follow the order rigidly — if a topic comes up early, go with it.
+
+---
+
+# Part 1 — Parent Discovery Call
+
+**Duration:** 15–20 minutes
+**Participant:** Family contact — parent of a child who uses AAC
+**Purpose:** Gather informal context on the lived parent experience; surface referral leads for SLP and BCBA recruitment
+**Bias note:** This participant is a family member and is aware of the Blaster app. Treat findings as directional context only — do not weight them equally with Cohort A or B sessions in synthesis.
+
+---
+
+## Before the Call
+
+- [ ] Zoom/Meet link sent
+- [ ] Notetaking doc open — label notes "Discovery / [first name]"
+- [ ] No NDA required for this session
+
+---
+
+## Introduction (2 min)
+
+*Keep it warm and brief.*
+
+"Hi! Thanks for chatting with me. I'm about to talk with some SLPs and behavioral therapists for Blaster but wanted to talk to you first!"
+
+---
+
+## Discovery Questions (12–15 min)
+
+*This is a conversation, not an interview. Let it breathe. The referral ask at the end is just as important as the questions.*
+
+**Their experience with AAC:**
+- What's working well about it?
+- What's been the hardest part for you?
+- What's been the hardest part for them?
+
+**Wishes and gaps:**
+- Is there something you've wanted the app or device to do that it just doesn't?
+- What would make your day-to-day easier?
+
+**On Blaster specifically (since she knows about it):**
+- Knowing what you know about Blaster — is there anything you'd want us to get right that you feel like other tools have gotten wrong?
+
+**Referrals:**
+- Do you work with an SLP or behavioral therapist you really trust? Someone who might be willing to talk to me for 30 minutes?
+- Any other AAC parents you're connected with who might want to be involved down the road?
+
+---
+
+## Wrap-up (2 min)
+
+"This was really helpful — seriously. I'll take what you said and let it shape the questions I ask the clinicians. And if you think of anyone who'd be a good person for me to talk to, just send them my way."
+
+---
+
+## After the Call
+
+- [ ] Write up notes immediately — label with "Discovery" and do not use an anonymized cohort ID
+- [ ] Log any referral names and contact info separately for follow-up
+- [ ] Note anything surprising to bring into the SLP/BCBA script refinement
+- [ ] Do not include this session in the formal participant count or synthesis affinity map — use as background context only
+
+---
+
+---
+
+# Part 2 — SLP / BCBA Interviews
 
 ---
 
@@ -17,6 +87,8 @@
 - [ ] Notetaking doc open
 - [ ] Know which cohort you're interviewing (SLP or BCBA) so you can route appropriately
 - [ ] Start recording at the beginning of the session (after verbal consent)
+
+> **If this is a pilot session:** Use the script as-is — no changes beforehand. During the session, note any questions that cause confusion, feel out of order, or run long. Afterward, log what to revise before full outreach begins.
 
 ---
 
@@ -133,3 +205,4 @@ You can stop at any time, skip any question, or end the session early — no pro
 - [ ] Note any direct quotes worth preserving (attribute to ID only)
 - [ ] Update participant tracker in `recruiting.md`
 - [ ] Flag surprising themes for synthesis — especially anything that cuts against our assumptions in `plan.md`
+- [ ] **If this was a pilot:** log any questions that caused confusion, felt out of order, or ran long — revise script before outreach begins May 26

@@ -139,6 +139,7 @@ The insight report will include specific recommendations for:
 | NDA reviewed (legal sanity check recommended) | markl | May 18 | ✓ Done |
 | Recruiting materials finalized | Kurt Lucovsky | May 20 | |
 | Pilot interviews (1 SLP, 1 BCBA) + parent discovery call | Kurt Lucovsky | May 23 | |
+| Script revised based on pilot findings | Kurt Lucovsky | May 25 | |
 | Outreach begins | Kurt Lucovsky | May 26 | |
 | Participants screened & scheduled (6–10 confirmed across both cohorts) | Kurt Lucovsky | May 30 | |
 | Interviews conducted | Kurt Lucovsky | Jun 2–13 | |
