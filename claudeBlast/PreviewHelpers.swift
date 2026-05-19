@@ -15,7 +15,7 @@ let previewContainer: ModelContainer = {
     let schema = Schema([
         TileModel.self, PageModel.self, PageTileModel.self,
         BlasterScene.self, SentenceCache.self, MetricEvent.self,
-        RecordedScript.self,
+        RecordedScript.self, LoggedUtterance.self,
     ])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: schema, configurations: [config])

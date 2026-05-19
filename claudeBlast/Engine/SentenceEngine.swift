@@ -379,6 +379,14 @@ final class SentenceEngine {
             if groupHistory.count > limit {
                 groupHistory.removeLast(groupHistory.count - limit)
             }
+            // Persist the finalized utterance for therapist review (AdminView → Activity Log).
+            // Final-state only: replay escalation is captured by repetitionCount, not as
+            // separate rows.
+            cacheManager?.logUtterance(
+                tiles: finalized.tiles,
+                sentence: finalized.sentence ?? "",
+                repetitionCount: finalized.repetitionCount
+            )
         }
 
         activeGroup = TileGroup()

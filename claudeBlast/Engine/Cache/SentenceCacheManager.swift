@@ -106,4 +106,25 @@ final class SentenceCacheManager {
         let event = MetricEvent(subjectType: subjectType, subjectKey: subjectKey, eventType: eventType)
         context.insert(event)
     }
+
+    /// Persist a finalized utterance for therapist review. Captures the active scene name
+    /// at commit time so logs remain meaningful after scene edits.
+    func logUtterance(tiles: [TileSelection], sentence: String, repetitionCount: Int) {
+        let sceneName = activeSceneName()
+        let entry = LoggedUtterance(
+            tileKeys: tiles.map(\.key),
+            sentence: sentence,
+            repetitionCount: repetitionCount,
+            sceneName: sceneName
+        )
+        context.insert(entry)
+    }
+
+    private func activeSceneName() -> String? {
+        var descriptor = FetchDescriptor<BlasterScene>(
+            predicate: #Predicate { $0.isActive == true }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first?.name
+    }
 }

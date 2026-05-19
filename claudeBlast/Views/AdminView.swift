@@ -298,6 +298,22 @@ struct AdminView: View {
 
                 Section {
                     NavigationLink {
+                        ActivityLogView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "list.bullet.rectangle")
+                                .foregroundStyle(.secondary)
+                            Text("View Activity Log")
+                        }
+                    }
+                } header: {
+                    Text("Activity Log")
+                } footer: {
+                    Text("Finalized utterances from the sentence tray, grouped by day. Read-only review for therapists and partners.")
+                }
+
+                Section {
+                    NavigationLink {
                         CacheDetailView(entries: cacheEntries, onDelete: deleteCacheEntries, onFlush: flushAllCache)
                     } label: {
                         Text("View \(cacheEntries.count) entries")
