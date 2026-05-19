@@ -555,35 +555,7 @@ private struct HistoryGroupChip: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 4) {
-                ForEach(Array(group.tiles.enumerated()), id: \.offset) { _, tile in
-                    HStack(spacing: 3) {
-                        TileImageView(key: tile.key, wordClass: tile.wordClass)
-                            .frame(width: kHistoryTileSize, height: kHistoryTileSize)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                        Text(tile.value)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.primary)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(wordClassColor(tile.wordClass).opacity(0.20))
-                    )
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
-            )
+            TileGroupBubble(tiles: group.tiles)
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -591,6 +563,47 @@ private struct HistoryGroupChip: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+// MARK: - TileGroupBubble (shared)
+
+/// The "bubble of tiles" used by both the in-app sentence tray history row and the AdminView
+/// Activity Log. Each tile is a tinted capsule chip (image + label colored by wordClass),
+/// wrapped in a rounded card with a soft shadow.
+struct TileGroupBubble: View {
+    let tiles: [TileSelection]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in
+                HStack(spacing: 3) {
+                    TileImageView(key: tile.key, wordClass: tile.wordClass)
+                        .frame(width: kHistoryTileSize, height: kHistoryTileSize)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    Text(tile.value)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(wordClassColor(tile.wordClass).opacity(0.20))
+                )
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+        )
     }
 }
 

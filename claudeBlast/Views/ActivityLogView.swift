@@ -117,56 +117,65 @@ struct ActivityLogView: View {
 
     @ViewBuilder
     private func entryRow(_ entry: LoggedUtterance) -> some View {
-        HStack(spacing: 10) {
-            TileGridIcon(tiles: tileSelections(for: entry.tileKeys))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.sentence.isEmpty ? "(no sentence)" : entry.sentence)
-                    .font(.subheadline)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    Text(entry.createdAt, format: .dateTime.hour().minute())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    if let scene = entry.sceneName, !scene.isEmpty {
-                        Text("• \(scene)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    TileGroupBubble(tiles: tileSelections(for: entry.tileKeys))
+                }
+                Spacer(minLength: 0)
+                if entry.repetitionCount > 0 {
+                    Label("\(entry.repetitionCount)", systemImage: "arrow.triangle.2.circlepath")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(Color.orange.opacity(0.18))
+                        )
+                        .foregroundStyle(.orange)
                 }
             }
-            Spacer()
-            if entry.repetitionCount > 0 {
-                Label("\(entry.repetitionCount)", systemImage: "arrow.triangle.2.circlepath")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption2.bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(Color.orange.opacity(0.18))
-                    )
-                    .foregroundStyle(.orange)
+            Text(entry.sentence.isEmpty ? "(no sentence)" : entry.sentence)
+                .font(.subheadline)
+                .lineLimit(3)
+            HStack(spacing: 6) {
+                Text(entry.createdAt, format: .dateTime.hour().minute())
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let scene = entry.sceneName, !scene.isEmpty {
+                    Text("• \(scene)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
     private func comboRow(rank: Int, combo: (keys: [String], count: Int, latestSentence: String)) -> some View {
-        HStack(spacing: 10) {
-            Text("#\(rank)")
-                .font(.caption2.monospacedDigit().bold())
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
-            TileGridIcon(tiles: tileSelections(for: combo.keys))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(combo.latestSentence.isEmpty ? combo.keys.joined(separator: " + ") : combo.latestSentence)
-                    .font(.caption)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("#\(rank)")
+                    .font(.caption2.monospacedDigit().bold())
+                    .foregroundStyle(.secondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    TileGroupBubble(tiles: tileSelections(for: combo.keys))
+                }
+                Spacer(minLength: 0)
                 Text("\(combo.count)×")
-                    .font(.caption2)
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            if !combo.latestSentence.isEmpty {
+                Text(combo.latestSentence)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.leading, 24)
+            }
         }
+        .padding(.vertical, 2)
     }
 
     private func tileSelections(for keys: [String]) -> [TileSelection] {
