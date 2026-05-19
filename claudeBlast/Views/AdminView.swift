@@ -38,7 +38,7 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
-    @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
+    @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
     @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.arasaac.rawValue
 
     // Sentence tray timeline settings
@@ -67,6 +67,19 @@ struct AdminView: View {
 
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
+    }
+
+    private func tileDensityLabel(_ step: Int) -> String {
+        switch step {
+        case -3: return "Tightest"
+        case -2: return "Tighter"
+        case -1: return "Tight"
+        case  0: return "Auto"
+        case  1: return "Roomy"
+        case  2: return "Roomier"
+        case  3: return "Roomiest"
+        default: return "Auto"
+        }
     }
 
     var body: some View {
@@ -105,10 +118,10 @@ struct AdminView: View {
                     Toggle("Audio", isOn: $audioEnabled)
                     Toggle("Tile Speech Preview", isOn: $tileSpeechEnabled)
                     Stepper(
-                        "Tile Size: \(Int(tileMinSize))pt",
-                        value: $tileMinSize,
-                        in: 56...140,
-                        step: 4
+                        "Tile Density: \(tileDensityLabel(tileSizeStep))",
+                        value: $tileSizeStep,
+                        in: -3...3,
+                        step: 1
                     )
 
                     Picker("Image Set", selection: $imageSetRaw) {

@@ -11,6 +11,7 @@ import SwiftData
 struct TileView: View {
     let pageTile: PageTileModel
     var isSelected: Bool = false
+    var labelFontSize: CGFloat = 11
     let onTap: () -> Void
 
     private var tile: TileModel { pageTile.tile }
@@ -25,7 +26,7 @@ struct TileView: View {
                 // Small label below — the images already carry the word,
                 // so this is a subtle hint rather than the primary label
                 Text(tile.displayName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: labelFontSize, weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
