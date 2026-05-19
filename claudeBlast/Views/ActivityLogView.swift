@@ -16,39 +16,50 @@ struct ActivityLogView: View {
     private var allEntries: [LoggedUtterance]
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
 
-    @State private var filter: TimeFilter = .today
+    @State private var filter: Filter = .today
 
-    enum TimeFilter: String, CaseIterable, Identifiable {
-        case today = "Today"
-        case week = "Past Week"
-        case all = "All Time"
+    /// Time-window filters group entries by day (newest first). `mostUsed` flattens entries
+    /// into unique tile combinations ordered by frequency across all time.
+    enum Filter: String, CaseIterable, Identifiable {
+        case today    = "Today"
+        case week     = "Past Week"
+        case all      = "All Time"
+        case mostUsed = "Most Used"
         var id: String { rawValue }
 
-        /// Lower bound (inclusive) for filtering; nil = no bound.
+        /// Lower bound (inclusive) for time-based filtering; nil = no bound or non-time mode.
         func earliest(now: Date = .now) -> Date? {
             let cal = Calendar.current
             switch self {
-            case .today: return cal.startOfDay(for: now)
-            case .week:  return cal.date(byAdding: .day, value: -7, to: now)
-            case .all:   return nil
+            case .today:    return cal.startOfDay(for: now)
+            case .week:     return cal.date(byAdding: .day, value: -7, to: now)
+            case .all, .mostUsed: return nil
             }
         }
-    }
-
-    private var filteredEntries: [LoggedUtterance] {
-        guard let earliest = filter.earliest() else { return allEntries }
-        return allEntries.filter { $0.createdAt >= earliest }
     }
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
     }
 
-    /// Top 3 most-frequent tile combinations in the current filter window.
-    /// Combos are ordered by tile keys for stable grouping (matches cache-key semantics).
-    private var topCombos: [(keys: [String], count: Int, latestSentence: String)] {
+    private var timeFilteredEntries: [LoggedUtterance] {
+        guard let earliest = filter.earliest() else { return allEntries }
+        return allEntries.filter { $0.createdAt >= earliest }
+    }
+
+    private var groupedByDay: [(day: Date, entries: [LoggedUtterance])] {
+        let cal = Calendar.current
+        let grouped = Dictionary(grouping: timeFilteredEntries) { cal.startOfDay(for: $0.createdAt) }
+        return grouped.keys.sorted(by: >).map { day in
+            (day, grouped[day] ?? [])
+        }
+    }
+
+    /// Distinct tile combinations across all entries, ordered by frequency (desc).
+    /// Combos are bucketed by sorted-key signature so "eat apple" and "apple eat" merge.
+    private var combosByFrequency: [(keys: [String], count: Int, latestSentence: String, latestAt: Date)] {
         var buckets: [String: (keys: [String], count: Int, latest: LoggedUtterance)] = [:]
-        for entry in filteredEntries {
+        for entry in allEntries {
             let sortedKeys = entry.tileKeys.sorted()
             let bucketKey = sortedKeys.joined(separator: "+")
             if let existing = buckets[bucketKey] {
@@ -59,60 +70,73 @@ struct ActivityLogView: View {
             }
         }
         return buckets.values
-            .sorted { $0.count > $1.count }
-            .prefix(3)
-            .map { ($0.keys, $0.count, $0.latest.sentence) }
-    }
-
-    private var groupedByDay: [(day: Date, entries: [LoggedUtterance])] {
-        let cal = Calendar.current
-        let grouped = Dictionary(grouping: filteredEntries) { cal.startOfDay(for: $0.createdAt) }
-        return grouped.keys.sorted(by: >).map { day in
-            (day, grouped[day] ?? [])
-        }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.latest.createdAt > rhs.latest.createdAt
+            }
+            .map { ($0.keys, $0.count, $0.latest.sentence, $0.latest.createdAt) }
     }
 
     var body: some View {
         List {
             Section {
-                Picker("Time Range", selection: $filter) {
-                    ForEach(TimeFilter.allCases) { range in
-                        Text(range.rawValue).tag(range)
+                Picker("Filter", selection: $filter) {
+                    ForEach(Filter.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
             }
 
-            if filteredEntries.isEmpty {
-                Section {
-                    ContentUnavailableView(
-                        "No utterances yet",
-                        systemImage: "text.bubble",
-                        description: Text("Finalized sentence tray groups will appear here for review.")
-                    )
-                }
-            } else {
-                Section("Summary") {
-                    LabeledContent("Utterances", value: "\(filteredEntries.count)")
-                    if !topCombos.isEmpty {
-                        ForEach(Array(topCombos.enumerated()), id: \.offset) { index, combo in
-                            comboRow(rank: index + 1, combo: combo)
-                        }
-                    }
-                }
-
-                ForEach(groupedByDay, id: \.day) { group in
-                    Section(dayHeader(for: group.day)) {
-                        ForEach(group.entries) { entry in
-                            entryRow(entry)
-                        }
-                    }
-                }
+            switch filter {
+            case .mostUsed:
+                mostUsedContent
+            case .today, .week, .all:
+                timelineContent
             }
         }
         .navigationTitle("Activity Log")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var timelineContent: some View {
+        if timeFilteredEntries.isEmpty {
+            emptyState
+        } else {
+            ForEach(groupedByDay, id: \.day) { group in
+                Section(dayHeader(for: group.day)) {
+                    ForEach(group.entries) { entry in
+                        entryRow(entry)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mostUsedContent: some View {
+        if combosByFrequency.isEmpty {
+            emptyState
+        } else {
+            Section {
+                ForEach(Array(combosByFrequency.enumerated()), id: \.offset) { _, combo in
+                    comboRow(combo)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        Section {
+            ContentUnavailableView(
+                "No utterances yet",
+                systemImage: "text.bubble",
+                description: Text("Finalized sentence tray groups will appear here for review.")
+            )
+        }
     }
 
     @ViewBuilder
@@ -124,15 +148,7 @@ struct ActivityLogView: View {
                 }
                 Spacer(minLength: 0)
                 if entry.repetitionCount > 0 {
-                    Label("\(entry.repetitionCount)", systemImage: "arrow.triangle.2.circlepath")
-                        .labelStyle(.titleAndIcon)
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(Color.orange.opacity(0.18))
-                        )
-                        .foregroundStyle(.orange)
+                    escalationBadge(entry.repetitionCount)
                 }
             }
             Text(entry.sentence.isEmpty ? "(no sentence)" : entry.sentence)
@@ -153,29 +169,42 @@ struct ActivityLogView: View {
     }
 
     @ViewBuilder
-    private func comboRow(rank: Int, combo: (keys: [String], count: Int, latestSentence: String)) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func comboRow(_ combo: (keys: [String], count: Int, latestSentence: String, latestAt: Date)) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
-                Text("#\(rank)")
-                    .font(.caption2.monospacedDigit().bold())
-                    .foregroundStyle(.secondary)
                 ScrollView(.horizontal, showsIndicators: false) {
                     TileGroupBubble(tiles: tileSelections(for: combo.keys))
                 }
                 Spacer(minLength: 0)
                 Text("\(combo.count)×")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.caption.monospacedDigit().bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.blue.opacity(0.15)))
+                    .foregroundStyle(.blue)
             }
             if !combo.latestSentence.isEmpty {
                 Text(combo.latestSentence)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.leading, 24)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
             }
+            Text("Last: \(combo.latestAt, format: .relative(presentation: .named))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func escalationBadge(_ count: Int) -> some View {
+        Label("\(count)", systemImage: "arrow.triangle.2.circlepath")
+            .labelStyle(.titleAndIcon)
+            .font(.caption2.bold())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.orange.opacity(0.18)))
+            .foregroundStyle(.orange)
     }
 
     private func tileSelections(for keys: [String]) -> [TileSelection] {
