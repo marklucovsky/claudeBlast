@@ -21,6 +21,19 @@ struct claudeBlastApp: App {
     @State private var imageResolver = TileImageResolver()
 
     init() {
+        // Register fallback defaults for any keys the engine reads via
+        // UserDefaults.standard directly (not via @AppStorage). @AppStorage's
+        // default applies only when *reading* through the wrapper — the engine
+        // bypasses it, so an unset key returns 0 and engine paths that treat
+        // 0 as "disabled" (notably autoDoneMs) end up never firing. Register
+        // here so the engine and AdminView see the same defaults.
+        UserDefaults.standard.register(defaults: [
+            AppSettingsKey.autoDoneMs: 30000,
+            AppSettingsKey.idleDebounceMs: 2500,
+            AppSettingsKey.trayBufferSize: 100,
+            AppSettingsKey.tileCapPerGroup: 4,
+        ])
+
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
         let container = setModelContainer(icloudEnabled: icloudEnabled)
         self.modelContainer = container
