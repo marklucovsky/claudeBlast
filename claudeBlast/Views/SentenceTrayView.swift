@@ -16,6 +16,7 @@
 //  Phone/portrait responsive layout (bubble → liquid-glass overlay) is a follow-up.
 //
 
+import Combine
 import SwiftUI
 import UIKit
 
@@ -25,7 +26,6 @@ import UIKit
 private let kCardHeight: CGFloat = 88
 private let kCardVerticalPadding: CGFloat = 6
 private let kActiveRowHeight: CGFloat = kCardHeight
-private let kHistoryRowHeight: CGFloat = 34
 private let kActiveImageSize: CGFloat = 56
 private let kPlayButtonWidth: CGFloat = 82
 private let kPlayButtonHeight: CGFloat = 54
@@ -41,6 +41,23 @@ struct SentenceTrayView: View {
     let onReplay: () -> Void
     let onReopenHistory: (UUID) -> Void
     let onDeleteHistory: (UUID) -> Void
+    /// Tap the inline sentence bubble to pop out the full sentence overlay.
+    /// On iPad this is rarely needed (the inline bubble has plenty of room)
+    /// but the affordance stays for parity with the iPhone tray.
+    let onExpandSentence: () -> Void
+    /// Tap the Home card. Wired to navigate to the active scene's root page.
+    let onHome: () -> Void
+    /// Tap the Favorites card. Opens the GlassFavoritesOverlay.
+    let onShowFavorites: () -> Void
+    /// True when the user is at the home page — dims the Home card.
+    let isAtHome: Bool
+    /// Number of promoted SentenceCache entries — shown next to the star.
+    let favoritesCount: Int
+    /// True when the sentence popover is currently visible (so the inline
+    /// bubble can mute its expand affordance).
+    let isSentenceShown: Bool
+    /// True when the favorites overlay is currently visible — dims the card.
+    let isFavoritesShown: Bool
     /// Currently unused in iPad layout; reserved for the phone/responsive variant where the
     /// bubble becomes a dismissible overlay (the "×" → clearSelection).
     let onDismissActive: () -> Void
@@ -64,13 +81,6 @@ struct SentenceTrayView: View {
         engine.isIdleNudge && canFire && !engine.isThinking
     }
 
-    private var bubbleContent: String {
-        if let sentence = engine.activeGroup.sentence {
-            return sentence
-        }
-        return engine.activeGroup.tiles.map(\.value).joined(separator: " ")
-    }
-
     private var hasActiveContent: Bool {
         !engine.activeGroup.tiles.isEmpty
     }
@@ -78,10 +88,9 @@ struct SentenceTrayView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             activeRow
-            divider
-            historyRow
+            navStrip
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -94,19 +103,74 @@ struct SentenceTrayView: View {
 
     // MARK: - Top row
 
+    /// Active card on the left (chips + inline speech bubble bound as one
+    /// surface, mirroring the iPhone tray's ActiveCard), and the Play/Done
+    /// stack on the right.
     private var activeRow: some View {
-        HStack(alignment: .center, spacing: 14) {
-            activeTilesArea
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .center, spacing: 12) {
+            ActiveTrayCard(
+                tiles: engine.activeGroup.tiles,
+                sentence: engine.activeGroup.sentence,
+                isThinking: engine.isThinking,
+                onTileTap: onTileTap,
+                onExpandSentence: onExpandSentence
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Play and Done handle their own enabled/disabled rendering —
+            // no outer opacity wrap so they stay visible even when the
+            // active group is empty (matches the iPhone tray).
             playColumn
-                .opacity(hasActiveContent ? 1 : 0.25)
-                .allowsHitTesting(hasActiveContent)
-
-            sentenceBubble
-                .frame(maxWidth: .infinity)
         }
         .frame(height: kActiveRowHeight)
+    }
+
+    // MARK: - Bottom nav strip (Home + History scroll + Favorites)
+
+    /// Replaces the old plain history row + the standalone TileGridView
+    /// navBar. Home and Favorites are the same-family cards from the
+    /// iPhone tray, sized up for iPad. History stays as a horizontal
+    /// scroll of TileGroupBubble chips — the existing iPad pattern that
+    /// makes sense given the available width.
+    private var navStrip: some View {
+        HStack(alignment: .center, spacing: 8) {
+            IPadHomeCard(isEnabled: !isAtHome, action: onHome)
+
+            historyScroll
+                .frame(maxWidth: .infinity)
+
+            IPadFavoritesCard(
+                count: favoritesCount,
+                isEnabled: favoritesCount > 0 && !isFavoritesShown,
+                action: onShowFavorites
+            )
+        }
+        .frame(height: kIPadNavCardHeight)
+    }
+
+    private var historyScroll: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .center, spacing: 8) {
+                if engine.groupHistory.isEmpty {
+                    Text("No history yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 8)
+                } else {
+                    // Closed groups: oldest first (left), newest last (right).
+                    ForEach(Array(engine.groupHistory.reversed()), id: \.id) { group in
+                        HistoryGroupChip(
+                            group: group,
+                            onTap: { onReopenHistory(group.id) },
+                            onDelete: { onDeleteHistory(group.id) }
+                        )
+                        .id(group.id)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+        }
     }
 
     /// Play button + Done (commit) button stacked vertically. Total height = kCardHeight.
@@ -116,6 +180,7 @@ struct SentenceTrayView: View {
                 canFire: canFire,
                 isPulsing: isPulsing,
                 isReplay: canReplay,
+                replayCount: engine.repetitionCount,
                 action: canReplay ? onReplay : onGo
             )
             .allowsHitTesting(canFire)
@@ -130,70 +195,196 @@ struct SentenceTrayView: View {
         .frame(height: kCardHeight)
     }
 
-    @ViewBuilder
-    private var activeTilesArea: some View {
-        if hasActiveContent {
-            ScrollView(.horizontal, showsIndicators: false) {
+}
+
+// MARK: - iPad bottom-row sizing
+
+/// Height of the iPad nav strip cards (Home, History scroll, Favorites).
+/// Sized to fit the existing TileGroupBubble history chips comfortably.
+private let kIPadNavCardHeight: CGFloat = 38
+private let kIPadNavCardWidth: CGFloat = 84
+private let kIPadNavCornerRadius: CGFloat = 11
+
+// MARK: - Active tray card (iPad: chips + inline speech bubble)
+
+/// Mirrors the iPhone CompactTrayStrip's ActiveCard at iPad proportions.
+/// Chips on the left (full ActiveTileCards with labels, since there's
+/// room), then a left-tail speech bubble carrying the sentence when one
+/// exists. The whole card is bound by one outer surface so chips and
+/// sentence read as one unit. Tap the bubble to pop out the
+/// GlassSentencePopover — rarely needed on iPad but kept for parity.
+private struct ActiveTrayCard: View {
+    let tiles: [TileSelection]
+    let sentence: String?
+    let isThinking: Bool
+    let onTileTap: (Int) -> Void
+    let onExpandSentence: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            if tiles.isEmpty {
+                Text("Tap tiles to build a sentence")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                // Engine enforces max 4 tiles — a plain HStack with
+                // fixedSize keeps the chips at their natural width so the
+                // sentence bubble (with maxWidth: .infinity) can only
+                // claim the remaining space, never push the chips out.
                 HStack(spacing: 8) {
-                    ForEach(Array(engine.activeGroup.tiles.enumerated()), id: \.offset) { index, tile in
+                    ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
                         ActiveTileCard(tile: tile) { onTileTap(index) }
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding(.vertical, 2)
-            }
-            .animation(.easeInOut(duration: 0.18), value: engine.activeGroup.tiles.count)
-        } else if engine.groupHistory.isEmpty {
-            Text("Tap tiles to build a sentence")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 4)
-        } else {
-            Color.clear
-        }
-    }
+                .padding(.horizontal, 4)
+                .fixedSize(horizontal: true, vertical: false)
+                .animation(.easeInOut(duration: 0.18), value: tiles.count)
 
-    @ViewBuilder
-    private var sentenceBubble: some View {
-        if hasActiveContent {
-            SentenceBubble(
-                content: bubbleContent,
-                isFinal: engine.activeGroup.sentence != nil,
-                isThinking: engine.isThinking
-            )
-        } else {
-            Color.clear
-        }
-    }
-
-    // MARK: - Divider
-
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.12))
-            .frame(height: 1)
-            .padding(.horizontal, 4)
-    }
-
-    // MARK: - Bottom row
-
-    private var historyRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .center, spacing: 8) {
-                // Closed groups: oldest first (left), newest last (right).
-                ForEach(Array(engine.groupHistory.reversed()), id: \.id) { group in
-                    HistoryGroupChip(
-                        group: group,
-                        onTap: { onReopenHistory(group.id) },
-                        onDelete: { onDeleteHistory(group.id) }
-                    )
-                    .id(group.id)
-                    .transition(.scale.combined(with: .opacity))
+                if let sentence = sentence {
+                    IPadSentenceBubble(text: sentence, onExpand: onExpandSentence)
+                } else if isThinking {
+                    IPadThinkingBubble()
+                } else {
+                    Color.clear
                 }
             }
-            .padding(.horizontal, 4)
         }
-        .frame(height: kHistoryRowHeight)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .frame(height: kCardHeight)
+        .background(TrayCardBackground(cornerRadius: 14))
+    }
+}
+
+/// Inline sentence bubble for the iPad active card. Same LeftTailBubble
+/// shape as the iPhone tray, sized up for the iPad's larger real estate.
+/// Still tappable to expand the full popover when the caregiver wants the
+/// big-text presentation.
+private struct IPadSentenceBubble: View {
+    let text: String
+    let onExpand: () -> Void
+
+    var body: some View {
+        Button(action: onExpand) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(text)
+                    .font(.title3.weight(.regular).italic())
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+            .padding(.leading, 20)
+            .padding(.trailing, 14)
+            .padding(.vertical, 12)
+            .background(
+                LeftTailBubble(cornerRadius: 14, tailWidth: 10, tailHeight: 16)
+                    .fill(Color(.tertiarySystemFill))
+            )
+            .overlay(
+                LeftTailBubble(cornerRadius: 14, tailWidth: 10, tailHeight: 16)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+            )
+            .contentShape(LeftTailBubble(cornerRadius: 14, tailWidth: 10, tailHeight: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sentence")
+        .accessibilityValue(text)
+        .accessibilityHint("Expand sentence")
+    }
+}
+
+/// Animated "thinking" placeholder for the iPad bubble, sized to match
+/// the IPadSentenceBubble's footprint so the active card doesn't reflow
+/// mid-generation.
+private struct IPadThinkingBubble: View {
+    @State private var phase: Int = 0
+    private let timer = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.secondary.opacity(phase == i ? 0.8 : 0.25))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 20)
+        .padding(.trailing, 14)
+        .padding(.vertical, 22)
+        .background(
+            LeftTailBubble(cornerRadius: 14, tailWidth: 10, tailHeight: 16)
+                .fill(Color(.tertiarySystemFill))
+        )
+        .onReceive(timer) { _ in
+            phase = (phase + 1) % 3
+        }
+    }
+}
+
+// MARK: - iPad nav cards (Home / Favorites)
+
+private struct IPadHomeCard: View {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "house.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Home")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(isEnabled ? .primary : .secondary)
+            .frame(width: kIPadNavCardWidth, height: kIPadNavCardHeight)
+            .background(TrayCardBackground(cornerRadius: kIPadNavCornerRadius))
+            .opacity(isEnabled ? 1.0 : 0.5)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel("Go home")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home")
+    }
+}
+
+private struct IPadFavoritesCard: View {
+    let count: Int
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isEnabled ? .orange : Color.orange.opacity(0.5))
+                Text("\(count)")
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(isEnabled ? .primary : .secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isEnabled ? .secondary : .tertiary)
+            }
+            .frame(width: kIPadNavCardWidth, height: kIPadNavCardHeight)
+            .background(TrayCardBackground(cornerRadius: kIPadNavCornerRadius))
+            .opacity(isEnabled ? 1.0 : 0.55)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel("Favorites")
+        .accessibilityValue("\(count)")
+        .accessibilityHint(isEnabled ? "Opens favorites" : "No favorites yet")
     }
 }
 
@@ -230,14 +421,25 @@ private struct ActiveTileCard: View {
 
 // MARK: - Primary play button
 
-private struct PrimaryPlayButton: View {
+struct PrimaryPlayButton: View {
     let canFire: Bool
     let isPulsing: Bool
     /// True when the active group is locked and tapping triggers an escalation-replay rather
     /// than first-time generation. The icon stays the play triangle either way; we add a small
     /// recycle badge in the top-right corner to mark replay mode.
     let isReplay: Bool
+    /// Number of replays already performed on the current active group. When > 0 the badge
+    /// turns into a small pill carrying the count, so the caregiver can see escalation depth
+    /// without watching the prompt logs.
+    var replayCount: Int = 0
+    /// Tighter sizing for the compact (iPhone) tray. iPad uses the default.
+    var compact: Bool = false
     let action: () -> Void
+
+    private var buttonWidth: CGFloat { compact ? 60 : kPlayButtonWidth }
+    private var buttonHeight: CGFloat { compact ? 44 : kPlayButtonHeight }
+    private var iconSize: CGFloat { compact ? 22 : 30 }
+    private var cornerRadius: CGFloat { compact ? 10 : 14 }
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var pulsePhase: Int = 0
@@ -271,38 +473,27 @@ private struct PrimaryPlayButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(Color(.systemBackground))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14)
+                        RoundedRectangle(cornerRadius: cornerRadius)
                             .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                     )
                     .shadow(color: haloColor, radius: haloRadius, y: 1)
 
                 Image(systemName: "play.fill")
-                    .font(.system(size: 30, weight: .semibold))
+                    .font(.system(size: iconSize, weight: .semibold))
                     .foregroundStyle(Color.blue)
                     .hueRotation(.degrees(hueRotation))
             }
             .overlay(alignment: .topTrailing) {
                 if isReplay {
-                    Image(systemName: "arrow.trianglehead.2.counterclockwise")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.orange)
-                        .padding(4)
-                        .background(
-                            Circle()
-                                .fill(Color(.systemBackground))
-                                .shadow(color: .black.opacity(0.15), radius: 1.5, y: 0.5)
-                        )
-                        .overlay(
-                            Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        )
-                        .padding(4)
+                    ReplayBadge(count: replayCount, compact: compact)
+                        .padding(compact ? 1 : 4)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            .frame(width: kPlayButtonWidth, height: kPlayButtonHeight)
+            .frame(width: buttonWidth, height: buttonHeight)
             .scaleEffect(pulseScale)
         }
         .buttonStyle(.plain)
@@ -353,15 +544,62 @@ private struct PrimaryPlayButton: View {
     }
 }
 
+// MARK: - Replay escalation badge
+
+/// Small badge attached to the play button's top-right corner when in
+/// replay mode. Starts as a circular recycle icon. Once the caregiver has
+/// hit replay at least once, the badge expands to a capsule carrying the
+/// escalation count next to the recycle glyph (e.g. `↺ 2`). Same visual
+/// language for iPad and iPhone — only the icon/text sizes differ.
+private struct ReplayBadge: View {
+    let count: Int
+    let compact: Bool
+
+    private var iconSize: CGFloat { compact ? 8 : 12 }
+    private var textSize: CGFloat { compact ? 9 : 12 }
+    private var innerPadding: CGFloat { compact ? 2 : 4 }
+
+    var body: some View {
+        HStack(spacing: compact ? 2 : 3) {
+            Image(systemName: "arrow.trianglehead.2.counterclockwise")
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(.orange)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.system(size: textSize, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.horizontal, count > 0 ? innerPadding + 1 : innerPadding)
+        .padding(.vertical, innerPadding)
+        .background(
+            Capsule()
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.15), radius: 1.5, y: 0.5)
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+        .animation(.easeInOut(duration: 0.2), value: count)
+    }
+}
+
 // MARK: - Done / commit button
 
-private struct DoneButton: View {
+struct DoneButton: View {
     let isEnabled: Bool
     /// Single binary trigger from the engine. Once true, the button drives its own escalating
     /// animation independent of any other clock: stage 0 (blue) → stage 1 (green) → stage 2
     /// (red), each ~2s apart, with progressively heavier border, font weight, and shadow.
     let isNudge: Bool
+    /// Tighter sizing for the compact (iPhone) tray. iPad uses the default.
+    var compact: Bool = false
     let action: () -> Void
+
+    private var buttonWidth: CGFloat { compact ? 60 : kPlayButtonWidth }
+    private var buttonHeight: CGFloat { compact ? 22 : kDoneButtonHeight }
+    private var cornerRadius: CGFloat { compact ? 10 : 8 }
 
     @State private var nudgeScale: CGFloat = 1.0
     @State private var nudgeStage: Int = 0
@@ -453,17 +691,17 @@ private struct DoneButton: View {
             .foregroundStyle(foreground)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(Color(.systemBackground))
                     .shadow(color: shadowColor.opacity(shadowOpacity), radius: shadowRadius, y: 0)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: cornerRadius)
                     .strokeBorder(borderColor, lineWidth: borderWidth)
             )
         }
         .buttonStyle(.plain)
-        .frame(width: kPlayButtonWidth, height: kDoneButtonHeight)
+        .frame(width: buttonWidth, height: buttonHeight)
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.5)
         .scaleEffect(nudgeScale)
@@ -496,53 +734,6 @@ private struct DoneButton: View {
                 nudgeScale = 1.0
             }
         }
-    }
-}
-
-// MARK: - Sentence bubble
-
-private struct SentenceBubble: View {
-    let content: String
-    /// True when the active group's sentence has been generated (post-Go or post-cap). When
-    /// false the bubble is showing a spelled-out preview of the selected tiles.
-    let isFinal: Bool
-    let isThinking: Bool
-
-    var body: some View {
-        Group {
-            if isThinking {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Generating…")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            } else if !content.isEmpty {
-                Text(content)
-                    .font(.title3)
-                    .fontWeight(isFinal ? .semibold : .regular)
-                    .foregroundStyle(isFinal ? Color.primary : Color.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Color.clear
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, kCardVerticalPadding)
-        .frame(height: kCardHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-        )
-        .animation(.easeInOut(duration: 0.2), value: content)
-        .animation(.easeInOut(duration: 0.2), value: isFinal)
     }
 }
 

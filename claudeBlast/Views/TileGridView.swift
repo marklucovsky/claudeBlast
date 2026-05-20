@@ -37,6 +37,19 @@ struct TileGridView: View {
 
     @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
 
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    @State private var compactOverlay: CompactOverlay = .none
+    @State private var overlayEpoch: Int = 0
+
+    private var isCompact: Bool { hSizeClass == .compact }
+
+    enum CompactOverlay: Equatable {
+        case none
+        case sentence
+        case history
+        case favorites
+    }
+
     private var activeScene: BlasterScene? { activeScenes.first }
 
     /// All tile keys reachable anywhere in the active scene.
@@ -65,46 +78,82 @@ struct TileGridView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SentenceTrayView(
-                onTileTap: { index in
-                    engine.removeTile(at: index)
-                },
-                onGo: {
-                    if recorder.state == .recording {
-                        recorder.recordPlay()
+            if isCompact {
+                CompactTrayStrip(
+                    onTileTap: { index in engine.removeTile(at: index) },
+                    onGo: {
+                        if recorder.state == .recording { recorder.recordPlay() }
+                        engine.triggerGo()
+                    },
+                    onReplay: {
+                        if recorder.state == .recording { recorder.recordReplay() }
+                        engine.replay()
+                    },
+                    onCommitActive: { engine.commitActiveAndStartNew() },
+                    onShowSentence: { showCompactOverlay(.sentence) },
+                    onShowHistory: { showCompactOverlay(.history) },
+                    onShowFavorites: { showCompactOverlay(.favorites) },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    isAtHome: coordinator.navigationPath.count <= 1,
+                    favoritesCount: min(promotedEntries.count, 99),
+                    isSentenceShown: compactOverlay == .sentence,
+                    isHistoryShown: compactOverlay == .history,
+                    isFavoritesShown: compactOverlay == .favorites
+                )
+            } else {
+                SentenceTrayView(
+                    onTileTap: { index in
+                        engine.removeTile(at: index)
+                    },
+                    onGo: {
+                        if recorder.state == .recording {
+                            recorder.recordPlay()
+                        }
+                        engine.triggerGo()
+                    },
+                    onReplay: {
+                        if recorder.state == .recording {
+                            recorder.recordReplay()
+                        }
+                        engine.replay()
+                    },
+                    onReopenHistory: { id in
+                        if recorder.state == .recording {
+                            recorder.recordReplay()
+                        }
+                        engine.reopenHistoryGroup(id: id)
+                    },
+                    onDeleteHistory: { id in
+                        engine.deleteHistoryGroup(id: id)
+                    },
+                    onExpandSentence: { showCompactOverlay(.sentence) },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    onShowFavorites: { showCompactOverlay(.favorites) },
+                    isAtHome: coordinator.navigationPath.count <= 1,
+                    favoritesCount: min(promotedEntries.count, 99),
+                    isSentenceShown: compactOverlay == .sentence,
+                    isFavoritesShown: compactOverlay == .favorites,
+                    onDismissActive: {
+                        engine.clearSelection()
+                    },
+                    onCommitActive: {
+                        engine.commitActiveAndStartNew()
                     }
-                    engine.triggerGo()
-                },
-                onReplay: {
-                    if recorder.state == .recording {
-                        recorder.recordReplay()
-                    }
-                    engine.replay()
-                },
-                onReopenHistory: { id in
-                    if recorder.state == .recording {
-                        recorder.recordReplay()
-                    }
-                    engine.reopenHistoryGroup(id: id)
-                },
-                onDeleteHistory: { id in
-                    engine.deleteHistoryGroup(id: id)
-                },
-                onDismissActive: {
-                    engine.clearSelection()
-                },
-                onCommitActive: {
-                    engine.commitActiveAndStartNew()
-                }
-            )
-            .padding(.top, 8)
-
-            if coordinator.navigationPath.count > 1 || !promotedEntries.isEmpty {
-                navBar
+                )
+                .padding(.top, 8)
             }
 
             if let page = currentPage {
                 pagedGrid(for: page)
+                    .overlay(alignment: .top) {
+                        compactOverlayContent
+                    }
             } else {
                 ContentUnavailableView(
                     "No Active Scene",
@@ -118,6 +167,25 @@ struct TileGridView: View {
                 TileScriptPlaybackOverlay()
             } else {
                 TileScriptRecordingOverlay()
+            }
+        }
+        .onChange(of: engine.canReplay) { _, isReady in
+            guard isCompact else { return }
+            if isReady {
+                // Auto-pop the sentence overlay when a sentence becomes ready,
+                // unless the caregiver is currently browsing history (don't interrupt).
+                if compactOverlay != .history { showCompactOverlay(.sentence) }
+            } else if compactOverlay == .sentence {
+                dismissCompactOverlay()
+            }
+        }
+        .task(id: overlayEpoch) {
+            // Only the sentence overlay auto-dismisses. History stays until tapped.
+            guard isCompact, compactOverlay == .sentence else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                if compactOverlay == .sentence { compactOverlay = .none }
             }
         }
         .task {
@@ -287,7 +355,7 @@ struct TileGridView: View {
                 }
             }
             #if DEBUG
-            .overlay(alignment: .topTrailing) {
+            .overlay(alignment: .centerLastTextBaseline) {
                 gridDebugBadge(spec: spec, tileCount: page.orderedTiles.count)
             }
             #endif
@@ -295,6 +363,57 @@ struct TileGridView: View {
                 currentDisplayPage = 0
             }
         }
+    }
+
+    // MARK: - Compact (iPhone) overlays
+
+    @ViewBuilder
+    private var compactOverlayContent: some View {
+        switch compactOverlay {
+        case .none:
+            EmptyView()
+        case .sentence:
+            if let sentence = engine.activeGroup.sentence {
+                GlassSentencePopover(
+                    sentence: sentence,
+                    onDismiss: { dismissCompactOverlay() }
+                )
+                .allowsHitTesting(true)
+            }
+        case .history:
+            let groups = engine.groupHistory.filter { $0.sentence != nil }
+            if !groups.isEmpty {
+                GlassHistoryOverlay(
+                    groups: groups,
+                    onReopen: { id in
+                        if recorder.state == .recording { recorder.recordReplay() }
+                        engine.reopenHistoryGroup(id: id)
+                        dismissCompactOverlay()
+                    },
+                    onDelete: { id in engine.deleteHistoryGroup(id: id) },
+                    onDismiss: { dismissCompactOverlay() }
+                )
+                .allowsHitTesting(true)
+            }
+        case .favorites:
+            GlassFavoritesOverlay(
+                entries: Array(promotedEntries.prefix(12)),
+                sceneKeySet: sceneKeySet,
+                tileWordClass: tileWordClass,
+                onPlay: { entry in engine.speakPromoted(entry) },
+                onDismiss: { dismissCompactOverlay() }
+            )
+            .allowsHitTesting(true)
+        }
+    }
+
+    private func showCompactOverlay(_ kind: CompactOverlay) {
+        withAnimation(.spring(duration: 0.35)) { compactOverlay = kind }
+        overlayEpoch &+= 1
+    }
+
+    private func dismissCompactOverlay() {
+        withAnimation(.easeOut(duration: 0.25)) { compactOverlay = .none }
     }
 
     #if DEBUG
@@ -429,7 +548,7 @@ struct TileGridView: View {
 // MARK: - Promoted Tile Strip
 
 /// Horizontal scroll of promoted chips — shown when expanded from the nav bar.
-private struct PromotedChipStrip: View {
+struct PromotedChipStrip: View {
     let entries: [SentenceCache]
     let sceneKeySet: Set<String>
     let tileWordClass: [String: String]
