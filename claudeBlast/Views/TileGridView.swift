@@ -35,10 +35,19 @@ struct TileGridView: View {
     @State private var showNoteAlert: Bool = false
     @State private var promotedExpanded: Bool = false
 
-    @AppStorage(AppSettingsKey.tileMinSize) private var tileMinSize: Double = 72
+    @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
 
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: CGFloat(tileMinSize)), spacing: 6)]
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    @State private var compactOverlay: CompactOverlay = .none
+    @State private var overlayEpoch: Int = 0
+
+    private var isCompact: Bool { hSizeClass == .compact }
+
+    enum CompactOverlay: Equatable {
+        case none
+        case sentence
+        case history
+        case favorites
     }
 
     private var activeScene: BlasterScene? { activeScenes.first }
@@ -69,46 +78,82 @@ struct TileGridView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SentenceTrayView(
-                onTileTap: { index in
-                    engine.removeTile(at: index)
-                },
-                onGo: {
-                    if recorder.state == .recording {
-                        recorder.recordPlay()
+            if isCompact {
+                CompactTrayStrip(
+                    onTileTap: { index in engine.removeTile(at: index) },
+                    onGo: {
+                        if recorder.state == .recording { recorder.recordPlay() }
+                        engine.triggerGo()
+                    },
+                    onReplay: {
+                        if recorder.state == .recording { recorder.recordReplay() }
+                        engine.replay()
+                    },
+                    onCommitActive: { engine.commitActiveAndStartNew() },
+                    onShowSentence: { showCompactOverlay(.sentence) },
+                    onShowHistory: { showCompactOverlay(.history) },
+                    onShowFavorites: { showCompactOverlay(.favorites) },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    isAtHome: coordinator.navigationPath.count <= 1,
+                    favoritesCount: min(promotedEntries.count, 99),
+                    isSentenceShown: compactOverlay == .sentence,
+                    isHistoryShown: compactOverlay == .history,
+                    isFavoritesShown: compactOverlay == .favorites
+                )
+            } else {
+                SentenceTrayView(
+                    onTileTap: { index in
+                        engine.removeTile(at: index)
+                    },
+                    onGo: {
+                        if recorder.state == .recording {
+                            recorder.recordPlay()
+                        }
+                        engine.triggerGo()
+                    },
+                    onReplay: {
+                        if recorder.state == .recording {
+                            recorder.recordReplay()
+                        }
+                        engine.replay()
+                    },
+                    onReopenHistory: { id in
+                        if recorder.state == .recording {
+                            recorder.recordReplay()
+                        }
+                        engine.reopenHistoryGroup(id: id)
+                    },
+                    onDeleteHistory: { id in
+                        engine.deleteHistoryGroup(id: id)
+                    },
+                    onExpandSentence: { showCompactOverlay(.sentence) },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    onShowFavorites: { showCompactOverlay(.favorites) },
+                    isAtHome: coordinator.navigationPath.count <= 1,
+                    favoritesCount: min(promotedEntries.count, 99),
+                    isSentenceShown: compactOverlay == .sentence,
+                    isFavoritesShown: compactOverlay == .favorites,
+                    onDismissActive: {
+                        engine.clearSelection()
+                    },
+                    onCommitActive: {
+                        engine.commitActiveAndStartNew()
                     }
-                    engine.triggerGo()
-                },
-                onReplay: {
-                    if recorder.state == .recording {
-                        recorder.recordReplay()
-                    }
-                    engine.replay()
-                },
-                onReopenHistory: { id in
-                    if recorder.state == .recording {
-                        recorder.recordReplay()
-                    }
-                    engine.reopenHistoryGroup(id: id)
-                },
-                onDeleteHistory: { id in
-                    engine.deleteHistoryGroup(id: id)
-                },
-                onDismissActive: {
-                    engine.clearSelection()
-                },
-                onCommitActive: {
-                    engine.commitActiveAndStartNew()
-                }
-            )
-            .padding(.top, 8)
-
-            if coordinator.navigationPath.count > 1 || !promotedEntries.isEmpty {
-                navBar
+                )
+                .padding(.top, 8)
             }
 
             if let page = currentPage {
                 pagedGrid(for: page)
+                    .overlay(alignment: .top) {
+                        compactOverlayContent
+                    }
             } else {
                 ContentUnavailableView(
                     "No Active Scene",
@@ -122,6 +167,25 @@ struct TileGridView: View {
                 TileScriptPlaybackOverlay()
             } else {
                 TileScriptRecordingOverlay()
+            }
+        }
+        .onChange(of: engine.canReplay) { _, isReady in
+            guard isCompact else { return }
+            if isReady {
+                // Auto-pop the sentence overlay when a sentence becomes ready,
+                // unless the caregiver is currently browsing history (don't interrupt).
+                if compactOverlay != .history { showCompactOverlay(.sentence) }
+            } else if compactOverlay == .sentence {
+                dismissCompactOverlay()
+            }
+        }
+        .task(id: overlayEpoch) {
+            // Only the sentence overlay auto-dismisses. History stays until tapped.
+            guard isCompact, compactOverlay == .sentence else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                if compactOverlay == .sentence { compactOverlay = .none }
             }
         }
         .task {
@@ -277,50 +341,104 @@ struct TileGridView: View {
     private func pagedGrid(for page: PageModel) -> some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
-            let count = tilesPerPage(geo: geo, isLandscape: isLandscape)
-            let chunkedTiles = page.orderedTiles.chunked(into: count)
+            let spec = GridLayoutCalculator.compute(
+                screenSize: UIScreen.main.bounds.size,
+                geo: geo.size,
+                userStep: tileSizeStep
+            )
+            let chunkedTiles = page.orderedTiles.chunked(into: spec.perPage)
             Group {
                 if isLandscape {
-                    landscapeTabView(chunks: chunkedTiles)
+                    landscapeTabView(chunks: chunkedTiles, spec: spec)
                 } else {
-                    portraitScrollView(chunks: chunkedTiles, pageHeight: geo.size.height)
+                    portraitScrollView(chunks: chunkedTiles, pageHeight: geo.size.height, spec: spec)
                 }
             }
+            #if DEBUG
+            .overlay(alignment: .centerLastTextBaseline) {
+                gridDebugBadge(spec: spec, tileCount: page.orderedTiles.count)
+            }
+            #endif
             .onChange(of: isLandscape) { _, _ in
                 currentDisplayPage = 0
             }
         }
     }
 
-    /// Compute how many tiles fit on one page given the available geometry.
-    private func tilesPerPage(geo: GeometryProxy, isLandscape: Bool) -> Int {
-        let hPad: CGFloat = 32   // 16pt padding each side
-        let vPad: CGFloat = 8
-        let spacing: CGFloat = 6
-        let minTile = CGFloat(tileMinSize)
-        let labelH: CGFloat = 13 // 11pt font line height + ~2pt margin (VStack spacing: 0)
-
-        let availW = geo.size.width - hPad
-        let availH = geo.size.height - vPad
-
-        let cols = max(1, Int((availW + spacing) / (minTile + spacing)))
-        let tileW = (availW - CGFloat(cols - 1) * spacing) / CGFloat(cols)
-        let tileH = tileW + labelH  // image is 1:1 square + label
-
-        let rows = max(1, Int((availH + spacing) / (tileH + spacing)))
-        #if DEBUG
-        print("[TileGrid] geo=\(Int(geo.size.width))×\(Int(geo.size.height)) cols=\(cols) tileW=\(Int(tileW)) tileH=\(Int(tileH)) rows=\(rows) total=\(cols * rows)")
-        #endif
-        return cols * rows
-    }
+    // MARK: - Compact (iPhone) overlays
 
     @ViewBuilder
-    private func landscapeTabView(chunks: [[PageTileModel]]) -> some View {
+    private var compactOverlayContent: some View {
+        switch compactOverlay {
+        case .none:
+            EmptyView()
+        case .sentence:
+            if let sentence = engine.activeGroup.sentence {
+                GlassSentencePopover(
+                    sentence: sentence,
+                    onDismiss: { dismissCompactOverlay() }
+                )
+                .allowsHitTesting(true)
+            }
+        case .history:
+            let groups = engine.groupHistory.filter { $0.sentence != nil }
+            if !groups.isEmpty {
+                GlassHistoryOverlay(
+                    groups: groups,
+                    onReopen: { id in
+                        if recorder.state == .recording { recorder.recordReplay() }
+                        engine.reopenHistoryGroup(id: id)
+                        dismissCompactOverlay()
+                    },
+                    onDelete: { id in engine.deleteHistoryGroup(id: id) },
+                    onDismiss: { dismissCompactOverlay() }
+                )
+                .allowsHitTesting(true)
+            }
+        case .favorites:
+            GlassFavoritesOverlay(
+                entries: Array(promotedEntries.prefix(12)),
+                sceneKeySet: sceneKeySet,
+                tileWordClass: tileWordClass,
+                onPlay: { entry in engine.speakPromoted(entry) },
+                onDismiss: { dismissCompactOverlay() }
+            )
+            .allowsHitTesting(true)
+        }
+    }
+
+    private func showCompactOverlay(_ kind: CompactOverlay) {
+        withAnimation(.spring(duration: 0.35)) { compactOverlay = kind }
+        overlayEpoch &+= 1
+    }
+
+    private func dismissCompactOverlay() {
+        withAnimation(.easeOut(duration: 0.25)) { compactOverlay = .none }
+    }
+
+    #if DEBUG
+    @ViewBuilder
+    private func gridDebugBadge(spec: GridLayoutSpec, tileCount: Int) -> some View {
+        let pages = max(1, Int(ceil(Double(tileCount) / Double(max(1, spec.perPage)))))
+        Text("\(spec.cols)×\(spec.rows) · \(spec.perPage)/pg · \(tileCount)t/\(pages)p · \(Int(spec.tileSize))pt")
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(6)
+            .allowsHitTesting(false)
+    }
+    #endif
+
+    @ViewBuilder
+    private func landscapeTabView(chunks: [[PageTileModel]], spec: GridLayoutSpec) -> some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: spec.cols)
         TabView(selection: $currentDisplayPage) {
             ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
-                LazyVGrid(columns: columns, spacing: 6) {
+                LazyVGrid(columns: columns, spacing: spec.verticalSpacing) {
                     ForEach(tiles) { pageTile in
-                        tileCellView(for: pageTile)
+                        tileCellView(for: pageTile, labelFontSize: spec.labelFontSize)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -336,16 +454,17 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
-    private func portraitScrollView(chunks: [[PageTileModel]], pageHeight: CGFloat) -> some View {
+    private func portraitScrollView(chunks: [[PageTileModel]], pageHeight: CGFloat, spec: GridLayoutSpec) -> some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: spec.cols)
         ScrollView {
             // VStack (not Lazy) ensures all page frames are committed upfront,
             // giving scrollTargetBehavior(.paging) correct snap offsets and
             // preventing layout artifacts on pages beyond the first.
             VStack(spacing: 0) {
                 ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
-                    LazyVGrid(columns: columns, spacing: 6) {
+                    LazyVGrid(columns: columns, spacing: spec.verticalSpacing) {
                         ForEach(tiles) { pageTile in
-                            tileCellView(for: pageTile)
+                            tileCellView(for: pageTile, labelFontSize: spec.labelFontSize)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -367,10 +486,11 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
-    private func tileCellView(for pageTile: PageTileModel) -> some View {
+    private func tileCellView(for pageTile: PageTileModel, labelFontSize: CGFloat) -> some View {
         TileView(
             pageTile: pageTile,
-            isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key }
+            isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key },
+            labelFontSize: labelFontSize
         ) { handleTileTap(pageTile) }
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.5)
@@ -428,7 +548,7 @@ struct TileGridView: View {
 // MARK: - Promoted Tile Strip
 
 /// Horizontal scroll of promoted chips — shown when expanded from the nav bar.
-private struct PromotedChipStrip: View {
+struct PromotedChipStrip: View {
     let entries: [SentenceCache]
     let sceneKeySet: Set<String>
     let tileWordClass: [String: String]

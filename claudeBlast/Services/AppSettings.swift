@@ -16,7 +16,10 @@ enum AppSettingsKey {
     static let audioEnabled          = "audio_enabled"
     static let tileSpeechEnabled     = "tile_speech_enabled"
     static let speechVoiceIdentifier = "speech_voice_identifier"
+    // Deprecated: superseded by `tileSizeStep`. Left declared so the
+    // UserDefaults key isn't accidentally reused for an unrelated setting.
     static let tileMinSize           = "tile_min_size"
+    static let tileSizeStep          = "tile_size_step"
     static let compareProviders      = "compare_providers"
     static let devShowNav            = "dev_show_nav"
     static let imageSet              = "image_set"

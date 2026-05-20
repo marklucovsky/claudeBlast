@@ -118,7 +118,10 @@ final class SentenceEngine {
     // MARK: - Internal state
 
     private var debounceTask: Task<Void, Never>?
-    private var repetitionCount: Int = 0
+    /// Number of consecutive replays / repeats on the current active group.
+    /// Resets when the user starts a new selection. Surfaced to the UI as
+    /// the escalation counter next to the play button's replay badge.
+    private(set) var repetitionCount: Int = 0
     private var lastTileKey: String?
     private let maxConversationHistory = 5
     private let maxHistorySheetEntries = 10
