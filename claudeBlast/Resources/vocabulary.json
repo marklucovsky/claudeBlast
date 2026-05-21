@@ -1985,5 +1985,9 @@
   {
     "key": "it",
     "wordClass": "core"
+  },
+  {
+    "key": "toilet",
+    "wordClass": "social"
   }
 ]

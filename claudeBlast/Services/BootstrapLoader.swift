@@ -194,11 +194,11 @@ enum BootstrapLoader {
             starterScene.pages = [starterHomePage, starterPeoplePage, starterFoodPage]
             let starterAllTiles = starterHomeTiles + starterPeopleTiles + starterFoodTiles
 
-            // Core-First — the new default scene. MVP layout: 6×4 home with
-            // category links, pronouns, high-frequency verbs, and modifiers.
-            // Reuses Legacy Default's topic pages (people/social/actions/...) as
-            // link targets — the legacy "home" page is filtered out so Core-First's
-            // own core_home is the only landing page in this scene.
+            // Core-First — the new default scene. Layout: 6×6 home with
+            // categories, family, pronouns, verbs, modifiers, and immediate-needs
+            // rows. Reuses Legacy Default's topic pages (people/social/actions/...)
+            // as link targets; the legacy "home" page is filtered out so
+            // Core-First's own core_home is the only landing page in this scene.
             let coreFirstHomeSpecs: [(String, String, Bool)] = [
                 // Row 1 — category links (audible=false; navigate to topic page)
                 ("people",   "people",   false),
@@ -207,15 +207,21 @@ enum BootstrapLoader {
                 ("describe", "describe", false),
                 ("food",     "food",     false),
                 ("drinks",   "drinks",   false),
-                // Row 2 — pronouns
-                ("i",        "", true), ("you",   "", true), ("me",  "", true),
-                ("my",       "", true), ("your",  "", true), ("it",  "", true),
-                // Row 3 — high-frequency verbs
-                ("want",     "", true), ("eat",   "", true), ("drink", "", true),
-                ("play",     "", true), ("go",    "", true), ("help",  "", true),
-                // Row 4 — modifiers + state
-                ("more",     "", true), ("here",  "", true), ("that",  "", true),
-                ("all",      "", true), ("all_done", "", true), ("yes",  "", true),
+                // Row 2 — family (high-frequency people)
+                ("mom",      "", true), ("dad",     "", true), ("sister",  "", true),
+                ("brother",  "", true), ("grandma", "", true), ("grandpa", "", true),
+                // Row 3 — pronouns
+                ("i",        "", true), ("you",     "", true), ("me",      "", true),
+                ("my",       "", true), ("your",    "", true), ("it",      "", true),
+                // Row 4 — high-frequency verbs
+                ("want",     "", true), ("eat",     "", true), ("drink",   "", true),
+                ("play",     "", true), ("go",      "", true), ("help",    "", true),
+                // Row 5 — modifiers + state
+                ("more",     "", true), ("here",    "", true), ("that",    "", true),
+                ("all",      "", true), ("all_done","", true), ("again",   "", true),
+                // Row 6 — immediate needs / yes-no
+                ("yes",      "", true), ("no",      "", true), ("toilet",  "", true),
+                ("hungry",   "", true), ("thirsty", "", true), ("tired",   "", true),
             ]
             let coreFirstHomeTiles: [PageTileModel] = coreFirstHomeSpecs
                 .compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
