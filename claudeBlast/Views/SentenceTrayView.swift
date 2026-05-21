@@ -818,6 +818,7 @@ func wordClassColor(_ wordClass: String) -> Color {
     case "toy", "games", "sports":              return .yellow
     case "art":                                 return Color(red: 0.7, green: 0.4, blue: 0.8)
     case "play":                                return .yellow
+    case "core":                                return Color(red: 0.95, green: 0.88, blue: 0.55)
     default:                                    return .gray
     }
 }

@@ -1913,5 +1913,77 @@
   {
     "key": "i_love_it",
     "wordClass": "social"
+  },
+  {
+    "key": "in",
+    "wordClass": "core"
+  },
+  {
+    "key": "on",
+    "wordClass": "core"
+  },
+  {
+    "key": "off",
+    "wordClass": "core"
+  },
+  {
+    "key": "out",
+    "wordClass": "core"
+  },
+  {
+    "key": "up",
+    "wordClass": "core"
+  },
+  {
+    "key": "down",
+    "wordClass": "core"
+  },
+  {
+    "key": "with",
+    "wordClass": "core"
+  },
+  {
+    "key": "for",
+    "wordClass": "core"
+  },
+  {
+    "key": "that",
+    "wordClass": "core"
+  },
+  {
+    "key": "all",
+    "wordClass": "core"
+  },
+  {
+    "key": "here",
+    "wordClass": "core"
+  },
+  {
+    "key": "all_done",
+    "wordClass": "core"
+  },
+  {
+    "key": "i",
+    "wordClass": "core"
+  },
+  {
+    "key": "me",
+    "wordClass": "core"
+  },
+  {
+    "key": "my",
+    "wordClass": "core"
+  },
+  {
+    "key": "you",
+    "wordClass": "core"
+  },
+  {
+    "key": "your",
+    "wordClass": "core"
+  },
+  {
+    "key": "it",
+    "wordClass": "core"
   }
 ]
