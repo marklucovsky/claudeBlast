@@ -42,7 +42,7 @@ enum BootstrapLoader {
     static func loadDefaultVocabulary(context: ModelContext) -> LoadResult {
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        let emptyScene = BlasterScene(name: "Default", isDefault: true, isActive: true)
+        let emptyScene = BlasterScene(name: "Legacy Default", isDefault: true, isActive: true)
 
         guard let vocabularyUrl = Bundle.main.url(forResource: "vocabulary", withExtension: "json") else {
             print("Failed to locate vocabulary.json in bundle.")
@@ -97,9 +97,12 @@ enum BootstrapLoader {
                 )
             }
 
+            // Legacy Default — the original bundled scene. Kept as the active default
+            // here; the Core-First scene (added in a later commit) will take over
+            // `isDefault: true, isActive: true` and demote this to false/false.
             let defaultScene = BlasterScene(
-                name: "Default",
-                descriptionText: "Built-in vocabulary",
+                name: "Legacy Default",
+                descriptionText: "Original bundled vocabulary",
                 homePageKey: "home",
                 isDefault: true,
                 isActive: true
