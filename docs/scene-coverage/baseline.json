@@ -1,0 +1,413 @@
+{
+  "generated_at": "2026-05-21",
+  "source_files": {
+    "vocabulary": "claudeBlast/Resources/vocabulary.json",
+    "pages": "claudeBlast/Resources/pages.json"
+  },
+  "totals": {
+    "pages": 12,
+    "tile_instances": 491,
+    "unique_keys_used": 453,
+    "vocabulary_size": 476,
+    "orphan_count": 23,
+    "total_links": 29
+  },
+  "whole_graph_histogram": {
+    "instances": {
+      "actions": 119,
+      "describe": 114,
+      "social": 40,
+      "places": 36,
+      "people": 25,
+      "meals": 19,
+      "weather": 16,
+      "colors": 15,
+      "navigation": 14,
+      "drinks": 11,
+      "fruit": 9,
+      "veggie": 9,
+      "snacks": 9,
+      "art": 9,
+      "body": 9,
+      "shape": 9,
+      "toy": 8,
+      "sports": 6,
+      "health": 6,
+      "feeling": 4,
+      "games": 3,
+      "question": 1
+    },
+    "total": 491
+  },
+  "unique_keys_per_class": {
+    "describe": 112,
+    "actions": 108,
+    "places": 36,
+    "social": 34,
+    "people": 20,
+    "meals": 19,
+    "weather": 16,
+    "colors": 15,
+    "drinks": 10,
+    "fruit": 9,
+    "veggie": 9,
+    "snacks": 9,
+    "art": 9,
+    "body": 9,
+    "shape": 9,
+    "toy": 8,
+    "sports": 6,
+    "health": 6,
+    "navigation": 3,
+    "games": 3,
+    "feeling": 2,
+    "question": 1
+  },
+  "home_direct_access_coverage": [
+    {
+      "class": "describe",
+      "on_home": 3,
+      "total_unique": 112,
+      "pct_direct_access": 2.7
+    },
+    {
+      "class": "actions",
+      "on_home": 12,
+      "total_unique": 108,
+      "pct_direct_access": 11.1
+    },
+    {
+      "class": "places",
+      "on_home": 1,
+      "total_unique": 36,
+      "pct_direct_access": 2.8
+    },
+    {
+      "class": "social",
+      "on_home": 7,
+      "total_unique": 34,
+      "pct_direct_access": 20.6
+    },
+    {
+      "class": "people",
+      "on_home": 6,
+      "total_unique": 20,
+      "pct_direct_access": 30.0
+    },
+    {
+      "class": "meals",
+      "on_home": 0,
+      "total_unique": 19,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "weather",
+      "on_home": 1,
+      "total_unique": 16,
+      "pct_direct_access": 6.2
+    },
+    {
+      "class": "colors",
+      "on_home": 1,
+      "total_unique": 15,
+      "pct_direct_access": 6.7
+    },
+    {
+      "class": "drinks",
+      "on_home": 1,
+      "total_unique": 10,
+      "pct_direct_access": 10.0
+    },
+    {
+      "class": "fruit",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "veggie",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "snacks",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "art",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "body",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "shape",
+      "on_home": 0,
+      "total_unique": 9,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "toy",
+      "on_home": 0,
+      "total_unique": 8,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "sports",
+      "on_home": 0,
+      "total_unique": 6,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "health",
+      "on_home": 0,
+      "total_unique": 6,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "navigation",
+      "on_home": 2,
+      "total_unique": 3,
+      "pct_direct_access": 66.7
+    },
+    {
+      "class": "games",
+      "on_home": 0,
+      "total_unique": 3,
+      "pct_direct_access": 0.0
+    },
+    {
+      "class": "feeling",
+      "on_home": 1,
+      "total_unique": 2,
+      "pct_direct_access": 50.0
+    },
+    {
+      "class": "question",
+      "on_home": 0,
+      "total_unique": 1,
+      "pct_direct_access": 0.0
+    }
+  ],
+  "per_page": [
+    {
+      "key": "home",
+      "tile_count": 35,
+      "link_count": 13,
+      "class_histogram": {
+        "actions": 12,
+        "social": 7,
+        "people": 6,
+        "describe": 3,
+        "navigation": 2,
+        "colors": 1,
+        "drinks": 1,
+        "feeling": 1,
+        "places": 1,
+        "weather": 1
+      },
+      "link_targets": [
+        "actions",
+        "body_health",
+        "colors_shapes",
+        "describe",
+        "drinks",
+        "food",
+        "people",
+        "places",
+        "play_activities",
+        "social",
+        "weather"
+      ]
+    },
+    {
+      "key": "people",
+      "tile_count": 20,
+      "link_count": 1,
+      "class_histogram": {
+        "people": 19,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "social",
+      "tile_count": 36,
+      "link_count": 1,
+      "class_histogram": {
+        "social": 32,
+        "feeling": 2,
+        "navigation": 1,
+        "question": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "actions",
+      "tile_count": 108,
+      "link_count": 4,
+      "class_histogram": {
+        "actions": 107,
+        "navigation": 1
+      },
+      "link_targets": [
+        "drinks",
+        "food",
+        "home",
+        "play_activities"
+      ]
+    },
+    {
+      "key": "describe",
+      "tile_count": 114,
+      "link_count": 1,
+      "class_histogram": {
+        "describe": 111,
+        "feeling": 1,
+        "navigation": 1,
+        "social": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "food",
+      "tile_count": 48,
+      "link_count": 2,
+      "class_histogram": {
+        "meals": 19,
+        "fruit": 9,
+        "snacks": 9,
+        "veggie": 9,
+        "drinks": 1,
+        "navigation": 1
+      },
+      "link_targets": [
+        "drinks",
+        "home"
+      ]
+    },
+    {
+      "key": "drinks",
+      "tile_count": 11,
+      "link_count": 2,
+      "class_histogram": {
+        "drinks": 9,
+        "navigation": 2
+      },
+      "link_targets": [
+        "food",
+        "home"
+      ]
+    },
+    {
+      "key": "places",
+      "tile_count": 36,
+      "link_count": 1,
+      "class_histogram": {
+        "places": 35,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "play_activities",
+      "tile_count": 27,
+      "link_count": 1,
+      "class_histogram": {
+        "art": 9,
+        "toy": 8,
+        "sports": 6,
+        "games": 3,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "body_health",
+      "tile_count": 16,
+      "link_count": 1,
+      "class_histogram": {
+        "body": 9,
+        "health": 6,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "colors_shapes",
+      "tile_count": 24,
+      "link_count": 1,
+      "class_histogram": {
+        "colors": 14,
+        "shape": 9,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    },
+    {
+      "key": "weather",
+      "tile_count": 16,
+      "link_count": 1,
+      "class_histogram": {
+        "weather": 15,
+        "navigation": 1
+      },
+      "link_targets": [
+        "home"
+      ]
+    }
+  ],
+  "orphan_vocabulary_keys": [
+    "art",
+    "basketball",
+    "body",
+    "fruit",
+    "games",
+    "goldfish_cracker",
+    "graham_cracker",
+    "health",
+    "meals",
+    "next_page",
+    "popsicle",
+    "pretzel",
+    "previous_page",
+    "quiet",
+    "shape",
+    "slide",
+    "snack",
+    "snack_bar",
+    "snacks",
+    "sports",
+    "toy",
+    "tricycle",
+    "veggie"
+  ],
+  "notes": [
+    "Only 11% of action vocabulary is directly accessible from home (12 of 108).",
+    "23 vocabulary entries are not referenced by any page.",
+    "Only 5 of 12 pages are mixed-class (home, food, play_activities, body_health, colors_shapes); the rest are mono-class.",
+    "No grammatical-glue vocabulary (pronouns, articles, prepositions, copula, modals, question-words) exists yet."
+  ]
+}
