@@ -97,15 +97,14 @@ enum BootstrapLoader {
                 )
             }
 
-            // Legacy Default — the original bundled scene. Kept as the active default
-            // here; the Core-First scene (added in a later commit) will take over
-            // `isDefault: true, isActive: true` and demote this to false/false.
+            // Legacy Default — the original bundled scene. Demoted: the Core-First
+            // scene below now owns `isDefault: true, isActive: true`.
             let defaultScene = BlasterScene(
                 name: "Legacy Default",
                 descriptionText: "Original bundled vocabulary",
                 homePageKey: "home",
-                isDefault: true,
-                isActive: true
+                isDefault: false,
+                isActive: false
             )
             defaultScene.pages = allPages
 
@@ -195,6 +194,49 @@ enum BootstrapLoader {
             starterScene.pages = [starterHomePage, starterPeoplePage, starterFoodPage]
             let starterAllTiles = starterHomeTiles + starterPeopleTiles + starterFoodTiles
 
+            // Core-First — the new default scene. MVP layout: 6×4 home with
+            // category links, pronouns, high-frequency verbs, and modifiers.
+            // Reuses Legacy Default's topic pages (people/social/actions/...) as
+            // link targets — the legacy "home" page is filtered out so Core-First's
+            // own core_home is the only landing page in this scene.
+            let coreFirstHomeSpecs: [(String, String, Bool)] = [
+                // Row 1 — category links (audible=false; navigate to topic page)
+                ("people",   "people",   false),
+                ("social",   "social",   false),
+                ("actions",  "actions",  false),
+                ("describe", "describe", false),
+                ("food",     "food",     false),
+                ("drinks",   "drinks",   false),
+                // Row 2 — pronouns
+                ("i",        "", true), ("you",   "", true), ("me",  "", true),
+                ("my",       "", true), ("your",  "", true), ("it",  "", true),
+                // Row 3 — high-frequency verbs
+                ("want",     "", true), ("eat",   "", true), ("drink", "", true),
+                ("play",     "", true), ("go",    "", true), ("help",  "", true),
+                // Row 4 — modifiers + state
+                ("more",     "", true), ("here",  "", true), ("that",  "", true),
+                ("all",      "", true), ("all_done", "", true), ("yes",  "", true),
+            ]
+            let coreFirstHomeTiles: [PageTileModel] = coreFirstHomeSpecs
+                .compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
+            let coreFirstHomePage = PageModel.make(
+                displayName: "core_home",
+                tiles: coreFirstHomeTiles,
+                tileOrder: coreFirstHomeTiles.map(\.id)
+            )
+
+            let coreFirstScene = BlasterScene(
+                name: "Core-First",
+                descriptionText: "High-reach home with pronouns, verbs, and category links",
+                homePageKey: "core_home",
+                isDefault: true,
+                isActive: true
+            )
+            // Share Legacy Default's topic pages; drop the legacy `home` page since
+            // Core-First's `core_home` replaces it.
+            let topicPagesForCoreFirst = allPages.filter { $0.displayName != "home" }
+            coreFirstScene.pages = [coreFirstHomePage] + topicPagesForCoreFirst
+
             try context.transaction {
                 for tile in allTiles {
                     context.insert(tile)
@@ -203,6 +245,9 @@ enum BootstrapLoader {
                     context.insert(page)
                 }
                 context.insert(defaultScene)
+                for pt in coreFirstHomeTiles { context.insert(pt) }
+                context.insert(coreFirstHomePage)
+                context.insert(coreFirstScene)
                 for pt in reviewPageTiles { context.insert(pt) }
                 context.insert(reviewPage)
                 context.insert(reviewScene)
@@ -214,7 +259,7 @@ enum BootstrapLoader {
             }
 
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            return LoadResult(tiles: allTiles, pages: allPages, scene: defaultScene, duration: elapsed)
+            return LoadResult(tiles: allTiles, pages: allPages, scene: coreFirstScene, duration: elapsed)
 
         } catch {
             print("Failed to load or decode vocabulary data: \(error)")

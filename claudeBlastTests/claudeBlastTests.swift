@@ -161,8 +161,10 @@ struct claudeBlastTests {
 
         #expect(result.scene.isDefault)
         #expect(result.scene.isActive)
-        #expect(result.scene.name == "Default")
-        #expect(result.scene.homePageKey == "home")
+        #expect(result.scene.name == "Core-First")
+        #expect(result.scene.homePageKey == "core_home")
+        // Core-First swaps the legacy `home` page for `core_home`, so it shares
+        // the same total page count as Legacy Default (allPages from pages.json).
         #expect(result.scene.pages.count == result.pages.count)
     }
 
