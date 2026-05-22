@@ -1823,6 +1823,36 @@
         "isAudible": true
       },
       {
+        "key": "snack",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "snack_bar",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "goldfish_cracker",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "graham_cracker",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "pretzel",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "popsicle",
+        "link": "",
+        "isAudible": true
+      },
+      {
         "key": "pretzels",
         "link": "",
         "isAudible": true
@@ -2074,6 +2104,26 @@
       },
       {
         "key": "zoo",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "slide",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "swing",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "school",
+        "link": "",
+        "isAudible": true
+      },
+      {
+        "key": "backyard",
         "link": "",
         "isAudible": true
       }

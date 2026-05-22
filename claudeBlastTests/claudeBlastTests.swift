@@ -162,10 +162,11 @@ struct claudeBlastTests {
         #expect(result.scene.isDefault)
         #expect(result.scene.isActive)
         #expect(result.scene.name == "Core-First")
-        #expect(result.scene.homePageKey == "core_home")
-        // Core-First swaps the legacy `home` page for `core_home`, so it shares
-        // the same total page count as Legacy Default (allPages from pages.json).
-        #expect(result.scene.pages.count == result.pages.count)
+        #expect(result.scene.homePageKey == "home")
+        // Core-First swaps the legacy `home` page for `core_home` AND adds a
+        // Core-First-only `food_drinks` combo page, so its page count is
+        // exactly one more than Legacy Default's allPages.
+        #expect(result.scene.pages.count == result.pages.count + 1)
     }
 
     @Test func sceneActivationDeactivatesOthers() throws {

@@ -1989,5 +1989,9 @@
   {
     "key": "toilet",
     "wordClass": "social"
+  },
+  {
+    "key": "backyard",
+    "wordClass": "places"
   }
 ]

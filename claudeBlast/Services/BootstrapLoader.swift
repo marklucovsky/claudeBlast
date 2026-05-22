@@ -69,33 +69,39 @@ enum BootstrapLoader {
             let pagesData = try Data(contentsOf: pagesUrl)
             let codablePages = try JSONDecoder().decode([PageModelCodable].self, from: pagesData)
 
-            let allPages: [PageModel] = codablePages.map { codablePage in
-                var pageTiles: [PageTileModel] = []
-
-                for ptc in codablePage.pageTiles {
-                    let tileKey = ptc.key
-                        .lowercased()
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    if let tile = tileLookup[tileKey] {
-                        let pageTile = PageTileModel(
-                            tile: tile,
-                            link: ptc.link,
-                            isAudible: ptc.isAudible
-                        )
-                        pageTiles.append(pageTile)
-                    } else {
-                        print("Warning: Tile not found for key '\(tileKey)' on page '\(codablePage.key)'")
+            // Closure factory so each scene gets an INDEPENDENT set of PageModel +
+            // PageTileModel instances built from the same codablePages source. We
+            // hit this fragility when Core-First reused Legacy Default's topic
+            // pages — SwiftData's @Relationship enforces effective single-parent
+            // ownership on the implicit inverse, so the navigation graph in one
+            // scene silently breaks when the same PageModel is assigned to another.
+            let buildPagesFromCodable: () -> [PageModel] = {
+                codablePages.map { codablePage in
+                    var pageTiles: [PageTileModel] = []
+                    for ptc in codablePage.pageTiles {
+                        let tileKey = ptc.key
+                            .lowercased()
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let tile = tileLookup[tileKey] {
+                            let pageTile = PageTileModel(
+                                tile: tile,
+                                link: ptc.link,
+                                isAudible: ptc.isAudible
+                            )
+                            pageTiles.append(pageTile)
+                        } else {
+                            print("Warning: Tile not found for key '\(tileKey)' on page '\(codablePage.key)'")
+                        }
                     }
+                    let tileOrder = pageTiles.map(\.id)
+                    return PageModel.make(
+                        displayName: codablePage.key,
+                        tiles: pageTiles,
+                        tileOrder: tileOrder
+                    )
                 }
-
-                let tileOrder = pageTiles.map(\.id)
-                return PageModel.make(
-                    displayName: codablePage.key,
-                    tiles: pageTiles,
-                    tileOrder: tileOrder
-                )
             }
+            let allPages: [PageModel] = buildPagesFromCodable()
 
             // Legacy Default — the original bundled scene. Demoted: the Core-First
             // scene below now owns `isDefault: true, isActive: true`.
@@ -194,54 +200,135 @@ enum BootstrapLoader {
             starterScene.pages = [starterHomePage, starterPeoplePage, starterFoodPage]
             let starterAllTiles = starterHomeTiles + starterPeopleTiles + starterFoodTiles
 
-            // Core-First — the new default scene. Layout: 6×6 home with
-            // categories, family, pronouns, verbs, modifiers, and immediate-needs
-            // rows. Reuses Legacy Default's topic pages (people/social/actions/...)
-            // as link targets; the legacy "home" page is filtered out so
-            // Core-First's own core_home is the only landing page in this scene.
+            // Core-First — the new default scene. Layout: 8×6 home (48 tiles).
+            // Restored from earlier 6×4/6×6 MVPs: category links for places +
+            // body_health, common ailments (sick, hurt), social pleasantries
+            // (please, thank_you, sorry), `like` and `stop`, `not`, and `play`
+            // promoted from audible action to a link into play_activities.
+            // Reuses Legacy Default's topic pages as link targets; the legacy
+            // "home" page is filtered out so core_home is Core-First's landing.
+            // Audible-link tiles (eat, drink, play): speak the word AND navigate
+            // to a deeper page. The tap handler in TileGridView already supports
+            // this combination — see recordAudibleNavigate.
             let coreFirstHomeSpecs: [(String, String, Bool)] = [
-                // Row 1 — category links (audible=false; navigate to topic page)
-                ("people",   "people",   false),
-                ("social",   "social",   false),
-                ("actions",  "actions",  false),
-                ("describe", "describe", false),
-                ("food",     "food",     false),
-                ("drinks",   "drinks",   false),
-                // Row 2 — family (high-frequency people)
-                ("mom",      "", true), ("dad",     "", true), ("sister",  "", true),
-                ("brother",  "", true), ("grandma", "", true), ("grandpa", "", true),
-                // Row 3 — pronouns
-                ("i",        "", true), ("you",     "", true), ("me",      "", true),
-                ("my",       "", true), ("your",    "", true), ("it",      "", true),
-                // Row 4 — high-frequency verbs
-                ("want",     "", true), ("eat",     "", true), ("drink",   "", true),
-                ("play",     "", true), ("go",      "", true), ("help",    "", true),
-                // Row 5 — modifiers + state
-                ("more",     "", true), ("here",    "", true), ("that",    "", true),
-                ("all",      "", true), ("all_done","", true), ("again",   "", true),
-                // Row 6 — immediate needs / yes-no
-                ("yes",      "", true), ("no",      "", true), ("toilet",  "", true),
-                ("hungry",   "", true), ("thirsty", "", true), ("tired",   "", true),
+                // Row 1 — category links (8): all major topic pages reachable in one tap.
+                ("people",     "people",          false),
+                ("social",     "social",          false),
+                ("actions",    "actions",         false),
+                ("describe",   "describe",        false),
+                ("food",       "food",            false),
+                ("drinks",     "drinks",          false),
+                ("places",     "places",          false),
+                ("body_health","body_health",     false),
+                // Row 2 — family (8): the people kids name most.
+                ("mom",     "", true), ("dad",     "", true), ("sister",  "", true), ("brother", "", true),
+                ("grandma", "", true), ("grandpa", "", true), ("baby",    "", true), ("friend",  "", true),
+                // Row 3 — immediate needs + responses (8): hoisted next to pronouns
+                // because these are what a child reaches for most under pressure.
+                ("hungry",  "", true), ("thirsty", "", true), ("tired",   "", true), ("hurt",    "", true),
+                ("sick",    "", true), ("toilet",  "", true), ("yes",     "", true), ("no",      "", true),
+                // Row 4 — pronouns + demonstratives (8): the core grammar payload.
+                ("i",       "", true), ("you",     "", true), ("me",      "", true), ("my",      "", true),
+                ("your",    "", true), ("it",      "", true), ("that",    "", true), ("here",    "", true),
+                // Row 5 — verbs (8). eat/drink/play are audible-link tiles: tap speaks
+                // the word AND navigates to a curated landing page.
+                ("want",    "",                true),
+                ("eat",     "food_drinks",     true),
+                ("play",    "play_activities", true),
+                ("go",      "",                true),
+                ("help",    "",                true),
+                ("stop",    "",                true),
+                ("like",    "",                true),
+                // Row 6 — modifiers / state / pleasantries (8).
+                ("more",    "", true), ("all",     "", true), ("all_done","", true), ("again",   "", true),
+                ("not",     "", true), ("please",  "", true), ("thank_you","",true), ("sorry",   "", true),
+                // ----- below-the-fold rows (visible after a scroll/swipe) -----
+                
+                // Row 7 — spatial prepositions (8): the v2 Core-First payload these
+                // tiles unlock the spatial meaning the SentenceEngine cannot infer
+                // ("ball IN" vs "ball OUT" vs "ball ON" are different intents).
+                ("in",      "", true), ("on",      "", true), ("off",     "", true), ("out",     "", true),
+                ("up",      "", true), ("down",    "", true), ("with",    "", true), ("for",     "", true),
+                // Row 8 — weather + colors (8): secondary category nav with a couple
+                // of in-class anchors for one-tap weather/color speech.
+                ("weather", "weather",         false),
+                ("hot",     "", true), ("cold",    "", true), ("sun",     "", true), ("rain",    "", true),
+                ("colors",  "colors_shapes",   false),
+                
+                // Row 9 — art / activities (8): expressive verbs + a few high-value
+                // playground items the child can name directly.
+                ("art",     "", true), ("draw",    "", true), ("paint",   "", true), ("color",   "", true),
+                ("sing",    "", true), ("dance",   "", true), ("read",    "", true),
             ]
             let coreFirstHomeTiles: [PageTileModel] = coreFirstHomeSpecs
                 .compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
+            // Named "home" (not "core_home") so the back-button tile on every
+            // topic page (link: "home" in pages.json) resolves to this page
+            // when Core-First is active. SwiftData scope: scene.pages.first
+            // { $0.displayName == "home" } resolves per-scene, so this doesn't
+            // collide with Legacy Default's separate "home" page.
             let coreFirstHomePage = PageModel.make(
-                displayName: "core_home",
+                displayName: "home",
                 tiles: coreFirstHomeTiles,
                 tileOrder: coreFirstHomeTiles.map(\.id)
+            )
+
+            // food_drinks combo page — destination of the audible-link `eat` tile.
+            // Curated set of common kid foods + drinks so "I want to eat/drink
+            // something" resolves to a specific choice in one tap.
+            let foodDrinksSpecs: [(String, String, Bool)] = [
+                // Top strip: home + sibling category links + immediate-need state.
+                ("home",     "home",      false), ("food",    "food",   false),
+                ("drinks",   "drinks",    false), ("hungry",  "", true),
+                ("thirsty",  "",          true),  ("more",    "", true),
+                // Drinks row
+                ("water",    "", true), ("milk",    "", true),
+                ("juice",    "", true), ("chocolate_milk", "", true),
+                ("eat",      "", true), ("drink",   "", true),
+                ("soda",     "", true), ("iced_tea",    "", true),
+                ("milkshake",     "", true), ("lemonade",    "", true),
+                ("ice_cubes",     "", true),
+
+                
+                // Foods (fruit + snacks)
+                ("apple",    "", true), ("banana",  "", true),
+                ("cookie",   "", true), ("cheese",  "", true),
+                ("yogurt",   "", true), ("sandwich","", true),
+                
+                
+                ("fries",   "", true), ("peanut_butter","", true),
+                ("blueberries",   "", true), ("strawberry","", true),
+                ("popcorn",   "", true), ("goldfish_cracker","", true),
+                ("graham_cracker",   "", true), ("pretzels","", true),
+                ("popsicle",   "", true), ("chips","", true),
+
+                
+                // Meals + close
+                ("cereal",   "", true), ("pizza",   "", true),
+                ("eggs",     "", true), ("please",  "", true),
+                ("all_done", "", true), ("no",      "", true),
+            ]
+            let foodDrinksTiles: [PageTileModel] = foodDrinksSpecs
+                .compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
+            let foodDrinksPage = PageModel.make(
+                displayName: "food_drinks",
+                tiles: foodDrinksTiles,
+                tileOrder: foodDrinksTiles.map(\.id)
             )
 
             let coreFirstScene = BlasterScene(
                 name: "Core-First",
                 descriptionText: "High-reach home with pronouns, verbs, and category links",
-                homePageKey: "core_home",
+                homePageKey: "home",
                 isDefault: true,
                 isActive: true
             )
-            // Share Legacy Default's topic pages; drop the legacy `home` page since
-            // Core-First's `core_home` replaces it.
-            let topicPagesForCoreFirst = allPages.filter { $0.displayName != "home" }
-            coreFirstScene.pages = [coreFirstHomePage] + topicPagesForCoreFirst
+            // Build INDEPENDENT topic-page instances for Core-First (separate
+            // PageModel + PageTileModel objects than Legacy Default has). Required
+            // because SwiftData's @Relationship can't safely share children across
+            // two parent relationships — links silently break in one scene.
+            let coreFirstTopicPages = buildPagesFromCodable().filter { $0.displayName != "home" }
+            coreFirstScene.pages = [coreFirstHomePage, foodDrinksPage] + coreFirstTopicPages
 
             try context.transaction {
                 for tile in allTiles {
@@ -253,6 +340,14 @@ enum BootstrapLoader {
                 context.insert(defaultScene)
                 for pt in coreFirstHomeTiles { context.insert(pt) }
                 context.insert(coreFirstHomePage)
+                for pt in foodDrinksTiles { context.insert(pt) }
+                context.insert(foodDrinksPage)
+                // Core-First's independent topic-page set (its own PageModel +
+                // PageTileModel instances, distinct from Legacy Default's).
+                for page in coreFirstTopicPages {
+                    for pt in page.tiles { context.insert(pt) }
+                    context.insert(page)
+                }
                 context.insert(coreFirstScene)
                 for pt in reviewPageTiles { context.insert(pt) }
                 context.insert(reviewPage)
