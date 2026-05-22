@@ -211,27 +211,7 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "baby",
-            "boy",
-            "brother",
-            "dad",
-            "family",
-            "friend",
-            "girl",
-            "grandma",
-            "grandpa",
-            "he",
-            "mine",
-            "mom",
-            "school_people",
-            "she",
-            "sister",
-            "student",
-            "teacher",
-            "they",
-            "we"
-          ]
+          "selectAll": "people"
         }
       ]
     },
@@ -244,42 +224,10 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "awesome",
-            "bathroom",
-            "be_quiet",
-            "cool",
-            "excuse_me",
-            "funny",
-            "goodbye",
-            "goodnight",
-            "great",
-            "hello",
-            "how_are_you",
-            "hungry",
-            "i_dont_know",
-            "i_love_it",
-            "i_love_you",
-            "maybe",
-            "nice_to_meet",
-            "no",
-            "no_way",
-            "oh_my",
-            "okay",
-            "please",
-            "problem",
-            "question",
-            "school",
-            "sick",
-            "sorry",
-            "thank_you",
-            "thirsty",
-            "tired",
-            "uh_oh",
-            "whats_up",
-            "yes",
-            "youre_welcome",
-            "happy"
+          "selectAll": [
+            "social",
+            "feeling",
+            "question"
           ]
         }
       ]
@@ -293,41 +241,9 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "answer",
-            "ask",
-            "bathe",
-            "blow",
-            "blush",
-            "bowl",
-            "brush",
-            "brush_teeth",
-            "buy",
-            "call",
-            "catch",
-            "chew",
-            "clap",
-            "clean",
-            "close",
-            "color",
-            "come",
-            "cook",
-            "cry",
-            "dance",
-            "draw",
-            "dress_up"
-          ]
-        },
-        {
           "makeLink": "drink",
           "link": "drinks",
           "audible": true
-        },
-        {
-          "selectKeys": [
-            "drive",
-            "dry"
-          ]
         },
         {
           "makeLink": "eat",
@@ -335,97 +251,12 @@
           "audible": true
         },
         {
-          "selectKeys": [
-            "email",
-            "fall",
-            "feel",
-            "find",
-            "finish",
-            "fly",
-            "forget",
-            "get",
-            "give",
-            "go",
-            "guess",
-            "hate",
-            "have",
-            "hear",
-            "help",
-            "hope",
-            "hurt",
-            "jump",
-            "kick",
-            "kiss",
-            "know",
-            "learn",
-            "leave",
-            "like",
-            "line_up",
-            "listen",
-            "live",
-            "look",
-            "lose",
-            "love",
-            "make",
-            "meet",
-            "move",
-            "nap",
-            "need",
-            "open",
-            "paint"
-          ]
-        },
-        {
           "makeLink": "play",
           "link": "play_activities",
           "audible": true
         },
         {
-          "selectKeys": [
-            "polish_nails",
-            "pray",
-            "pull",
-            "push",
-            "put",
-            "read",
-            "remember",
-            "ride",
-            "run",
-            "say",
-            "see",
-            "shop",
-            "show",
-            "sing",
-            "sit",
-            "sleep",
-            "smell",
-            "speak",
-            "stand",
-            "stop",
-            "swim",
-            "swing",
-            "take",
-            "talk",
-            "tell",
-            "think",
-            "throw",
-            "try",
-            "turn",
-            "understand",
-            "use",
-            "wait",
-            "walk",
-            "want",
-            "wash",
-            "wash_hair",
-            "wash_hands",
-            "watch",
-            "wear",
-            "wish",
-            "work",
-            "write",
-            "shower"
-          ]
+          "selectAll": "actions"
         }
       ]
     },
@@ -438,120 +269,12 @@
           "audible": false
         },
         {
+          "selectAll": "describe"
+        },
+        {
           "selectKeys": [
-            "afraid",
-            "again",
-            "alone",
-            "angry",
-            "apart",
-            "around",
-            "asleep",
-            "away",
-            "back_",
-            "bad",
-            "behind",
-            "best",
-            "better",
-            "between",
-            "big",
-            "bored",
-            "boring",
-            "bottom",
-            "broken",
-            "busy",
-            "cheap",
-            "clean_",
-            "cold__",
-            "crazy",
-            "cute",
-            "dark",
-            "different",
-            "dirty",
             "don't",
-            "dry_",
-            "dumb",
-            "easy",
-            "empty",
-            "excellent",
-            "excited",
-            "exciting",
-            "expensive",
-            "far",
-            "fast",
-            "fat",
-            "few",
-            "fine",
-            "fixed",
-            "front",
-            "frustrated",
-            "full",
-            "fun",
-            "funny_",
-            "good",
-            "hard",
-            "hard_",
-            "happy",
-            "heavy",
-            "high",
-            "hot_",
-            "left",
-            "light",
-            "light_",
-            "little",
-            "lonely",
-            "long",
-            "loud",
-            "low",
-            "many",
-            "mean",
-            "messy",
-            "middle",
-            "more",
-            "near",
-            "new",
-            "nice",
-            "not",
-            "old",
-            "old_",
-            "okay_",
-            "or",
-            "over",
-            "pretty",
-            "proud",
-            "quick",
-            "right",
-            "right_",
-            "sad",
-            "same",
-            "scared",
-            "short",
-            "silly",
-            "slow",
-            "smart",
-            "smelly",
-            "soft",
-            "stinky",
-            "surprised",
-            "terrible",
-            "terrific",
-            "there",
-            "thin",
-            "this",
-            "through",
-            "together",
-            "top",
-            "true",
-            "false",
-            "ugly",
-            "uncomfortable",
-            "under",
-            "wet",
-            "worse",
-            "worst",
-            "wrong",
-            "yucky",
-            "yummy",
-            "young"
+            "happy"
           ]
         }
       ]
@@ -570,59 +293,12 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "sandwich",
-            "macaroni",
-            "pizza",
-            "hamburger",
-            "fries",
-            "hot_dog",
-            "nuggets",
-            "salad",
-            "soup",
-            "cereal",
-            "oatmeal",
-            "toast",
-            "eggs",
-            "pancakes",
-            "syrup",
-            "peanut_butter",
-            "jelly",
-            "sausage",
-            "cheese",
-            "apple",
-            "banana",
-            "blueberries",
-            "orange",
-            "cherry",
-            "grapes",
-            "lemon",
-            "strawberry",
-            "pear",
-            "broccoli",
-            "carrot",
-            "corn",
-            "cucumber",
-            "green_beans",
-            "pepper",
-            "lettuce",
-            "tomato",
-            "potato",
-            "crackers",
-            "cookie",
-            "fruit_snack",
-            "pudding",
-            "applesauce",
-            "yogurt",
-            "popcorn",
-            "snack",
-            "snack_bar",
-            "goldfish_cracker",
-            "graham_cracker",
-            "pretzel",
-            "popsicle",
-            "pretzels",
-            "chips"
+          "selectAll": [
+            "food",
+            "meals",
+            "fruit",
+            "veggie",
+            "snacks"
           ]
         }
       ]
@@ -641,17 +317,7 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "juice",
-            "milk",
-            "chocolate_milk",
-            "water",
-            "soda",
-            "iced_tea",
-            "milkshake",
-            "lemonade",
-            "ice_cubes"
-          ]
+          "selectAll": "drinks"
         }
       ]
     },
@@ -664,46 +330,13 @@
           "audible": false
         },
         {
+          "selectAll": "places"
+        },
+        {
           "selectKeys": [
-            "airport",
-            "beach",
-            "bedroom",
-            "building",
-            "bus",
-            "bowling_alley",
-            "camp",
-            "church",
-            "class",
-            "closet",
-            "dining_room",
-            "doctor",
-            "door",
-            "farm",
-            "grocery_store",
-            "house",
-            "kitchen",
-            "lake",
-            "laundry",
-            "library",
-            "living_room",
-            "lunch",
-            "mall",
-            "movie",
-            "ocean",
-            "outside",
-            "park",
-            "playground",
-            "pool",
-            "restaurant",
-            "speech",
-            "store",
-            "therapy",
-            "window",
-            "zoo",
             "slide",
             "swing",
-            "school",
-            "backyard"
+            "school"
           ]
         }
       ]
@@ -717,33 +350,11 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "ipad",
-            "blocks",
-            "bubbles",
-            "cars",
-            "trampoline",
-            "puzzle",
-            "playdoh",
-            "doll",
-            "baseball",
-            "bassketball",
-            "football",
-            "ball",
-            "soccer",
-            "tennis",
-            "bingo",
-            "cards",
-            "video_game",
-            "markers",
-            "crayons",
-            "pencil",
-            "paintbrush",
-            "paints",
-            "scissors",
-            "tape",
-            "glue",
-            "paper"
+          "selectAll": [
+            "art",
+            "toy",
+            "sports",
+            "games"
           ]
         }
       ]
@@ -757,22 +368,9 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "head",
-            "eye",
-            "ear",
-            "nose",
-            "mouth",
-            "arm",
-            "leg",
-            "stomach",
-            "back",
-            "cold",
-            "fever",
-            "headache",
-            "sore_throat",
-            "stomachache",
-            "toothache"
+          "selectAll": [
+            "body",
+            "health"
           ]
         }
       ]
@@ -786,30 +384,9 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "red",
-            "orange_",
-            "yellow",
-            "green",
-            "blue",
-            "purple",
-            "pink",
-            "black",
-            "brown",
-            "white",
-            "grey",
-            "gold",
-            "silver",
-            "tan",
-            "circle",
-            "square",
-            "heart",
-            "triangle",
-            "diamond",
-            "star",
-            "rectangle",
-            "oval",
-            "octagon"
+          "selectAll": [
+            "colors",
+            "shape"
           ]
         }
       ]
@@ -823,23 +400,7 @@
           "audible": false
         },
         {
-          "selectKeys": [
-            "cold_",
-            "hot",
-            "cool_",
-            "warm",
-            "rain",
-            "cloud",
-            "sun",
-            "wind",
-            "fog",
-            "rainbow",
-            "storm",
-            "lightning",
-            "thunder",
-            "tornado",
-            "snow"
-          ]
+          "selectAll": "weather"
         }
       ]
     }
