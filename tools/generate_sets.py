@@ -141,31 +141,44 @@ def build_prompt(subject: str, style: str) -> str:
 
 
 def generate_image(prompt: str, api_key: str, session: requests.Session) -> bytes | None:
+    # gpt-image-1 replaced dall-e-3 (April 2025+). It returns b64_json directly
+    # and does not accept a `response_format` parameter. Quality values are
+    # low/medium/high/auto; medium ≈ legacy "standard" pricing.
     payload = {
-        "model": "dall-e-3",
+        "model": "gpt-image-1",
         "prompt": prompt,
         "n": 1,
         "size": "1024x1024",
-        "quality": "standard",
-        "response_format": "url",
+        "quality": "medium",
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     try:
-        r = session.post(OPENAI_IMAGE_URL, json=payload, headers=headers, timeout=90)
-        r.raise_for_status()
-        image_url = r.json()["data"][0]["url"]
-    except (requests.RequestException, KeyError, IndexError) as e:
+        r = session.post(OPENAI_IMAGE_URL, json=payload, headers=headers, timeout=120)
+    except requests.RequestException as e:
         print(f"  [generation error: {e}]")
         return None
+    if not r.ok:
+        # Surface OpenAI's error body — the previous error-swallowing made
+        # a dall-e-3 deprecation invisible across 19 failed prompts.
+        try:
+            body = r.json().get("error", {}).get("message", r.text[:200])
+        except ValueError:
+            body = r.text[:200]
+        print(f"  [generation error: {r.status_code} {body}]")
+        return None
     try:
-        img_r = session.get(image_url, timeout=30)
-        img_r.raise_for_status()
-        return img_r.content
-    except requests.RequestException as e:
-        print(f"  [download error: {e}]")
+        b64 = r.json()["data"][0]["b64_json"]
+    except (KeyError, IndexError, ValueError) as e:
+        print(f"  [response parse error: {e}]")
+        return None
+    import base64
+    try:
+        return base64.b64decode(b64)
+    except Exception as e:
+        print(f"  [base64 decode error: {e}]")
         return None
 
 
