@@ -9,7 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct TilePickerView: View {
-    let page: PageModel
+    @Bindable var scene: BlasterScene
+    let pageKey: String
     var initialSelectedKeys: Set<String> = []
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +31,7 @@ struct TilePickerView: View {
     }
 
     private var existingKeys: Set<String> {
-        Set(page.tiles.map { $0.tile.key })
+        Set(scene.pages.first { $0.key == pageKey }?.tiles.map(\.key) ?? [])
     }
 
     private var wordClasses: [String] {
@@ -225,15 +226,19 @@ struct TilePickerView: View {
 
     private func addSelectedTiles() {
         var seenKeys = Set<String>()
-        let tilesToAdd = allTiles.filter {
-            selectedKeys.contains($0.key) && !existingKeys.contains($0.key) && seenKeys.insert($0.key).inserted
+        let keysToAdd = allTiles.compactMap { tile -> String? in
+            guard selectedKeys.contains(tile.key),
+                  !existingKeys.contains(tile.key),
+                  seenKeys.insert(tile.key).inserted else { return nil }
+            return tile.key
         }
-        for tile in tilesToAdd {
-            let pt = PageTileModel(tile: tile, link: "", isAudible: true)
-            modelContext.insert(pt)
-            page.tiles.append(pt)
-            page.tileOrder.append(pt.id)
+        guard !keysToAdd.isEmpty else { return }
+        var pages = scene.pages
+        guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
+        for key in keysToAdd {
+            pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
         }
+        scene.pages = pages
         try? modelContext.save()
     }
 }

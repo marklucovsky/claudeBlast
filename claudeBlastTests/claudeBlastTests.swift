@@ -17,7 +17,7 @@ struct claudeBlastTests {
 
     private func makeTestContainer() throws -> ModelContainer {
         let schema = Schema([
-            TileModel.self, PageModel.self, PageTileModel.self,
+            TileModel.self,
             SentenceCache.self, BlasterScene.self, MetricEvent.self
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -65,25 +65,19 @@ struct claudeBlastTests {
         #expect(allTileEvents.count == 3)
     }
 
-    @Test func pageModelWithOrderedTiles() throws {
-        let tile = TileModel(key: "eat", wordClass: "actions")
-        let pageTile = PageTileModel(tile: tile, link: "eat", isAudible: true)
-        let page = PageModel.make(
-            displayName: "home",
-            tiles: [pageTile],
-            tileOrder: [pageTile.id]
-        )
-        #expect(page.displayName == "home")
+    @Test func pageSpecWithOrderedTiles() throws {
+        let page = PageSpec(key: "home", tiles: [
+            TileEntry(key: "eat", link: "eat", isAudible: true)
+        ])
+        #expect(page.key == "home")
         #expect(page.tiles.count == 1)
-        #expect(page.orderedTiles.count == 1)
-        #expect(page.orderedTiles.first?.tile.key == "eat")
+        #expect(page.tiles.first?.key == "eat")
     }
 
-    @Test func pageTileModelDefaults() throws {
-        let tile = TileModel(key: "home", wordClass: "navigation")
-        let pageTile = PageTileModel(tile: tile)
-        #expect(pageTile.link == "")
-        #expect(pageTile.isAudible == true)
+    @Test func tileEntryDefaults() throws {
+        let entry = TileEntry(key: "home")
+        #expect(entry.link == "")
+        #expect(entry.isAudible == true)
     }
 
     @Test func sentenceCacheOrderIndependentKey() throws {
@@ -129,12 +123,11 @@ struct claudeBlastTests {
     }
 
     @Test func navigationTileHasLink() throws {
-        let tile = TileModel(key: "food", wordClass: "navigation")
-        let navTile = PageTileModel(tile: tile, link: "food_page", isAudible: false)
+        let navTile = TileEntry(key: "food", link: "food_page", isAudible: false)
         #expect(!navTile.link.isEmpty)
         #expect(!navTile.isAudible)
 
-        let audibleNavTile = PageTileModel(tile: tile, link: "food_page", isAudible: true)
+        let audibleNavTile = TileEntry(key: "food", link: "food_page", isAudible: true)
         #expect(!audibleNavTile.link.isEmpty)
         #expect(audibleNavTile.isAudible)
     }
@@ -146,7 +139,7 @@ struct claudeBlastTests {
         #expect(result.tiles.count > 400)
         #expect(result.pages.count > 5)
 
-        let homePage = result.pages.first { $0.displayName == "home" }
+        let homePage = result.pages.first { $0.key == "home" }
         #expect(homePage != nil)
         #expect(homePage!.tiles.count > 0)
 
@@ -206,18 +199,17 @@ struct claudeBlastTests {
         let context = container.mainContext
 
         let tile = TileModel(key: "eat", wordClass: "actions")
-        let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
-        let page = PageModel.make(displayName: "therapy_page", tiles: [pageTile], tileOrder: [pageTile.id])
+        let page = PageSpec(key: "therapy_page",
+                            tiles: [TileEntry(key: "eat", link: "", isAudible: true)])
 
         let scene = BlasterScene(name: "Therapy Session", homePageKey: "therapy_page")
         scene.pages = [page]
 
         context.insert(tile)
-        context.insert(page)
         context.insert(scene)
 
         #expect(scene.pages.count == 1)
-        #expect(scene.pages.first?.displayName == "therapy_page")
+        #expect(scene.pages.first?.key == "therapy_page")
         #expect(scene.homePageKey == "therapy_page")
     }
 }

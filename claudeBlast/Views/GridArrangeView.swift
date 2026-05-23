@@ -7,39 +7,49 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct GridArrangeView: View {
-    @Bindable var page: PageModel
+    @Bindable var scene: BlasterScene
+    let pageKey: String
+    @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.dismiss) private var dismiss
 
-    // Local ordering modified during drag; committed only on Done
+    // Local ordering modified during drag; committed only on Done.
+    // Stored as tile keys (the page's PageSpec uses keys as identifiers).
     @State private var previewOrder: [String] = []
-    @State private var draggingID: String? = nil
+    @State private var draggingKey: String? = nil
     @State private var dragLocation: CGPoint = .zero
     @State private var cellFrames: [String: CGRect] = [:]
 
     private let columns = [GridItem(.adaptive(minimum: 80, maximum: 110), spacing: 10)]
 
-    private var currentOrder: [String] { previewOrder }
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    private var page: PageSpec? {
+        scene.pages.first { $0.key == pageKey }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(currentOrder, id: \.self) { id in
-                        if let pt = page.tiles.first(where: { $0.id == id }) {
-                            arrangeTileCell(pt, id: id)
-                                .opacity(draggingID == id ? 0 : 1)
+                    ForEach(previewOrder, id: \.self) { key in
+                        if let tile = tileLookup[key] {
+                            arrangeTileCell(tile: tile)
+                                .opacity(draggingKey == key ? 0 : 1)
                         }
                     }
                 }
                 .padding(16)
             }
             .coordinateSpace(name: "arrangeGrid")
-            .scrollDisabled(draggingID != nil)
+            .scrollDisabled(draggingKey != nil)
             .onPreferenceChange(ArrangeCellFrameKey.self) { cellFrames = $0 }
             .overlay(floatingTile)
-            .navigationTitle("Arrange \(page.displayName)")
+            .navigationTitle("Arrange \(pageKey)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -47,7 +57,7 @@ struct GridArrangeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        page.tileOrder = previewOrder
+                        commitOrder()
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -55,7 +65,7 @@ struct GridArrangeView: View {
             }
         }
         .onAppear {
-            previewOrder = page.tileOrder
+            previewOrder = page?.tiles.map(\.key) ?? []
         }
     }
 
@@ -63,10 +73,10 @@ struct GridArrangeView: View {
 
     @ViewBuilder
     private var floatingTile: some View {
-        if let dragID = draggingID,
-           let pt = page.tiles.first(where: { $0.id == dragID }),
-           let frame = cellFrames[dragID] {
-            ArrangeTileCell(pageTile: pt)
+        if let dragKey = draggingKey,
+           let tile = tileLookup[dragKey],
+           let frame = cellFrames[dragKey] {
+            ArrangeTileCell(tile: tile)
                 .frame(width: frame.width, height: frame.height)
                 .scaleEffect(1.08)
                 .shadow(color: .black.opacity(0.28), radius: 10, y: 4)
@@ -79,32 +89,32 @@ struct GridArrangeView: View {
     // MARK: - Individual tile cell
 
     @ViewBuilder
-    private func arrangeTileCell(_ pageTile: PageTileModel, id: String) -> some View {
-        ArrangeTileCell(pageTile: pageTile)
+    private func arrangeTileCell(tile: TileModel) -> some View {
+        let key = tile.key
+        ArrangeTileCell(tile: tile)
             .scaleEffect(0.85)
             .background(
                 GeometryReader { geo in
                     Color.clear.preference(
                         key: ArrangeCellFrameKey.self,
-                        value: [id: geo.frame(in: .named("arrangeGrid"))]
+                        value: [key: geo.frame(in: .named("arrangeGrid"))]
                     )
                 }
             )
             .gesture(
                 DragGesture(minimumDistance: 4, coordinateSpace: .named("arrangeGrid"))
                     .onChanged { value in
-                        if draggingID == nil {
-                            draggingID = id
+                        if draggingKey == nil {
+                            draggingKey = key
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         }
                         dragLocation = value.location
 
-                        // Find the cell under the current drag location and shift
-                        if let hoveredID = cellFrames.first(where: {
-                            $0.key != id && $0.value.contains(value.location)
+                        if let hoveredKey = cellFrames.first(where: {
+                            $0.key != key && $0.value.contains(value.location)
                         })?.key,
-                           let fromIdx = previewOrder.firstIndex(of: id),
-                           let toIdx = previewOrder.firstIndex(of: hoveredID),
+                           let fromIdx = previewOrder.firstIndex(of: key),
+                           let toIdx = previewOrder.firstIndex(of: hoveredKey),
                            fromIdx != toIdx {
                             withAnimation(.interactiveSpring(response: 0.25)) {
                                 previewOrder.move(
@@ -116,11 +126,20 @@ struct GridArrangeView: View {
                     }
                     .onEnded { _ in
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            draggingID = nil
+                            draggingKey = nil
                         }
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     }
             )
+    }
+
+    private func commitOrder() {
+        var pages = scene.pages
+        guard let pageIdx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
+        let byKey = Dictionary(uniqueKeysWithValues: pages[pageIdx].tiles.map { ($0.key, $0) })
+        let reordered = previewOrder.compactMap { byKey[$0] }
+        pages[pageIdx].tiles = reordered
+        scene.pages = pages
     }
 }
 
@@ -136,10 +155,9 @@ private struct ArrangeCellFrameKey: PreferenceKey {
 // MARK: - Tile display cell (shared between grid and floating overlay)
 
 struct ArrangeTileCell: View {
-    let pageTile: PageTileModel
+    let tile: TileModel
 
     var body: some View {
-        let tile = pageTile.tile
         VStack(spacing: 3) {
             TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
                 .padding(5)

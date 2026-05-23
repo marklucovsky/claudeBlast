@@ -552,7 +552,10 @@ struct AdminView: View {
 
     private func exportScene(_ scene: BlasterScene) {
         do {
-            let data = try SceneExporter.exportJSON(scene, defaultTileKeys: defaultTileKeys)
+            let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let data = try SceneExporter.exportJSON(scene,
+                                                    defaultTileKeys: defaultTileKeys,
+                                                    tileLookup: tileLookup)
             sceneToExport = BlasterSceneFile(
                 data: data,
                 filename: scene.name.sanitizedFilename + "." + BlasterSceneFormat.fileExtension
@@ -600,13 +603,11 @@ struct AdminView: View {
         isResetting = true
         sentenceEngine.clearSelection()
         do {
-            // Relationship-safe deletion order:
-            // BlasterScene.pages = nullify (doesn't cascade to PageModel)
-            // PageModel.tiles = cascade (auto-deletes PageTileModel)
+            // BlasterScene.pages is inline JSON-encoded data (no PageModel
+            // relationship), so deleting BlasterScene is sufficient.
             try modelContext.delete(model: MetricEvent.self)
             try modelContext.delete(model: SentenceCache.self)
             try modelContext.delete(model: BlasterScene.self)
-            try modelContext.delete(model: PageModel.self)   // cascades PageTileModel
             try modelContext.delete(model: TileModel.self)
             try modelContext.save()
         } catch {

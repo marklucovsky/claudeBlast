@@ -36,11 +36,13 @@ enum AppSettingsKey {
 /// Version stamp written to UserDefaults after bootstrap completes.
 /// Primary purpose: first-launch detection.
 /// Bump only if a structural change requires forcing a full re-bootstrap from the bundle.
-let currentBootstrapVersion: Int = 11
+let currentBootstrapVersion: Int = 12
 
 func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
+    // PageModel + PageTileModel are gone — BlasterScene.pages is now an
+    // inline [PageSpec] attribute (JSON-encoded Data), not a relationship.
     let schema = Schema([
-        TileModel.self, PageModel.self, PageTileModel.self,
+        TileModel.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
     ])

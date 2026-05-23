@@ -103,34 +103,24 @@ enum SceneImporter {
             }
         }
 
-        // Build pages
+        // Build pages as inline PageSpec values. Tiles missing from the import
+        // are reported in `skippedKeys` and dropped from their page.
         var skippedKeys: [String] = []
-        var allPageTiles: [PageTileModel] = []
-        var pages: [PageModel] = []
-
-        for exportPage in exportable.pages {
-            var pageTiles: [PageTileModel] = []
-            for exportTile in exportPage.tiles {
-                guard let tile = tileLookup[exportTile.key] else {
+        let pages: [PageSpec] = exportable.pages.map { exportPage in
+            let tiles: [TileEntry] = exportPage.tiles.compactMap { exportTile in
+                guard tileLookup[exportTile.key] != nil else {
                     if !skippedKeys.contains(exportTile.key) {
                         skippedKeys.append(exportTile.key)
                     }
-                    continue
+                    return nil
                 }
-                let pt = PageTileModel(
-                    tile: tile,
+                return TileEntry(
+                    key: exportTile.key,
                     link: exportTile.link,
                     isAudible: exportTile.isAudible
                 )
-                pageTiles.append(pt)
             }
-            let page = PageModel.make(
-                displayName: exportPage.key,
-                tiles: pageTiles,
-                tileOrder: pageTiles.map(\.id)
-            )
-            pages.append(page)
-            allPageTiles.append(contentsOf: pageTiles)
+            return PageSpec(key: exportPage.key, tiles: tiles)
         }
 
         let scene = BlasterScene(
@@ -145,8 +135,6 @@ enum SceneImporter {
         scene.pages = pages
 
         try context.transaction {
-            for pt in allPageTiles { context.insert(pt) }
-            for page in pages { context.insert(page) }
             context.insert(scene)
         }
 

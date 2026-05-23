@@ -20,7 +20,10 @@ struct SceneEditorView: View {
     }
 
     @State private var isAddingPage = false
-    @State private var navigateToNewPage: PageModel? = nil
+    /// Identifier of a freshly-created page to navigate into. Stored as the
+    /// page key string now that pages are inline structs rather than
+    /// SwiftData entities.
+    @State private var navigateToNewPageKey: String? = nil
     @State private var pickerKeysForNewPage: Set<String> = []
     @State private var sceneToExport: BlasterSceneFile?
 
@@ -37,21 +40,21 @@ struct SceneEditorView: View {
                 }
                 if !scene.pages.isEmpty {
                     Picker("Home Page", selection: $scene.homePageKey) {
-                        ForEach(scene.pages, id: \.displayName) { page in
-                            Text(page.displayName).tag(page.displayName)
+                        ForEach(scene.pages, id: \.key) { page in
+                            Text(page.key).tag(page.key)
                         }
                     }
                 }
             }
 
             Section("Pages (\(scene.pages.count))") {
-                ForEach(scene.pages) { page in
-                    NavigationLink(destination: PageEditorView(page: page, scene: scene)) {
+                ForEach(scene.pages, id: \.key) { page in
+                    NavigationLink(destination: PageEditorView(scene: scene, pageKey: page.key)) {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(page.displayName)
+                                Text(page.key)
                                     .font(.headline)
-                                if scene.homePageKey == page.displayName {
+                                if scene.homePageKey == page.key {
                                     Text("HOME")
                                         .font(.caption2)
                                         .fontWeight(.semibold)
@@ -92,19 +95,22 @@ struct SceneEditorView: View {
             ActivityView(items: [file.temporaryFileURL()])
         }
         .sheet(isPresented: $isAddingPage) {
-            PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { page, preSelectedKeys in
+            PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
                 pickerKeysForNewPage = preSelectedKeys
-                navigateToNewPage = page
+                navigateToNewPageKey = pageKey
             }
         }
-        .navigationDestination(item: $navigateToNewPage) { page in
-            PageEditorView(page: page, scene: scene, autoOpenPickerWithKeys: pickerKeysForNewPage)
+        .navigationDestination(item: $navigateToNewPageKey) { pageKey in
+            PageEditorView(scene: scene, pageKey: pageKey, autoOpenPickerWithKeys: pickerKeysForNewPage)
         }
     }
 
     private func exportScene() {
         let defaultKeys = Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
-        guard let data = try? SceneExporter.exportJSON(scene, defaultTileKeys: defaultKeys) else { return }
+        let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        guard let data = try? SceneExporter.exportJSON(scene,
+                                                       defaultTileKeys: defaultKeys,
+                                                       tileLookup: tileLookup) else { return }
         sceneToExport = BlasterSceneFile(
             data: data,
             filename: scene.name.sanitizedFilename + "." + BlasterSceneFormat.fileExtension
@@ -112,13 +118,13 @@ struct SceneEditorView: View {
     }
 
     private func deletePages(at offsets: IndexSet) {
+        var pages = scene.pages
         for index in offsets.sorted().reversed() {
-            let page = scene.pages[index]
-            modelContext.delete(page)
-            scene.pages.remove(at: index)
+            pages.remove(at: index)
         }
-        if !scene.pages.contains(where: { $0.displayName == scene.homePageKey }) {
-            scene.homePageKey = scene.pages.first?.displayName ?? ""
+        scene.pages = pages
+        if !scene.pages.contains(where: { $0.key == scene.homePageKey }) {
+            scene.homePageKey = scene.pages.first?.key ?? ""
         }
         try? modelContext.save()
     }
@@ -130,8 +136,9 @@ private struct PageGeneratorSheet: View {
     let scene: BlasterScene
     let allTiles: [TileModel]
     let apiKey: String
-    /// Callback: (newly created page, pre-selected keys for Edit path — empty for Accept path).
-    let onCreate: (PageModel, Set<String>) -> Void
+    /// Callback: (newly created page key, pre-selected keys for Edit path —
+    /// empty for Accept path).
+    let onCreate: (String, Set<String>) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -263,42 +270,30 @@ private struct PageGeneratorSheet: View {
     private func buildAndAccept(_ result: GeneratedPageResult, editMode: Bool) {
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
-
         let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
 
-        // Create primary page
         if editMode {
-            // Edit path: create empty page, pass pre-selected keys to caller
+            // Edit path: create empty page, pass pre-selected keys to caller.
             createEmptyPage(preSelectedKeys: result.primaryTileKeys)
         } else {
-            // Accept path: create page with AI tiles already added
-            var pageTiles: [PageTileModel] = []
-            for genTile in result.primaryPage.tiles {
-                guard let tile = tileLookup[genTile.key] else { continue }
-                let pt = PageTileModel(tile: tile, link: genTile.link, isAudible: genTile.isAudible)
-                modelContext.insert(pt)
-                pageTiles.append(pt)
+            // Accept path: append the AI-generated page (and any sub-pages)
+            // to the scene's inline pages array.
+            var pages = scene.pages
+            let primaryTiles: [TileEntry] = result.primaryPage.tiles.compactMap { gen in
+                guard tileLookup[gen.key] != nil else { return nil }
+                return TileEntry(key: gen.key, link: gen.link, isAudible: gen.isAudible)
             }
-            let page = PageModel.make(displayName: key, tiles: pageTiles, tileOrder: pageTiles.map(\.id))
-            modelContext.insert(page)
-            scene.pages.append(page)
-            if scene.homePageKey.isEmpty { scene.homePageKey = key }
-
-            // Create sub-pages
+            pages.append(PageSpec(key: key, tiles: primaryTiles))
             for genSub in result.subPages {
-                var subTiles: [PageTileModel] = []
-                for genTile in genSub.tiles {
-                    guard let tile = tileLookup[genTile.key] else { continue }
-                    let pt = PageTileModel(tile: tile, link: genTile.link, isAudible: genTile.isAudible)
-                    modelContext.insert(pt)
-                    subTiles.append(pt)
+                let subTiles: [TileEntry] = genSub.tiles.compactMap { gen in
+                    guard tileLookup[gen.key] != nil else { return nil }
+                    return TileEntry(key: gen.key, link: gen.link, isAudible: gen.isAudible)
                 }
-                let subPage = PageModel.make(displayName: genSub.key, tiles: subTiles, tileOrder: subTiles.map(\.id))
-                modelContext.insert(subPage)
-                scene.pages.append(subPage)
+                pages.append(PageSpec(key: genSub.key, tiles: subTiles))
             }
-
-            onCreate(page, [])
+            scene.pages = pages
+            if scene.homePageKey.isEmpty { scene.homePageKey = key }
+            onCreate(key, [])
         }
         dismiss()
     }
@@ -306,11 +301,11 @@ private struct PageGeneratorSheet: View {
     private func createEmptyPage(preSelectedKeys: Set<String>) {
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
-        let page = PageModel(displayName: key)
-        modelContext.insert(page)
-        scene.pages.append(page)
+        var pages = scene.pages
+        pages.append(PageSpec(key: key, tiles: []))
+        scene.pages = pages
         if scene.homePageKey.isEmpty { scene.homePageKey = key }
-        onCreate(page, preSelectedKeys)
+        onCreate(key, preSelectedKeys)
         dismiss()
     }
 
@@ -351,7 +346,6 @@ private struct PagePreviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Section picker (primary page + sub-pages)
             if allSections.count > 1 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -382,7 +376,6 @@ private struct PagePreviewView: View {
                     .padding(.bottom, 8)
             }
 
-            // Tile count
             Text("\(currentTiles.count) tile\(currentTiles.count == 1 ? "" : "s")")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -390,7 +383,6 @@ private struct PagePreviewView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 6)
 
-            // Tile grid
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(currentTiles, id: \.key) { genTile in
@@ -405,7 +397,6 @@ private struct PagePreviewView: View {
 
             Divider()
 
-            // Action bar
             HStack(spacing: 10) {
                 Button("Cancel", role: .destructive) { onCancel() }
                     .buttonStyle(.bordered)
