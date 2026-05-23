@@ -9,7 +9,18 @@ import SwiftData
 import Foundation
 
 enum AppSettingsKey {
+    /// Legacy: integer version stamp. Pre-Step M bootstrap used this; new code
+    /// uses bootstrapContentHash + bootstrapInstalled. Kept declared so the
+    /// UserDefaults key isn't accidentally reused.
     static let bootstrapVersion  = "bootstrap_version"
+    /// SHA256 hex of the bundled content (vocabulary.json + scenes/*.json) at
+    /// the most recent bootstrap. Used in DEBUG builds to auto-re-bootstrap
+    /// when a developer edits a bundled file. RELEASE builds ignore this.
+    static let bootstrapContentHash = "bootstrap_content_hash"
+    /// Set to true the first time bootstrap completes. RELEASE builds use
+    /// this as the sole bootstrap gate — once true, app updates never
+    /// auto-replace the user's scene/vocab.
+    static let bootstrapInstalled   = "bootstrap_installed"
     static let icloudEnabled     = "icloud_enabled"
     static let openaiApiKey      = "openai_api_key"
     static let providerChoice    = "provider_choice"
@@ -33,10 +44,9 @@ enum AppSettingsKey {
     static let autoDoneMs            = "auto_done_ms"
 }
 
-/// Version stamp written to UserDefaults after bootstrap completes.
-/// Primary purpose: first-launch detection.
-/// Bump only if a structural change requires forcing a full re-bootstrap from the bundle.
-let currentBootstrapVersion: Int = 12
+// Bootstrap version stamp removed in Step M. needsBootstrap now derives from
+// a content hash of the bundled resource files (DEBUG) or the bootstrapInstalled
+// flag (RELEASE). See BootstrapLoader.needsBootstrap().
 
 func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
     // PageModel + PageTileModel are gone — BlasterScene.pages is now an

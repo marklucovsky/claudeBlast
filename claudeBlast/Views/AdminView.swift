@@ -615,7 +615,12 @@ struct AdminView: View {
             isResetting = false
             return
         }
-        UserDefaults.standard.set(0, forKey: AppSettingsKey.bootstrapVersion)
+        // Clear all bootstrap-state flags so the next loadDefaultVocabulary
+        // call writes fresh hash + installed flag via markBootstrapComplete.
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapInstalled)
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapContentHash)
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapVersion)
         _ = BootstrapLoader.loadDefaultVocabulary(context: modelContext)
         BootstrapLoader.markBootstrapComplete()
         isResetting = false

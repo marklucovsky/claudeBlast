@@ -7,6 +7,7 @@
 
 import SwiftData
 import Foundation
+import CryptoKit
 
 enum BootstrapLoader {
     struct LoadResult {
@@ -16,12 +17,64 @@ enum BootstrapLoader {
         let duration: TimeInterval
     }
 
+    /// Bundled-content fingerprint: SHA256 of vocabulary.json + every
+    /// scenes/*.json in the bundle. Recomputed on each call; cheap (few hundred
+    /// KB of input). Used to detect content drift in DEBUG builds.
+    static var bundledContentHash: String {
+        var hasher = SHA256()
+        let names: [(String, String)] = [
+            ("vocabulary", "json"),
+            ("core_first", "json"),
+        ]
+        for (name, ext) in names {
+            if let url = Bundle.main.url(forResource: name, withExtension: ext),
+               let data = try? Data(contentsOf: url) {
+                hasher.update(data: data)
+            }
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Decide whether bootstrap should run. Two modes:
+    ///
+    /// - **RELEASE**: bootstrap fires only on first install. The
+    ///   bootstrapInstalled flag is set once and never re-checked. App updates
+    ///   that change bundled JSON files do NOT auto-replace the user's
+    ///   scene/vocab. This protects children in the wild — they keep their
+    ///   muscle-memory layout across app updates.
+    ///
+    /// - **DEBUG**: bootstrap fires whenever the bundled content hash changes,
+    ///   so developers editing scenes/*.json see updates on next launch.
+    ///
+    /// Both modes still respect AdminView's "Factory Reset" — that path resets
+    /// both flags so the next launch performs a fresh bootstrap regardless.
     static func needsBootstrap() -> Bool {
-        UserDefaults.standard.integer(forKey: AppSettingsKey.bootstrapVersion) < currentBootstrapVersion
+        let defaults = UserDefaults.standard
+        let installed = defaults.bool(forKey: AppSettingsKey.bootstrapInstalled)
+
+        #if DEBUG
+        // Migrate from the old integer-version scheme: if installed-flag is
+        // unset but the legacy bootstrap_version key is set, we already
+        // bootstrapped at least once. Migrate forward without an extra wipe.
+        if !installed && defaults.integer(forKey: AppSettingsKey.bootstrapVersion) > 0 {
+            defaults.set(true, forKey: AppSettingsKey.bootstrapInstalled)
+            // Don't store the hash here; let the next bootstrap or the next
+            // hash check write it. We deliberately return true on this branch
+            // so the developer sees up-to-date content.
+            return true
+        }
+        if !installed { return true }
+        let stored = defaults.string(forKey: AppSettingsKey.bootstrapContentHash) ?? ""
+        return stored != bundledContentHash
+        #else
+        return !installed
+        #endif
     }
 
     static func markBootstrapComplete() {
-        UserDefaults.standard.set(currentBootstrapVersion, forKey: AppSettingsKey.bootstrapVersion)
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: AppSettingsKey.bootstrapInstalled)
+        defaults.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
     }
 
     /// Wipe all app-owned SwiftData records. Relationship-safe order matches
