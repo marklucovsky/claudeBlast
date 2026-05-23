@@ -102,7 +102,7 @@ enum SceneMaterializer {
     ) throws {
         switch cmd {
 
-        case .selectAll(let classes, let exclude, let limit, let orderBy):
+        case .classSelector(let classes, let exclude, let limit, let orderBy):
             for c in classes where !classSet.contains(c) {
                 throw MaterializeError.unknownVocabularyClass(c)
             }
@@ -120,7 +120,7 @@ enum SceneMaterializer {
                 tiles.append(TileEntry(key: key))
             }
 
-        case .selectKeys(let keys):
+        case .keys(let keys):
             for key in keys {
                 guard keySet.contains(key) else {
                     throw MaterializeError.unknownVocabularyKey(key)
@@ -130,19 +130,19 @@ enum SceneMaterializer {
                 }
             }
 
-        case .makeLink(let key, let link, let audible):
+        case .link(let key, let to, let audible):
             guard keySet.contains(key) else {
                 throw MaterializeError.unknownVocabularyKey(key)
             }
             if let idx = tiles.firstIndex(where: { $0.key == key }) {
                 // Update in place — preserves position the earlier command set.
-                tiles[idx].link = link
+                tiles[idx].link = to
                 tiles[idx].isAudible = audible
             } else {
-                tiles.append(TileEntry(key: key, link: link, isAudible: audible))
+                tiles.append(TileEntry(key: key, link: to, isAudible: audible))
             }
 
-        case .deleteTile(let key):
+        case .remove(let key):
             tiles.removeAll { $0.key == key }
         }
     }

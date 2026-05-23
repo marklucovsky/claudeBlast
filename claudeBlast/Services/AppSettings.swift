@@ -36,7 +36,7 @@ enum AppSettingsKey {
 /// Version stamp written to UserDefaults after bootstrap completes.
 /// Primary purpose: first-launch detection.
 /// Bump only if a structural change requires forcing a full re-bootstrap from the bundle.
-let currentBootstrapVersion: Int = 10
+let currentBootstrapVersion: Int = 11
 
 func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
     let schema = Schema([

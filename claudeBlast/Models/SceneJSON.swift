@@ -31,26 +31,36 @@ struct PageJSON: Codable {
     let tiles: [PageBuildCommand]
 }
 
-/// Sum type of DSL commands applied to a page's working tile list.
-/// Encoded with implicit tagging — the present key (selectAll / selectKeys /
-/// makeLink / deleteTile) determines the case.
+/// Sum type of DSL commands applied to a page's working tile list. Each
+/// entry in a page's `tiles` array is one command. Encoded with implicit
+/// tagging — the present root key (class / keys / link / remove)
+/// determines the case.
+///
+/// JSON shapes:
+///   {"class": "actions"}                                          // single class
+///   {"class": ["food","drinks"], "exclude": ["pizza"], "limit": 8, "orderBy": "name"}
+///   {"keys": ["i","me","you"]}                                    // explicit list
+///   {"link": "people", "to": "people", "audible": false}          // link tile
+///   {"remove": "stop"}                                            // drop a tile
 enum PageBuildCommand: Codable, Hashable {
-    /// Pull all vocabulary tiles whose wordClass matches one of `classes`.
-    /// Tiles are appended as audible (no link). Use exclude/limit/orderBy
-    /// to refine.
-    case selectAll(classes: [String], exclude: [String], limit: Int?, orderBy: OrderBy)
+    /// `class`: pull every vocabulary tile whose wordClass matches one of
+    /// `classes`. Appended as audible (no link). Use exclude/limit/orderBy
+    /// to refine. (Named `classSelector` in Swift to avoid the `class`
+    /// keyword.)
+    case classSelector(classes: [String], exclude: [String], limit: Int?, orderBy: OrderBy)
 
-    /// Explicit list of vocabulary keys. Each appended as audible (no link).
-    case selectKeys([String])
+    /// `keys`: explicit list of vocabulary keys. Each appended as audible
+    /// (no link).
+    case keys([String])
 
-    /// Add or update a single tile with a link. If `key` already exists in
-    /// the working list (e.g. placed earlier by selectAll), update it in
-    /// place to carry the link + audible setting. Otherwise append a new
-    /// tile.
-    case makeLink(key: String, link: String, audible: Bool)
+    /// `link`: add or update a single tile that navigates to a page. If
+    /// `key` is already present (e.g. via a prior class/keys command),
+    /// update it in place — preserves position. Otherwise append.
+    case link(key: String, to: String, audible: Bool)
 
-    /// Remove the tile with this key from the working list, if present.
-    case deleteTile(String)
+    /// `remove`: remove the tile with this key from the working list, if
+    /// present. No-op when the key is absent.
+    case remove(String)
 
     enum OrderBy: String, Codable {
         case vocab   // declaration order in vocabulary.json (default)
@@ -59,14 +69,6 @@ enum PageBuildCommand: Codable, Hashable {
     }
 
     // MARK: - Codable
-    //
-    // The JSON shape uses the command name as the key on the surrounding
-    // object. Examples:
-    //   {"selectAll": "actions"}
-    //   {"selectAll": ["food","drinks"], "exclude": ["pizza"], "limit": 8, "orderBy": "name"}
-    //   {"selectKeys": ["i","me","you"]}
-    //   {"makeLink": "people", "link": "people", "audible": false}
-    //   {"deleteTile": "stop"}
 
     private struct DynamicKey: CodingKey {
         var stringValue: String
@@ -79,13 +81,13 @@ enum PageBuildCommand: Codable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: DynamicKey.self)
 
-        if c.contains(.k("selectAll")) {
+        if c.contains(.k("class")) {
             // Value is either a string (single class) or [String] (multi-class).
             let classes: [String]
-            if let single = try? c.decode(String.self, forKey: .k("selectAll")) {
+            if let single = try? c.decode(String.self, forKey: .k("class")) {
                 classes = [single]
             } else {
-                classes = try c.decode([String].self, forKey: .k("selectAll"))
+                classes = try c.decode([String].self, forKey: .k("class"))
             }
             let exclude = (try? c.decode([String].self, forKey: .k("exclude"))) ?? []
             let limit = try? c.decode(Int.self, forKey: .k("limit"))
@@ -96,27 +98,27 @@ enum PageBuildCommand: Codable, Hashable {
             } else {
                 orderBy = .vocab
             }
-            self = .selectAll(classes: classes, exclude: exclude, limit: limit, orderBy: orderBy)
+            self = .classSelector(classes: classes, exclude: exclude, limit: limit, orderBy: orderBy)
             return
         }
 
-        if c.contains(.k("selectKeys")) {
-            let keys = try c.decode([String].self, forKey: .k("selectKeys"))
-            self = .selectKeys(keys)
+        if c.contains(.k("keys")) {
+            let keys = try c.decode([String].self, forKey: .k("keys"))
+            self = .keys(keys)
             return
         }
 
-        if c.contains(.k("makeLink")) {
-            let key = try c.decode(String.self, forKey: .k("makeLink"))
-            let link = try c.decode(String.self, forKey: .k("link"))
+        if c.contains(.k("link")) {
+            let key = try c.decode(String.self, forKey: .k("link"))
+            let to = try c.decode(String.self, forKey: .k("to"))
             let audible = try c.decode(Bool.self, forKey: .k("audible"))
-            self = .makeLink(key: key, link: link, audible: audible)
+            self = .link(key: key, to: to, audible: audible)
             return
         }
 
-        if c.contains(.k("deleteTile")) {
-            let key = try c.decode(String.self, forKey: .k("deleteTile"))
-            self = .deleteTile(key)
+        if c.contains(.k("remove")) {
+            let key = try c.decode(String.self, forKey: .k("remove"))
+            self = .remove(key)
             return
         }
 
@@ -129,23 +131,23 @@ enum PageBuildCommand: Codable, Hashable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: DynamicKey.self)
         switch self {
-        case .selectAll(let classes, let exclude, let limit, let orderBy):
+        case .classSelector(let classes, let exclude, let limit, let orderBy):
             if classes.count == 1 {
-                try c.encode(classes[0], forKey: .k("selectAll"))
+                try c.encode(classes[0], forKey: .k("class"))
             } else {
-                try c.encode(classes, forKey: .k("selectAll"))
+                try c.encode(classes, forKey: .k("class"))
             }
             if !exclude.isEmpty { try c.encode(exclude, forKey: .k("exclude")) }
             if let limit { try c.encode(limit, forKey: .k("limit")) }
             if orderBy != .vocab { try c.encode(orderBy.rawValue, forKey: .k("orderBy")) }
-        case .selectKeys(let keys):
-            try c.encode(keys, forKey: .k("selectKeys"))
-        case .makeLink(let key, let link, let audible):
-            try c.encode(key, forKey: .k("makeLink"))
-            try c.encode(link, forKey: .k("link"))
+        case .keys(let keys):
+            try c.encode(keys, forKey: .k("keys"))
+        case .link(let key, let to, let audible):
+            try c.encode(key, forKey: .k("link"))
+            try c.encode(to, forKey: .k("to"))
             try c.encode(audible, forKey: .k("audible"))
-        case .deleteTile(let key):
-            try c.encode(key, forKey: .k("deleteTile"))
+        case .remove(let key):
+            try c.encode(key, forKey: .k("remove"))
         }
     }
 }
