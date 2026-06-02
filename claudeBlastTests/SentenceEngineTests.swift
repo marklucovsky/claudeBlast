@@ -15,7 +15,7 @@ struct SentenceEngineTests {
 
     private func makeTestContainer() throws -> ModelContainer {
         let schema = Schema([
-            TileModel.self, PageModel.self, PageTileModel.self,
+            TileModel.self,
             SentenceCache.self, BlasterScene.self, MetricEvent.self
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

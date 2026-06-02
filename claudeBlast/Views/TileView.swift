@@ -9,13 +9,14 @@ import SwiftUI
 import SwiftData
 
 struct TileView: View {
-    let pageTile: PageTileModel
+    let tile: TileModel
+    var link: String = ""
+    var isAudible: Bool = true
     var isSelected: Bool = false
     var labelFontSize: CGFloat = 11
     let onTap: () -> Void
 
-    private var tile: TileModel { pageTile.tile }
-    private var isNavigation: Bool { !pageTile.link.isEmpty }
+    private var isNavigation: Bool { !link.isEmpty }
 
     var body: some View {
         Button(action: onTap) {
@@ -38,8 +39,6 @@ struct TileView: View {
     @ViewBuilder
     private var tileCard: some View {
         ZStack(alignment: .bottomTrailing) {
-            // Card background — word-class color at low opacity so the
-            // ARASAAC images have a solid, tinted base instead of transparency.
             colorForWordClass(tile.wordClass).opacity(0.12)
                 .aspectRatio(1, contentMode: .fit)
 
@@ -71,24 +70,21 @@ struct TileView: View {
 
 #Preview("Audible tile") {
     let tile = TileModel(key: "eat", wordClass: "actions")
-    let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
-    TileView(pageTile: pageTile, isSelected: false) {}
+    TileView(tile: tile, link: "", isAudible: true, isSelected: false) {}
         .frame(width: 80)
         .modelContainer(for: TileModel.self, inMemory: true)
 }
 
 #Preview("Nav tile") {
     let tile = TileModel(key: "food", wordClass: "navigation")
-    let pageTile = PageTileModel(tile: tile, link: "food", isAudible: false)
-    TileView(pageTile: pageTile, isSelected: false) {}
+    TileView(tile: tile, link: "food", isAudible: false, isSelected: false) {}
         .frame(width: 80)
         .modelContainer(for: TileModel.self, inMemory: true)
 }
 
 #Preview("Selected tile") {
     let tile = TileModel(key: "happy", wordClass: "feeling")
-    let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
-    TileView(pageTile: pageTile, isSelected: true) {}
+    TileView(tile: tile, link: "", isAudible: true, isSelected: true) {}
         .frame(width: 80)
         .modelContainer(for: TileModel.self, inMemory: true)
 }

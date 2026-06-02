@@ -7,21 +7,77 @@
 
 import SwiftData
 import Foundation
+import CryptoKit
 
 enum BootstrapLoader {
     struct LoadResult {
         let tiles: [TileModel]
-        let pages: [PageModel]
+        let pages: [PageSpec]
         let scene: BlasterScene
         let duration: TimeInterval
     }
 
+    /// Bundled-content fingerprint: SHA256 of vocabulary.json + every
+    /// scenes/*.json in the bundle. Recomputed on each call; cheap (few hundred
+    /// KB of input). Used to detect content drift in DEBUG builds.
+    static var bundledContentHash: String {
+        var hasher = SHA256()
+        let names: [(String, String)] = [
+            ("vocabulary", "json"),
+            ("core_first", "json"),
+        ]
+        for (name, ext) in names {
+            if let url = Bundle.main.url(forResource: name, withExtension: ext),
+               let data = try? Data(contentsOf: url) {
+                hasher.update(data: data)
+            }
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Decide whether bootstrap should run. Two modes:
+    ///
+    /// - **RELEASE**: bootstrap fires only on first install. The
+    ///   bootstrapInstalled flag is set once and never re-checked. App updates
+    ///   that change bundled JSON files do NOT auto-replace the user's
+    ///   scene/vocab. This protects children in the wild — they keep their
+    ///   muscle-memory layout across app updates.
+    ///
+    /// - **DEBUG**: bootstrap fires whenever the bundled content hash changes,
+    ///   so developers editing scenes/*.json see updates on next launch.
+    ///
+    /// Both modes still respect AdminView's "Factory Reset" — that path resets
+    /// both flags so the next launch performs a fresh bootstrap regardless.
     static func needsBootstrap() -> Bool {
-        UserDefaults.standard.integer(forKey: AppSettingsKey.bootstrapVersion) < currentBootstrapVersion
+        let defaults = UserDefaults.standard
+        let installed = defaults.bool(forKey: AppSettingsKey.bootstrapInstalled)
+
+        #if DEBUG
+        // debug builds automatically re-bootstrap if hashes are not the same,
+        // customer builds do not do this auto update, but do allow for manual download
+        //
+        // Migrate from the old integer-version scheme: if installed-flag is
+        // unset but the legacy bootstrap_version key is set, we already
+        // bootstrapped at least once. Migrate forward without an extra wipe.
+        if !installed && defaults.integer(forKey: AppSettingsKey.bootstrapVersion) > 0 {
+            defaults.set(true, forKey: AppSettingsKey.bootstrapInstalled)
+            // Don't store the hash here; let the next bootstrap or the next
+            // hash check write it. We deliberately return true on this branch
+            // so the developer sees up-to-date content.
+            return true
+        }
+        if !installed { return true }
+        let stored = defaults.string(forKey: AppSettingsKey.bootstrapContentHash) ?? ""
+        return stored != bundledContentHash
+        #else
+        return !installed
+        #endif
     }
 
     static func markBootstrapComplete() {
-        UserDefaults.standard.set(currentBootstrapVersion, forKey: AppSettingsKey.bootstrapVersion)
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: AppSettingsKey.bootstrapInstalled)
+        defaults.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
     }
 
     /// Wipe all app-owned SwiftData records. Relationship-safe order matches
@@ -31,7 +87,6 @@ enum BootstrapLoader {
             try context.delete(model: MetricEvent.self)
             try context.delete(model: SentenceCache.self)
             try context.delete(model: BlasterScene.self)
-            try context.delete(model: PageModel.self) // cascades PageTileModel
             try context.delete(model: TileModel.self)
             try context.save()
         } catch {
@@ -42,19 +97,15 @@ enum BootstrapLoader {
     static func loadDefaultVocabulary(context: ModelContext) -> LoadResult {
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        let emptyScene = BlasterScene(name: "Default", isDefault: true, isActive: true)
+        let emptyScene = BlasterScene(name: "Empty", isDefault: true, isActive: true)
 
         guard let vocabularyUrl = Bundle.main.url(forResource: "vocabulary", withExtension: "json") else {
             print("Failed to locate vocabulary.json in bundle.")
             return LoadResult(tiles: [], pages: [], scene: emptyScene, duration: 0)
         }
 
-        guard let pagesUrl = Bundle.main.url(forResource: "pages", withExtension: "json") else {
-            print("Failed to locate pages.json in bundle.")
-            return LoadResult(tiles: [], pages: [], scene: emptyScene, duration: 0)
-        }
-
         do {
+            // ----- vocabulary -----
             let tilesData = try Data(contentsOf: vocabularyUrl)
             let codableTiles = try JSONDecoder().decode([TileModelCodable].self, from: tilesData)
             // Deduplicate by key at load time (CloudKit does not support @Attribute(.unique))
@@ -63,159 +114,158 @@ enum BootstrapLoader {
                 guard seenTileKeys.insert(codable.key).inserted else { return nil }
                 return TileModel(from: codable)
             }
-
             let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
 
-            let pagesData = try Data(contentsOf: pagesUrl)
-            let codablePages = try JSONDecoder().decode([PageModelCodable].self, from: pagesData)
-
-            let allPages: [PageModel] = codablePages.map { codablePage in
-                var pageTiles: [PageTileModel] = []
-
-                for ptc in codablePage.pageTiles {
-                    let tileKey = ptc.key
-                        .lowercased()
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    if let tile = tileLookup[tileKey] {
-                        let pageTile = PageTileModel(
-                            tile: tile,
-                            link: ptc.link,
-                            isAudible: ptc.isAudible
-                        )
-                        pageTiles.append(pageTile)
-                    } else {
-                        print("Warning: Tile not found for key '\(tileKey)' on page '\(codablePage.key)'")
-                    }
-                }
-
-                let tileOrder = pageTiles.map(\.id)
-                return PageModel.make(
-                    displayName: codablePage.key,
-                    tiles: pageTiles,
-                    tileOrder: tileOrder
-                )
+            // ----- Core-First scene from Resources/scenes/core_first.json -----
+            // The hardcoded Swift scene specs (coreFirstHomeSpecs / foodDrinksSpecs)
+            // are gone — the scene now lives in JSON, with DSL commands
+            // (selectAll / selectKeys / makeLink / deleteTile) expanded by
+            // SceneMaterializer against the vocabulary. The materialized
+            // PageSpec list is then converted to PageModel/PageTileModel
+            // instances for SwiftData storage; that conversion is a
+            // transition step — Step K replaces the PageModel storage with
+            // inline [PageSpec] on BlasterScene.
+            // The Xcode synchronized group flattens Resources/scenes/*.json into
+            // the bundle root, so no subdirectory: parameter. (We'll revisit
+            // naming when more than one bundled scene file ships.)
+            guard let coreSceneUrl = Bundle.main.url(
+                forResource: "core_first", withExtension: "json"
+            ) else {
+                print("Failed to locate core_first.json in bundle.")
+                return LoadResult(tiles: [], pages: [], scene: emptyScene, duration: 0)
             }
-
-            let defaultScene = BlasterScene(
-                name: "Default",
-                descriptionText: "Built-in vocabulary",
-                homePageKey: "home",
-                isDefault: true,
-                isActive: true
+            let coreSceneData = try Data(contentsOf: coreSceneUrl)
+            let coreSceneJSON = try JSONDecoder().decode(SceneJSON.self, from: coreSceneData)
+            let materialized = try SceneMaterializer.materialize(
+                scene: coreSceneJSON, vocabulary: codableTiles
             )
-            defaultScene.pages = allPages
+            let coreFirstScene = buildScene(from: materialized)
 
-            // "All Tiles (Review)" scene — full vocabulary sorted by word class,
-            // one flat page for image quality review.
+            // ----- All Tiles scene (programmatic) -----
+            // Single page with every vocab tile, grouped by wordClass in vocab
+            // declaration order. Useful for review/admin; not a child-facing
+            // scene. Programmatic rather than JSON because the content is just
+            // "all of vocabulary" — no curation needed.
             var wcOrder: [String] = []
-            var wcGroups: [String: [TileModel]] = [:]
+            var wcGroups: [String: [String]] = [:]
             for tile in allTiles {
                 if wcGroups[tile.wordClass] == nil {
                     wcOrder.append(tile.wordClass)
                     wcGroups[tile.wordClass] = []
                 }
-                wcGroups[tile.wordClass]!.append(tile)
+                wcGroups[tile.wordClass]!.append(tile.key)
             }
-            let reviewPageTiles: [PageTileModel] = wcOrder.flatMap { wc in
-                (wcGroups[wc] ?? []).map { PageTileModel(tile: $0, link: "", isAudible: true) }
+            let allTilesEntries: [TileEntry] = wcOrder.flatMap { wc in
+                (wcGroups[wc] ?? []).map { TileEntry(key: $0, link: "", isAudible: true) }
             }
-            let reviewPage = PageModel.make(
-                displayName: "all_tiles",
-                tiles: reviewPageTiles,
-                tileOrder: reviewPageTiles.map(\.id)
-            )
-            let reviewScene = BlasterScene(
-                name: "All Tiles (Review)",
-                descriptionText: "Full vocabulary by word class — image review",
+            let allTilesPage = PageSpec(key: "all_tiles", tiles: allTilesEntries)
+            let allTilesScene = BlasterScene(
+                name: "All Tiles",
+                descriptionText: "Full vocabulary grouped by word class",
                 homePageKey: "all_tiles",
                 isDefault: false,
                 isActive: false
             )
-            reviewScene.pages = [reviewPage]
+            allTilesScene.pages = [allTilesPage]
 
-            // "Starter" scene — small people + food vocabulary for quick demos
-            func makePT(_ key: String, link: String = "", audible: Bool = true) -> PageTileModel? {
-                guard let tile = tileLookup[key] else { return nil }
-                return PageTileModel(tile: tile, link: link, isAudible: audible)
-            }
-
-            let starterHomeTiles: [PageTileModel] = [
-                ("people", "starter_people", false),
-                ("eat",    "starter_food",   true),
-                ("drink",  "",               true),
-                ("yes",    "",               true),
-                ("no",     "",               true),
-                ("more",   "",               true),
-                ("want",   "",               true),
-                ("help",   "",               true),
-                ("go",     "",               true),
-                ("good",   "",               true),
-                ("play",   "",               true),
-                ("stop",   "",               true),
-            ].compactMap { makePT($0.0, link: $0.1, audible: $0.2) }
-            let starterHomePage = PageModel.make(
-                displayName: "starter_home",
-                tiles: starterHomeTiles,
-                tileOrder: starterHomeTiles.map(\.id)
-            )
-
-            let starterPeopleTiles: [PageTileModel] = ["mom", "dad", "brother", "sister",
-                "grandma", "grandpa", "friend", "baby",
-                "boy", "girl", "she", "teacher",
-                "family", "people"]
-                .compactMap { makePT($0) }
-            let starterPeoplePage = PageModel.make(
-                displayName: "starter_people",
-                tiles: starterPeopleTiles,
-                tileOrder: starterPeopleTiles.map(\.id)
-            )
-
-            let starterFoodTiles: [PageTileModel] = ["eat", "drink", "apple", "banana",
-                "pizza", "cereal", "crackers", "cookie",
-                "milk", "juice", "water", "snacks",
-                "fruit", "cheese", "grapes", "yogurt"]
-                .compactMap { makePT($0) }
-            let starterFoodPage = PageModel.make(
-                displayName: "starter_food",
-                tiles: starterFoodTiles,
-                tileOrder: starterFoodTiles.map(\.id)
-            )
-
-            let starterScene = BlasterScene(
-                name: "Starter",
-                descriptionText: "People & food — small vocabulary for quick demos",
-                homePageKey: "starter_home",
-                isDefault: false,
-                isActive: false
-            )
-            starterScene.pages = [starterHomePage, starterPeoplePage, starterFoodPage]
-            let starterAllTiles = starterHomeTiles + starterPeopleTiles + starterFoodTiles
-
+            // ----- persist -----
+            // BlasterScene.pages is now an inline JSON-encoded attribute, so
+            // there are no PageModel / PageTileModel children to insert
+            // alongside each scene. Just the tiles + scenes.
             try context.transaction {
-                for tile in allTiles {
-                    context.insert(tile)
-                }
-                for page in allPages {
-                    context.insert(page)
-                }
-                context.insert(defaultScene)
-                for pt in reviewPageTiles { context.insert(pt) }
-                context.insert(reviewPage)
-                context.insert(reviewScene)
-                for pt in starterAllTiles { context.insert(pt) }
-                context.insert(starterHomePage)
-                context.insert(starterPeoplePage)
-                context.insert(starterFoodPage)
-                context.insert(starterScene)
+                for tile in allTiles { context.insert(tile) }
+                context.insert(coreFirstScene)
+                context.insert(allTilesScene)
             }
 
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            return LoadResult(tiles: allTiles, pages: allPages, scene: defaultScene, duration: elapsed)
+            return LoadResult(
+                tiles: allTiles,
+                pages: coreFirstScene.pages,
+                scene: coreFirstScene,
+                duration: elapsed
+            )
 
         } catch {
-            print("Failed to load or decode vocabulary data: \(error)")
+            print("Failed to load or decode bootstrap data: \(error)")
             return LoadResult(tiles: [], pages: [], scene: emptyScene, duration: 0)
+        }
+    }
+
+    // MARK: - Materialized scene → BlasterScene
+
+    /// Convert a SceneMaterializer.MaterializedScene into a BlasterScene whose
+    /// `pages` array carries the materialized [PageSpec] directly. The "<home>"
+    /// symbolic link is kept LITERAL — TileGridView resolves it to the active
+    /// scene's homePageKey at navigation time (Step J), so a runtime change of
+    /// homePageKey works without rebuilding pages.
+    private static func buildScene(
+        from materialized: SceneMaterializer.MaterializedScene
+    ) -> BlasterScene {
+        let scene = BlasterScene(
+            name: materialized.name,
+            descriptionText: materialized.description,
+            homePageKey: materialized.homePageKey,
+            isDefault: materialized.isDefault,
+            isActive: materialized.isDefault
+        )
+        scene.systemSceneKey = materialized.key
+        scene.pages = materialized.pages
+        return scene
+    }
+
+    // MARK: - Force-refresh (caregiver-initiated bundle update)
+
+    /// True when the bundled content differs from what was last applied. In
+    /// RELEASE this is the only signal a caregiver gets that a newer Core-First
+    /// layout shipped with an app update (auto-bootstrap is suppressed there).
+    static func isBundleUpdateAvailable() -> Bool {
+        let stored = UserDefaults.standard.string(forKey: AppSettingsKey.bootstrapContentHash) ?? ""
+        return stored != bundledContentHash
+    }
+
+    /// Re-materialize the bundled `core_first.json` and overwrite the existing
+    /// system scene's content IN PLACE — same BlasterScene id, isActive, and
+    /// isDefault preserved, so navigation and active-scene state aren't
+    /// disrupted. Scoped strictly to the system Core-First scene; user-created
+    /// and duplicated scenes (systemSceneKey == "") are never touched.
+    ///
+    /// Caregiver-initiated only (AdminView "Update Available"). After applying,
+    /// the stored content hash is advanced so the affordance clears.
+    @discardableResult
+    static func updateSystemScene(context: ModelContext) -> Bool {
+        guard let url = Bundle.main.url(forResource: "core_first", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let sceneJSON = try? JSONDecoder().decode(SceneJSON.self, from: data),
+              let vocabURL = Bundle.main.url(forResource: "vocabulary", withExtension: "json"),
+              let vocabData = try? Data(contentsOf: vocabURL),
+              let vocab = try? JSONDecoder().decode([TileModelCodable].self, from: vocabData),
+              let materialized = try? SceneMaterializer.materialize(scene: sceneJSON, vocabulary: vocab)
+        else {
+            print("updateSystemScene: failed to load/materialize core_first.json")
+            return false
+        }
+
+        do {
+            let key = materialized.key
+            let scenes = try context.fetch(
+                FetchDescriptor<BlasterScene>(predicate: #Predicate { $0.systemSceneKey == key })
+            )
+            guard let scene = scenes.first else {
+                print("updateSystemScene: no scene with systemSceneKey '\(key)'")
+                return false
+            }
+            // Overwrite content in place; preserve id / isActive / isDefault.
+            scene.name = materialized.name
+            scene.descriptionText = materialized.description
+            scene.homePageKey = materialized.homePageKey
+            scene.pages = materialized.pages
+            try context.save()
+            UserDefaults.standard.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
+            return true
+        } catch {
+            print("updateSystemScene failed: \(error)")
+            return false
         }
     }
 }

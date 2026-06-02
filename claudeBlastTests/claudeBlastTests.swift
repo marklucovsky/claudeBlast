@@ -17,7 +17,7 @@ struct claudeBlastTests {
 
     private func makeTestContainer() throws -> ModelContainer {
         let schema = Schema([
-            TileModel.self, PageModel.self, PageTileModel.self,
+            TileModel.self,
             SentenceCache.self, BlasterScene.self, MetricEvent.self
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -65,25 +65,19 @@ struct claudeBlastTests {
         #expect(allTileEvents.count == 3)
     }
 
-    @Test func pageModelWithOrderedTiles() throws {
-        let tile = TileModel(key: "eat", wordClass: "actions")
-        let pageTile = PageTileModel(tile: tile, link: "eat", isAudible: true)
-        let page = PageModel.make(
-            displayName: "home",
-            tiles: [pageTile],
-            tileOrder: [pageTile.id]
-        )
-        #expect(page.displayName == "home")
+    @Test func pageSpecWithOrderedTiles() throws {
+        let page = PageSpec(key: "home", tiles: [
+            TileEntry(key: "eat", link: "eat", isAudible: true)
+        ])
+        #expect(page.key == "home")
         #expect(page.tiles.count == 1)
-        #expect(page.orderedTiles.count == 1)
-        #expect(page.orderedTiles.first?.tile.key == "eat")
+        #expect(page.tiles.first?.key == "eat")
     }
 
-    @Test func pageTileModelDefaults() throws {
-        let tile = TileModel(key: "home", wordClass: "navigation")
-        let pageTile = PageTileModel(tile: tile)
-        #expect(pageTile.link == "")
-        #expect(pageTile.isAudible == true)
+    @Test func tileEntryDefaults() throws {
+        let entry = TileEntry(key: "home")
+        #expect(entry.link == "")
+        #expect(entry.isAudible == true)
     }
 
     @Test func sentenceCacheOrderIndependentKey() throws {
@@ -129,12 +123,11 @@ struct claudeBlastTests {
     }
 
     @Test func navigationTileHasLink() throws {
-        let tile = TileModel(key: "food", wordClass: "navigation")
-        let navTile = PageTileModel(tile: tile, link: "food_page", isAudible: false)
+        let navTile = TileEntry(key: "food", link: "food_page", isAudible: false)
         #expect(!navTile.link.isEmpty)
         #expect(!navTile.isAudible)
 
-        let audibleNavTile = PageTileModel(tile: tile, link: "food_page", isAudible: true)
+        let audibleNavTile = TileEntry(key: "food", link: "food_page", isAudible: true)
         #expect(!audibleNavTile.link.isEmpty)
         #expect(audibleNavTile.isAudible)
     }
@@ -146,7 +139,7 @@ struct claudeBlastTests {
         #expect(result.tiles.count > 400)
         #expect(result.pages.count > 5)
 
-        let homePage = result.pages.first { $0.displayName == "home" }
+        let homePage = result.pages.first { $0.key == "home" }
         #expect(homePage != nil)
         #expect(homePage!.tiles.count > 0)
 
@@ -161,9 +154,82 @@ struct claudeBlastTests {
 
         #expect(result.scene.isDefault)
         #expect(result.scene.isActive)
-        #expect(result.scene.name == "Default")
+        #expect(result.scene.name == "Core-First")
         #expect(result.scene.homePageKey == "home")
+        // Core-First is now sourced from scenes/core_first.json — 13 pages:
+        // home + food_drinks + 11 topic pages (people/social/actions/describe/
+        // food/drinks/places/play_activities/body_health/colors_shapes/weather).
+        // result.pages is the same materialized list, so the counts match.
         #expect(result.scene.pages.count == result.pages.count)
+        #expect(result.scene.pages.count == 13)
+        // The bundled scene is tagged as system-defined.
+        #expect(result.scene.systemSceneKey == "core_first")
+    }
+
+    @Test func bundledTopicPagesKeepHomeLinkLiteral() throws {
+        // Step J: <home> is no longer rewritten at scene-build time. Topic-page
+        // back tiles store the literal "<home>" token; TileGridView resolves it
+        // to the active scene's homePageKey at navigation time.
+        let container = try makeTestContainer()
+        let result = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
+        let people = result.scene.pages.first { $0.key == "people" }
+        #expect(people != nil)
+        let backTile = people?.tiles.first { $0.key == "home" }
+        #expect(backTile?.link == "<home>")
+    }
+
+    @Test func userSceneHasNoSystemKey() throws {
+        // Only bundled scenes carry a systemSceneKey; hand-built ones don't.
+        let scene = BlasterScene(name: "Therapy", homePageKey: "home")
+        #expect(scene.systemSceneKey == "")
+    }
+
+    @Test func duplicateProducesPeerCopyWithProvenance() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let source = BlasterScene(name: "Core-First",
+                                   descriptionText: "built-in",
+                                   homePageKey: "home",
+                                   isDefault: true,
+                                   isActive: true)
+        source.systemSceneKey = "core_first"
+        source.pages = [PageSpec(key: "home", tiles: [TileEntry(key: "eat")])]
+        context.insert(source)
+
+        let copy = BlasterScene.duplicate(of: source, in: context)
+        #expect(copy.name == "duplicate-of:Core-First")
+        #expect(copy.descriptionText.hasPrefix("duplicated from Core-First::"))
+        #expect(copy.homePageKey == "home")
+        // Duplicates are never the active or default scene, and they shed the
+        // systemSceneKey so they're not protected by the force-refresh path.
+        #expect(copy.isDefault == false)
+        #expect(copy.isActive == false)
+        #expect(copy.systemSceneKey == "")
+        // Deep page copy: same content, independent storage.
+        #expect(copy.pages.count == 1)
+        #expect(copy.pages.first?.tiles.first?.key == "eat")
+    }
+
+    @Test func duplicateCollisionUsesSuffix() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let source = BlasterScene(name: "Core-First", homePageKey: "home")
+        context.insert(source)
+        try context.save()
+
+        let first = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(first.name == "duplicate-of:Core-First")
+
+        let second = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(second.name == "duplicate-of:Core-First-2")
+
+        let third = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(third.name == "duplicate-of:Core-First-3")
     }
 
     @Test func sceneActivationDeactivatesOthers() throws {
@@ -201,18 +267,17 @@ struct claudeBlastTests {
         let context = container.mainContext
 
         let tile = TileModel(key: "eat", wordClass: "actions")
-        let pageTile = PageTileModel(tile: tile, link: "", isAudible: true)
-        let page = PageModel.make(displayName: "therapy_page", tiles: [pageTile], tileOrder: [pageTile.id])
+        let page = PageSpec(key: "therapy_page",
+                            tiles: [TileEntry(key: "eat", link: "", isAudible: true)])
 
         let scene = BlasterScene(name: "Therapy Session", homePageKey: "therapy_page")
         scene.pages = [page]
 
         context.insert(tile)
-        context.insert(page)
         context.insert(scene)
 
         #expect(scene.pages.count == 1)
-        #expect(scene.pages.first?.displayName == "therapy_page")
+        #expect(scene.pages.first?.key == "therapy_page")
         #expect(scene.homePageKey == "therapy_page")
     }
 }

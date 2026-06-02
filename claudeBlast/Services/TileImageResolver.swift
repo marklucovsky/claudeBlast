@@ -84,6 +84,11 @@ final class TileImageResolver {
     /// Load a prefixed image from the bundle root ({prefix}_{key}.png).
     /// Non-asset-catalog images land at the bundle root with the synchronized group build system.
     /// Uses NSCache to avoid repeated disk reads.
+    ///
+    /// Fallback chain: if {prefix}_{key}.png is missing AND the prefix has a
+    /// registered missing-image placeholder (currently only `hc` →
+    /// `hc_missing.png`), return the placeholder. This lets us ship sparse
+    /// sets without forcing every new tile through bespoke art generation.
     private func prefixedBundleImage(for key: String, prefix: String) -> UIImage? {
         let resourceName = "\(prefix)_\(key)"
         let cacheKey = NSString(string: resourceName)
@@ -92,16 +97,34 @@ final class TileImageResolver {
             return cached
         }
 
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "png") else {
-            return nil
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
+           let data = try? Data(contentsOf: url),
+           let img = UIImage(data: data) {
+            cache.setObject(img, forKey: cacheKey)
+            return img
         }
 
-        guard let data = try? Data(contentsOf: url),
-              let img = UIImage(data: data) else {
-            return nil
+        // Per-set placeholder fallback. Cache under the same cacheKey so each
+        // missing tile pays the disk read once; subsequent lookups for the
+        // same tile hit the cache without reloading the placeholder PNG.
+        if let placeholderName = Self.missingPlaceholderName(for: prefix),
+           let url = Bundle.main.url(forResource: placeholderName, withExtension: "png"),
+           let data = try? Data(contentsOf: url),
+           let img = UIImage(data: data) {
+            cache.setObject(img, forKey: cacheKey)
+            return img
         }
 
-        cache.setObject(img, forKey: cacheKey)
-        return img
+        return nil
+    }
+
+    /// Per-prefix missing-image placeholder name (without `.png`).
+    /// Currently only the high-contrast set has a shared placeholder; the
+    /// other sets fall through to TileImageView's letter-on-color rendering.
+    private static func missingPlaceholderName(for prefix: String) -> String? {
+        switch prefix {
+        case "hc": return "hc_missing"
+        default:   return nil
+        }
     }
 }

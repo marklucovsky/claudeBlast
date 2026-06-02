@@ -13,13 +13,24 @@ import UIKit
 enum SceneExporter {
 
     /// Convert a BlasterScene into an ExportableScene struct.
-    static func export(_ scene: BlasterScene, defaultTileKeys: Set<String> = []) -> ExportableScene {
+    ///
+    /// - Parameters:
+    ///   - scene: the scene to export.
+    ///   - defaultTileKeys: keys considered part of the bundled vocabulary
+    ///     (any key NOT in this set is treated as a custom vocab entry and
+    ///     included in `tiles` on the exportable).
+    ///   - tileLookup: maps vocabulary key → TileModel. Needed because the
+    ///     scene's pages now store keys only; tile metadata (wordClass,
+    ///     displayName, userImageData) lives on the TileModel entities.
+    static func export(_ scene: BlasterScene,
+                       defaultTileKeys: Set<String> = [],
+                       tileLookup: [String: TileModel]) -> ExportableScene {
         var exportTiles: [ExportableTile] = []
         var seenTileKeys = Set<String>()
 
         let exportPages: [ExportablePage] = scene.pages.map { page in
-            let pageTiles = page.orderedTiles.map { pt -> ExportablePageTile in
-                let tile = pt.tile
+            let pageTiles: [ExportablePageTile] = page.tiles.compactMap { entry in
+                guard let tile = tileLookup[entry.key] else { return nil }
 
                 // Collect tiles that are not in the default vocabulary or have custom images
                 if seenTileKeys.insert(tile.key).inserted {
@@ -39,11 +50,11 @@ enum SceneExporter {
 
                 return ExportablePageTile(
                     key: tile.key,
-                    isAudible: pt.isAudible,
-                    link: pt.link
+                    isAudible: entry.isAudible,
+                    link: entry.link
                 )
             }
-            return ExportablePage(key: page.displayName, tiles: pageTiles)
+            return ExportablePage(key: page.key, tiles: pageTiles)
         }
 
         return ExportableScene(
@@ -58,8 +69,10 @@ enum SceneExporter {
     }
 
     /// Export a BlasterScene to pretty-printed JSON Data.
-    static func exportJSON(_ scene: BlasterScene, defaultTileKeys: Set<String> = []) throws -> Data {
-        let exportable = export(scene, defaultTileKeys: defaultTileKeys)
+    static func exportJSON(_ scene: BlasterScene,
+                           defaultTileKeys: Set<String> = [],
+                           tileLookup: [String: TileModel]) throws -> Data {
+        let exportable = export(scene, defaultTileKeys: defaultTileKeys, tileLookup: tileLookup)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(exportable)

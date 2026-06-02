@@ -24,7 +24,7 @@ struct TileScriptRecorderTests {
 
     private func makeTestContainer() throws -> ModelContainer {
         let schema = Schema([
-            TileModel.self, PageModel.self, PageTileModel.self,
+            TileModel.self,
             SentenceCache.self, BlasterScene.self, MetricEvent.self,
             RecordedScript.self,
         ])

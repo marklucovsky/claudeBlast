@@ -65,6 +65,14 @@ struct AdminView: View {
     @State private var importWarning: String?
     @State private var sceneToExport: BlasterSceneFile?
 
+    /// Whether the bundled Core-First content differs from what's installed.
+    /// Recomputed onAppear and after an update is applied. Drives the
+    /// per-scene "Update Available" affordance.
+    @State private var bundleUpdateAvailable = false
+    /// Set to the system scene the caregiver tapped "Update" on, to drive the
+    /// confirmation dialog.
+    @State private var sceneToUpdate: BlasterScene?
+
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
     }
@@ -206,9 +214,12 @@ struct AdminView: View {
                 Section("Scenes") {
                     ForEach(scenes) { scene in
                         NavigationLink(destination: SceneEditorView(scene: scene)) {
-                            SceneRow(scene: scene) {
-                                activateScene(scene)
-                            }
+                            SceneRow(
+                                scene: scene,
+                                updateAvailable: bundleUpdateAvailable,
+                                onActivate: { activateScene(scene) },
+                                onUpdate: { sceneToUpdate = scene }
+                            )
                         }
                         .swipeActions(edge: .leading) {
                             if !scene.isActive {
@@ -230,6 +241,12 @@ struct AdminView: View {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
                             .tint(.blue)
+                            Button {
+                                duplicateScene(scene)
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
+                            .tint(.indigo)
                         }
                     }
                 }
@@ -380,6 +397,15 @@ struct AdminView: View {
             // Request speech recognition permission now, while no sheet is open,
             // so the system dialog is never occluded by a presented sheet.
             SFSpeechRecognizer.requestAuthorization { _ in }
+            bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
+        }
+        .sheet(item: $sceneToUpdate) { scene in
+            UpdateConfirmationSheet(
+                sceneName: scene.name,
+                onConfirm: { duplicateFirst, remember in
+                    applySystemSceneUpdate(duplicateFirst: duplicateFirst, remember: remember)
+                }
+            )
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -472,6 +498,36 @@ struct AdminView: View {
         }
     }
 
+    private func applySystemSceneUpdate(duplicateFirst: Bool, remember: Bool) {
+        // Persist the sticky preference state to match the toggle exactly:
+        // - remember ON → store remembered=true + the duplicate value
+        // - remember OFF → store remembered=false (toggling off explicitly
+        //   forgets a previous choice, so the dialog reverts to safe defaults
+        //   next time)
+        let defaults = UserDefaults.standard
+        defaults.set(remember, forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+        if remember {
+            defaults.set(duplicateFirst, forKey: AppSettingsKey.forceRefreshDuplicate)
+        }
+
+        // Snapshot the current Core-First into a duplicate before applying
+        // the bundled overwrite, so the caregiver always has a recovery path.
+        if duplicateFirst, let source = sceneToUpdate {
+            _ = BlasterScene.duplicate(of: source, in: modelContext)
+            try? modelContext.save()
+        }
+
+        sceneToUpdate = nil
+        guard BootstrapLoader.updateSystemScene(context: modelContext) else { return }
+        bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
+        sentenceEngine.clearSelection()
+    }
+
+    private func duplicateScene(_ scene: BlasterScene) {
+        _ = BlasterScene.duplicate(of: scene, in: modelContext)
+        try? modelContext.save()
+    }
+
     private func activateScene(_ scene: BlasterScene) {
         try? scene.activate(context: modelContext)
     }
@@ -552,7 +608,10 @@ struct AdminView: View {
 
     private func exportScene(_ scene: BlasterScene) {
         do {
-            let data = try SceneExporter.exportJSON(scene, defaultTileKeys: defaultTileKeys)
+            let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let data = try SceneExporter.exportJSON(scene,
+                                                    defaultTileKeys: defaultTileKeys,
+                                                    tileLookup: tileLookup)
             sceneToExport = BlasterSceneFile(
                 data: data,
                 filename: scene.name.sanitizedFilename + "." + BlasterSceneFormat.fileExtension
@@ -600,13 +659,11 @@ struct AdminView: View {
         isResetting = true
         sentenceEngine.clearSelection()
         do {
-            // Relationship-safe deletion order:
-            // BlasterScene.pages = nullify (doesn't cascade to PageModel)
-            // PageModel.tiles = cascade (auto-deletes PageTileModel)
+            // BlasterScene.pages is inline JSON-encoded data (no PageModel
+            // relationship), so deleting BlasterScene is sufficient.
             try modelContext.delete(model: MetricEvent.self)
             try modelContext.delete(model: SentenceCache.self)
             try modelContext.delete(model: BlasterScene.self)
-            try modelContext.delete(model: PageModel.self)   // cascades PageTileModel
             try modelContext.delete(model: TileModel.self)
             try modelContext.save()
         } catch {
@@ -614,7 +671,12 @@ struct AdminView: View {
             isResetting = false
             return
         }
-        UserDefaults.standard.set(0, forKey: AppSettingsKey.bootstrapVersion)
+        // Clear all bootstrap-state flags so the next loadDefaultVocabulary
+        // call writes fresh hash + installed flag via markBootstrapComplete.
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapInstalled)
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapContentHash)
+        defaults.removeObject(forKey: AppSettingsKey.bootstrapVersion)
         _ = BootstrapLoader.loadDefaultVocabulary(context: modelContext)
         BootstrapLoader.markBootstrapComplete()
         isResetting = false
@@ -751,7 +813,14 @@ private struct VoiceHelpPopover: View {
 
 struct SceneRow: View {
     let scene: BlasterScene
+    var updateAvailable: Bool = false
     let onActivate: () -> Void
+    var onUpdate: (() -> Void)? = nil
+
+    private var isSystemScene: Bool { !scene.systemSceneKey.isEmpty }
+    /// Show the update affordance only for the system scene, and only when a
+    /// newer bundled version is available.
+    private var showUpdateButton: Bool { isSystemScene && updateAvailable && onUpdate != nil }
 
     var body: some View {
         HStack {
@@ -760,28 +829,43 @@ struct SceneRow: View {
                     Text(scene.name)
                         .font(.headline)
                     if scene.isDefault {
-                        Text("Default")
+                        badge("Default", .blue)
+                    }
+                    if isSystemScene {
+                        badge("System", .purple)
+                    }
+                    if showUpdateButton {
+                        // Inline next to the System badge — a tappable badge
+                        // that drives the same confirmation dialog.
+                        Button {
+                            onUpdate?()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .imageScale(.small)
+                                Text("Update")
+                            }
                             .font(.caption2)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(.blue.opacity(0.15)))
-                            .foregroundStyle(.blue)
+                            .background(Capsule().fill(Color.orange.opacity(0.18)))
+                            .foregroundStyle(.orange)
+                        }
+                        .buttonStyle(.plain)
                     }
                     if scene.isImported {
-                        Text("Imported")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(.orange.opacity(0.15)))
-                            .foregroundStyle(.orange)
+                        badge("Imported", .orange)
                     }
                 }
                 Text("\(scene.pages.count) pages · \(scene.lastModified, style: .date)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if !scene.descriptionText.isEmpty {
+                if isSystemScene {
+                    Text("Built-in scene — defined by the app. Updates ship with new versions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !scene.descriptionText.isEmpty {
                     Text(scene.descriptionText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -795,14 +879,112 @@ struct SceneRow: View {
                     .foregroundStyle(.green)
                     .font(.title3)
             } else {
-                Button("Activate") {
-                    onActivate()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Button("Activate") { onActivate() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func badge(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.15)))
+            .foregroundStyle(color)
+    }
+}
+
+// MARK: - Update Confirmation Sheet
+
+/// Confirms the caregiver's intent to overwrite the system Core-First scene
+/// with the latest bundled version. Two safety affordances:
+///
+/// - "Save a copy first" toggle (default ON) creates a duplicate of the
+///   current scene before applying the overwrite, preserving any caregiver
+///   customizations as a recoverable peer scene.
+/// - "Remember this choice" persists the toggle's value via UserDefaults so
+///   future updates pre-select accordingly. The dialog is still shown every
+///   time — caregivers shouldn't be conditioned to dismiss without reading.
+struct UpdateConfirmationSheet: View {
+    let sceneName: String
+    /// Callback: (duplicateFirst, remember)
+    let onConfirm: (Bool, Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var duplicateFirst: Bool
+    @State private var rememberChoice: Bool
+
+    private var hasRememberedChoice: Bool {
+        UserDefaults.standard.bool(forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+    }
+
+    init(sceneName: String, onConfirm: @escaping (Bool, Bool) -> Void) {
+        self.sceneName = sceneName
+        self.onConfirm = onConfirm
+        let defaults = UserDefaults.standard
+        let remembered = defaults.bool(forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+        let initialDuplicate: Bool
+        if remembered {
+            // .bool returns false for missing keys, so use .object check.
+            initialDuplicate = defaults.object(forKey: AppSettingsKey.forceRefreshDuplicate) as? Bool ?? true
+        } else {
+            initialDuplicate = true   // safe default for first-time and unremembered cases
+        }
+        _duplicateFirst = State(initialValue: initialDuplicate)
+        // Pre-check the Remember toggle when a previous choice is stored, so
+        // the caregiver sees the persisted state. Unchecking it on confirm
+        // clears the sticky preference (handled in applySystemSceneUpdate).
+        _rememberChoice = State(initialValue: remembered)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("This replaces the **\(sceneName)** layout with the latest built-in version.")
+                        .font(.callout)
+                    Text("If someone depends on the current layout, save a copy first — the update overwrites in place.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle(isOn: $duplicateFirst) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Save a copy of the current \(sceneName) first")
+                            Text("Recommended")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle("Remember this choice", isOn: $rememberChoice)
+                } footer: {
+                    if hasRememberedChoice {
+                        Text("Last choice was remembered. Change here and check Remember to update.")
+                            .font(.caption2)
+                    }
+                }
+            }
+            .navigationTitle("Update \(sceneName)?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Update") {
+                        onConfirm(duplicateFirst, rememberChoice)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

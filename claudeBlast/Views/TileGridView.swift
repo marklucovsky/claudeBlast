@@ -16,6 +16,10 @@ struct TileGridView: View {
     @Query(filter: #Predicate<BlasterScene> { $0.isActive })
     var activeScenes: [BlasterScene]
 
+    /// All vocabulary tiles. Used to resolve a TileEntry.key back to the
+    /// underlying TileModel for display (image, label, wordClass).
+    @Query(sort: \TileModel.key) private var allTiles: [TileModel]
+
     @Query(
         filter: #Predicate<SentenceCache> { entry in
             entry.hitCount >= promotedHitThreshold || entry.isPinned
@@ -23,6 +27,10 @@ struct TileGridView: View {
         sort: \SentenceCache.hitCount, order: .reverse
     )
     private var promotedEntries: [SentenceCache]
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
 
     @Environment(SentenceEngine.self) private var engine
     @Environment(NavigationCoordinator.self) private var coordinator
@@ -55,25 +63,26 @@ struct TileGridView: View {
     /// All tile keys reachable anywhere in the active scene.
     private var sceneKeySet: Set<String> {
         guard let scene = activeScene else { return [] }
-        return Set(scene.pages.flatMap { $0.orderedTiles.map(\.tile.key) })
+        return Set(scene.pages.flatMap { $0.tiles.map(\.key) })
     }
 
     /// key → wordClass for all tiles in the active scene (used for icon color coding).
     private var tileWordClass: [String: String] {
         guard let scene = activeScene else { return [:] }
+        let lookup = tileLookup
         var result: [String: String] = [:]
         for page in scene.pages {
-            for pt in page.orderedTiles {
-                result[pt.tile.key] = pt.tile.wordClass
+            for entry in page.tiles {
+                result[entry.key] = lookup[entry.key]?.wordClass ?? ""
             }
         }
         return result
     }
 
-    private var currentPage: PageModel? {
+    private var currentPage: PageSpec? {
         guard let scene = activeScene else { return nil }
         let key = coordinator.currentPageKey ?? scene.homePageKey
-        return scene.pages.first { $0.displayName == key }
+        return scene.pages.first { $0.key == key }
     }
 
     var body: some View {
@@ -197,7 +206,7 @@ struct TileGridView: View {
             currentDisplayPage = 0
             engine.clearSelection()
         }
-        .onChange(of: activeScene?.pages.map(\.displayName)) { _, pageNames in
+        .onChange(of: activeScene?.pages.map(\.key)) { _, pageNames in
             // If the current page was deleted or renamed, navigate home
             guard let pageNames, let key = coordinator.currentPageKey else { return }
             if !pageNames.contains(key) {
@@ -205,7 +214,7 @@ struct TileGridView: View {
                 currentDisplayPage = 0
             }
         }
-        .onChange(of: currentPage?.tileOrder) { _, _ in
+        .onChange(of: currentPage?.tiles.map(\.key)) { _, _ in
             // Reset display page position when tile count changes significantly
             currentDisplayPage = 0
         }
@@ -338,7 +347,7 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
-    private func pagedGrid(for page: PageModel) -> some View {
+    private func pagedGrid(for page: PageSpec) -> some View {
         GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
             let spec = GridLayoutCalculator.compute(
@@ -346,7 +355,7 @@ struct TileGridView: View {
                 geo: geo.size,
                 userStep: tileSizeStep
             )
-            let chunkedTiles = page.orderedTiles.chunked(into: spec.perPage)
+            let chunkedTiles = page.tiles.chunked(into: spec.perPage)
             Group {
                 if isLandscape {
                     landscapeTabView(chunks: chunkedTiles, spec: spec)
@@ -356,7 +365,7 @@ struct TileGridView: View {
             }
             #if DEBUG
             .overlay(alignment: .centerLastTextBaseline) {
-                gridDebugBadge(spec: spec, tileCount: page.orderedTiles.count)
+                gridDebugBadge(spec: spec, tileCount: page.tiles.count)
             }
             #endif
             .onChange(of: isLandscape) { _, _ in
@@ -432,13 +441,13 @@ struct TileGridView: View {
     #endif
 
     @ViewBuilder
-    private func landscapeTabView(chunks: [[PageTileModel]], spec: GridLayoutSpec) -> some View {
+    private func landscapeTabView(chunks: [[TileEntry]], spec: GridLayoutSpec) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: spec.cols)
         TabView(selection: $currentDisplayPage) {
             ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
                 LazyVGrid(columns: columns, spacing: spec.verticalSpacing) {
-                    ForEach(tiles) { pageTile in
-                        tileCellView(for: pageTile, labelFontSize: spec.labelFontSize)
+                    ForEach(tiles, id: \.key) { entry in
+                        tileCellView(for: entry, labelFontSize: spec.labelFontSize)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -454,7 +463,7 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
-    private func portraitScrollView(chunks: [[PageTileModel]], pageHeight: CGFloat, spec: GridLayoutSpec) -> some View {
+    private func portraitScrollView(chunks: [[TileEntry]], pageHeight: CGFloat, spec: GridLayoutSpec) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: spec.cols)
         ScrollView {
             // VStack (not Lazy) ensures all page frames are committed upfront,
@@ -463,8 +472,8 @@ struct TileGridView: View {
             VStack(spacing: 0) {
                 ForEach(Array(chunks.enumerated()), id: \.offset) { index, tiles in
                     LazyVGrid(columns: columns, spacing: spec.verticalSpacing) {
-                        ForEach(tiles) { pageTile in
-                            tileCellView(for: pageTile, labelFontSize: spec.labelFontSize)
+                        ForEach(tiles, id: \.key) { entry in
+                            tileCellView(for: entry, labelFontSize: spec.labelFontSize)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -486,32 +495,43 @@ struct TileGridView: View {
     }
 
     @ViewBuilder
-    private func tileCellView(for pageTile: PageTileModel, labelFontSize: CGFloat) -> some View {
-        TileView(
-            pageTile: pageTile,
-            isSelected: engine.selectedTiles.contains { $0.key == pageTile.tile.key },
-            labelFontSize: labelFontSize
-        ) { handleTileTap(pageTile) }
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.5)
-                .onEnded { _ in
-                    pendingNote = "\(pageTile.tile.key) [\(pageTile.tile.wordClass)]"
-                    showNoteAlert = true
-                }
-        )
+    private func tileCellView(for entry: TileEntry, labelFontSize: CGFloat) -> some View {
+        if let tile = tileLookup[entry.key] {
+            TileView(
+                tile: tile,
+                link: entry.link,
+                isAudible: entry.isAudible,
+                isSelected: engine.selectedTiles.contains { $0.key == entry.key },
+                labelFontSize: labelFontSize
+            ) { handleTileTap(entry) }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in
+                        pendingNote = "\(tile.key) [\(tile.wordClass)]"
+                        showNoteAlert = true
+                    }
+            )
+        }
     }
 
-    private func handleTileTap(_ pageTile: PageTileModel) {
-        let key = pageTile.tile.key
+    private func handleTileTap(_ entry: TileEntry) {
+        let key = entry.key
+        guard let tile = tileLookup[key] else { return }
+        // Resolve the symbolic "<home>" link to the active scene's homePageKey
+        // at navigation time (Step J). Tiles store "<home>" literally so a
+        // runtime change of homePageKey is honored without rebuilding pages.
+        let resolvedLink = entry.link == "<home>"
+            ? (activeScene?.homePageKey ?? "home")
+            : entry.link
         // An "audible nav tile" is a single gesture that both adds a tile to the active group
         // AND navigates. We treat it as such in recordings only when the tile key matches the
         // link key (the conventional case for nav tiles like <drinks isAudible=t/>).
-        let isAudibleNavTile = pageTile.isAudible
-            && !pageTile.link.isEmpty
-            && pageTile.link == key
+        let isAudibleNavTile = entry.isAudible
+            && !resolvedLink.isEmpty
+            && resolvedLink == key
 
         var alreadySelected = false
-        if pageTile.isAudible {
+        if entry.isAudible {
             alreadySelected = engine.selectedTiles.contains { $0.key == key }
             if alreadySelected {
                 if let index = engine.selectedTiles.firstIndex(where: { $0.key == key }) {
@@ -519,26 +539,26 @@ struct TileGridView: View {
                 }
             } else {
                 if tileSpeechEnabled {
-                    engine.speakTile(pageTile.tile.displayName)
+                    engine.speakTile(tile.displayName)
                 }
-                engine.addTile(pageTile.tile)
+                engine.addTile(tile)
                 if recorder.state == .recording {
                     if isAudibleNavTile {
-                        recorder.recordAudibleNavigate(pageKey: pageTile.link)
+                        recorder.recordAudibleNavigate(pageKey: resolvedLink)
                     } else {
                         recorder.recordTap(tileKey: key)
                     }
                 }
             }
         }
-        if !pageTile.link.isEmpty {
-            coordinator.navigate(to: pageTile.link)
+        if !resolvedLink.isEmpty {
+            coordinator.navigate(to: resolvedLink)
             if recorder.state == .recording {
                 // Skip a separate navigate record if we already recorded an audible-nav for
                 // this gesture (it covers both the tile and the navigation).
                 let recordedAsAudibleNav = isAudibleNavTile && !alreadySelected
                 if !recordedAsAudibleNav {
-                    recorder.recordNavigate(pageKey: pageTile.link)
+                    recorder.recordNavigate(pageKey: resolvedLink)
                 }
             }
         }

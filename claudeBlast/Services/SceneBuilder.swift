@@ -4,8 +4,8 @@
 //  SceneBuilder.swift
 //  claudeBlast
 //
-//  Materializes a GeneratedScene (AI output) into the SwiftData model graph.
-//  All objects are inserted in a single transaction.
+//  Materializes a GeneratedScene (AI output) into BlasterScene + inline
+//  [PageSpec]. Inserts the scene in a single transaction.
 //
 
 import SwiftData
@@ -14,7 +14,9 @@ enum SceneBuilder {
     /// Build a BlasterScene from AI output, insert it into `context`, and return it.
     /// - Parameters:
     ///   - generated: The AI-generated scene structure.
-    ///   - tileLookup: Dictionary mapping tile key → TileModel (already inserted).
+    ///   - tileLookup: Dictionary mapping tile key → TileModel. Used only to
+    ///     validate that every generated key exists in vocabulary; the resulting
+    ///     PageSpec.tiles store keys directly (no PageTileModel/TileModel refs).
     ///   - context: The ModelContext to insert into.
     @discardableResult
     static func build(
@@ -30,30 +32,16 @@ enum SceneBuilder {
             isActive: false
         )
 
-        var allPageTiles: [PageTileModel] = []
-        var pages: [PageModel] = []
-
-        for genPage in generated.pages {
-            var pageTiles: [PageTileModel] = []
-            for genTile in genPage.tiles {
-                guard let tile = tileLookup[genTile.key] else { continue }
-                let pt = PageTileModel(tile: tile, link: genTile.link, isAudible: genTile.isAudible)
-                pageTiles.append(pt)
+        let pages: [PageSpec] = generated.pages.map { genPage in
+            let tiles = genPage.tiles.compactMap { genTile -> TileEntry? in
+                guard tileLookup[genTile.key] != nil else { return nil }
+                return TileEntry(key: genTile.key, link: genTile.link, isAudible: genTile.isAudible)
             }
-            let page = PageModel.make(
-                displayName: genPage.key,
-                tiles: pageTiles,
-                tileOrder: pageTiles.map(\.id)
-            )
-            pages.append(page)
-            allPageTiles.append(contentsOf: pageTiles)
+            return PageSpec(key: genPage.key, tiles: tiles)
         }
-
         scene.pages = pages
 
         try context.transaction {
-            for pt in allPageTiles { context.insert(pt) }
-            for page in pages { context.insert(page) }
             context.insert(scene)
         }
 

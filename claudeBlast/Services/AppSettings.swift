@@ -9,7 +9,27 @@ import SwiftData
 import Foundation
 
 enum AppSettingsKey {
+    /// Legacy: integer version stamp. Pre-Step M bootstrap used this; new code
+    /// uses bootstrapContentHash + bootstrapInstalled. Kept declared so the
+    /// UserDefaults key isn't accidentally reused.
     static let bootstrapVersion  = "bootstrap_version"
+    /// SHA256 hex of the bundled content (vocabulary.json + scenes/*.json) at
+    /// the most recent bootstrap. Used in DEBUG builds to auto-re-bootstrap
+    /// when a developer edits a bundled file. RELEASE builds ignore this.
+    static let bootstrapContentHash = "bootstrap_content_hash"
+    /// Set to true the first time bootstrap completes. RELEASE builds use
+    /// this as the sole bootstrap gate — once true, app updates never
+    /// auto-replace the user's scene/vocab.
+    static let bootstrapInstalled   = "bootstrap_installed"
+    /// Sticky preference for the force-refresh "Save a copy first" toggle.
+    /// Default true (safe). Only read when forceRefreshDuplicateRemembered
+    /// is true; otherwise the dialog opens with the default each time.
+    static let forceRefreshDuplicate           = "force_refresh_duplicate"
+    /// Whether the user checked "Remember this choice" in the force-refresh
+    /// dialog. False = the dialog re-asks every time with the default
+    /// pre-selected. True = the toggle's last value is honored as the
+    /// pre-selected value.
+    static let forceRefreshDuplicateRemembered = "force_refresh_duplicate_remembered"
     static let icloudEnabled     = "icloud_enabled"
     static let openaiApiKey      = "openai_api_key"
     static let providerChoice    = "provider_choice"
@@ -33,14 +53,15 @@ enum AppSettingsKey {
     static let autoDoneMs            = "auto_done_ms"
 }
 
-/// Version stamp written to UserDefaults after bootstrap completes.
-/// Primary purpose: first-launch detection.
-/// Bump only if a structural change requires forcing a full re-bootstrap from the bundle.
-let currentBootstrapVersion: Int = 2
+// Bootstrap version stamp removed in Step M. needsBootstrap now derives from
+// a content hash of the bundled resource files (DEBUG) or the bootstrapInstalled
+// flag (RELEASE). See BootstrapLoader.needsBootstrap().
 
 func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
+    // PageModel + PageTileModel are gone — BlasterScene.pages is now an
+    // inline [PageSpec] attribute (JSON-encoded Data), not a relationship.
     let schema = Schema([
-        TileModel.self, PageModel.self, PageTileModel.self,
+        TileModel.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
     ])

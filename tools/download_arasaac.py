@@ -7,8 +7,10 @@ Phase 1: Download ARASAAC pictograms for all Blaster vocabulary tiles.
 Usage:
     python3 tools/download_arasaac.py [--dry-run] [--skip-existing]
 
-Reads reference/vocabulary/vocabulary.json, searches the ARASAAC API for each
+Reads claudeBlast/Resources/vocabulary.json, searches the ARASAAC API for each
 word, and downloads the PNG into the correct Assets.xcassets imageset.
+Auto-creates missing imageset directories (with Contents.json) so new
+vocabulary entries don't have to be hand-bootstrapped.
 
 ARASAAC license: CC BY-NC-SA 4.0 (non-commercial use only).
 """
@@ -27,7 +29,7 @@ except ImportError:
 API_BASE = "https://api.arasaac.org/api/pictograms/en"
 PIC_STATIC = "https://static.arasaac.org/pictograms"  # {id}/{id}_500.png
 ASSETS = Path("claudeBlast/Assets.xcassets")
-VOCAB = Path("reference/vocabulary/vocabulary.json")
+VOCAB = Path("claudeBlast/Resources/vocabulary.json")
 
 # Per-key search overrides.  Keys that normalise poorly or are multi-word
 # phrases where the full phrase gives better ARASAAC results.
@@ -94,7 +96,34 @@ OVERRIDES: dict[str, str] = {
     "orange_": "orange",
     # Colors
     "don't": "not",
+    # Core grammar (vocab additions in Core-First worktree).
+    # First pass overrides were too clever and all collided on ARASAAC's
+    # generic "pronoun"-keyword pictogram (id 6480 = "he"). Empirically
+    # confirmed via direct API probe: the plain words work better for
+    # i/me/it (English ARASAAC uses the same picto for I/me; "it" is
+    # distinct). For "for", "in order to" routes to the preposition picto.
+    # For "out", "outside" avoids matching "extinct"/sentinel results.
+    "me": "I",        # ARASAAC: English I/me share id 6632
+    "all_done": "finished",
+    "out": "outside",
+    "for": "in order to",
+    "backyard": "garden",  # ARASAAC's "backyard" matches a compost bin (id 36611)
 }
+
+
+def ensure_imageset(dest_dir: Path, key: str) -> None:
+    """Create the .imageset directory + Contents.json if missing.
+    Mirrors Xcode's default imageset shape so the asset catalog picks up
+    the new key on the next build.
+    """
+    if dest_dir.exists():
+        return
+    dest_dir.mkdir(parents=True)
+    contents = {
+        "images": [{"filename": f"{key}.png", "idiom": "universal"}],
+        "info": {"author": "xcode", "version": 1},
+    }
+    (dest_dir / "Contents.json").write_text(json.dumps(contents, indent=2) + "\n")
 
 
 def normalize(key: str) -> str:
@@ -170,10 +199,9 @@ def main() -> None:
             print(f"→  {key:35s}  (skipped, exists)")
             continue
 
-        if not dest_dir.exists():
-            print(f"✗  {key:35s}  imageset directory missing — skipping")
-            not_found.append(key)
-            continue
+        # Auto-create the imageset directory for new vocabulary entries.
+        # Safe no-op when the directory already exists.
+        ensure_imageset(dest_dir, key)
 
         # Search
         pid = search_arasaac(term, session)
