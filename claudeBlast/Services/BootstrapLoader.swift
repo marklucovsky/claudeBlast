@@ -53,6 +53,9 @@ enum BootstrapLoader {
         let installed = defaults.bool(forKey: AppSettingsKey.bootstrapInstalled)
 
         #if DEBUG
+        // debug builds automatically re-bootstrap if hashes are not the same,
+        // customer builds do not do this auto update, but do allow for manual download
+        //
         // Migrate from the old integer-version scheme: if installed-flag is
         // unset but the legacy bootstrap_version key is set, we already
         // bootstrapped at least once. Migrate forward without an extra wipe.
@@ -192,19 +195,13 @@ enum BootstrapLoader {
     // MARK: - Materialized scene → BlasterScene
 
     /// Convert a SceneMaterializer.MaterializedScene into a BlasterScene whose
-    /// `pages` array carries the materialized [PageSpec] directly. Symbolic
-    /// "<home>" links rewrite to the scene's actual homePageKey at this point;
-    /// Step J will move that resolution to navigation time.
+    /// `pages` array carries the materialized [PageSpec] directly. The "<home>"
+    /// symbolic link is kept LITERAL — TileGridView resolves it to the active
+    /// scene's homePageKey at navigation time (Step J), so a runtime change of
+    /// homePageKey works without rebuilding pages.
     private static func buildScene(
         from materialized: SceneMaterializer.MaterializedScene
     ) -> BlasterScene {
-        let resolvedPages: [PageSpec] = materialized.pages.map { spec in
-            let tiles = spec.tiles.map { entry -> TileEntry in
-                let to = entry.link == "<home>" ? materialized.homePageKey : entry.link
-                return TileEntry(key: entry.key, link: to, isAudible: entry.isAudible)
-            }
-            return PageSpec(key: spec.key, tiles: tiles)
-        }
         let scene = BlasterScene(
             name: materialized.name,
             descriptionText: materialized.description,
@@ -212,7 +209,63 @@ enum BootstrapLoader {
             isDefault: materialized.isDefault,
             isActive: materialized.isDefault
         )
-        scene.pages = resolvedPages
+        scene.systemSceneKey = materialized.key
+        scene.pages = materialized.pages
         return scene
+    }
+
+    // MARK: - Force-refresh (caregiver-initiated bundle update)
+
+    /// True when the bundled content differs from what was last applied. In
+    /// RELEASE this is the only signal a caregiver gets that a newer Core-First
+    /// layout shipped with an app update (auto-bootstrap is suppressed there).
+    static func isBundleUpdateAvailable() -> Bool {
+        let stored = UserDefaults.standard.string(forKey: AppSettingsKey.bootstrapContentHash) ?? ""
+        return stored != bundledContentHash
+    }
+
+    /// Re-materialize the bundled `core_first.json` and overwrite the existing
+    /// system scene's content IN PLACE — same BlasterScene id, isActive, and
+    /// isDefault preserved, so navigation and active-scene state aren't
+    /// disrupted. Scoped strictly to the system Core-First scene; user-created
+    /// and duplicated scenes (systemSceneKey == "") are never touched.
+    ///
+    /// Caregiver-initiated only (AdminView "Update Available"). After applying,
+    /// the stored content hash is advanced so the affordance clears.
+    @discardableResult
+    static func updateSystemScene(context: ModelContext) -> Bool {
+        guard let url = Bundle.main.url(forResource: "core_first", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let sceneJSON = try? JSONDecoder().decode(SceneJSON.self, from: data),
+              let vocabURL = Bundle.main.url(forResource: "vocabulary", withExtension: "json"),
+              let vocabData = try? Data(contentsOf: vocabURL),
+              let vocab = try? JSONDecoder().decode([TileModelCodable].self, from: vocabData),
+              let materialized = try? SceneMaterializer.materialize(scene: sceneJSON, vocabulary: vocab)
+        else {
+            print("updateSystemScene: failed to load/materialize core_first.json")
+            return false
+        }
+
+        do {
+            let key = materialized.key
+            let scenes = try context.fetch(
+                FetchDescriptor<BlasterScene>(predicate: #Predicate { $0.systemSceneKey == key })
+            )
+            guard let scene = scenes.first else {
+                print("updateSystemScene: no scene with systemSceneKey '\(key)'")
+                return false
+            }
+            // Overwrite content in place; preserve id / isActive / isDefault.
+            scene.name = materialized.name
+            scene.descriptionText = materialized.description
+            scene.homePageKey = materialized.homePageKey
+            scene.pages = materialized.pages
+            try context.save()
+            UserDefaults.standard.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
+            return true
+        } catch {
+            print("updateSystemScene failed: \(error)")
+            return false
+        }
     }
 }

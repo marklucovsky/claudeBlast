@@ -162,6 +162,26 @@ struct claudeBlastTests {
         // result.pages is the same materialized list, so the counts match.
         #expect(result.scene.pages.count == result.pages.count)
         #expect(result.scene.pages.count == 13)
+        // The bundled scene is tagged as system-defined.
+        #expect(result.scene.systemSceneKey == "core_first")
+    }
+
+    @Test func bundledTopicPagesKeepHomeLinkLiteral() throws {
+        // Step J: <home> is no longer rewritten at scene-build time. Topic-page
+        // back tiles store the literal "<home>" token; TileGridView resolves it
+        // to the active scene's homePageKey at navigation time.
+        let container = try makeTestContainer()
+        let result = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
+        let people = result.scene.pages.first { $0.key == "people" }
+        #expect(people != nil)
+        let backTile = people?.tiles.first { $0.key == "home" }
+        #expect(backTile?.link == "<home>")
+    }
+
+    @Test func userSceneHasNoSystemKey() throws {
+        // Only bundled scenes carry a systemSceneKey; hand-built ones don't.
+        let scene = BlasterScene(name: "Therapy", homePageKey: "home")
+        #expect(scene.systemSceneKey == "")
     }
 
     @Test func sceneActivationDeactivatesOthers() throws {

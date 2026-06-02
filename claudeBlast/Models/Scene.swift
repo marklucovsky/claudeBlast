@@ -22,6 +22,13 @@ final class BlasterScene {
     /// Source URL if the scene was imported from a web link.
     var sourceURL: String = ""
 
+    /// Non-empty for system-defined scenes backed by a bundled JSON file
+    /// (e.g. "core_first"). Empty for user-created or duplicated scenes.
+    /// Drives the AdminView "system scene" label and the bundle-update
+    /// affordance — only a scene with a systemSceneKey can be force-refreshed
+    /// from the bundle.
+    var systemSceneKey: String = ""
+
     /// JSON-encoded [PageSpec], stored inline. Exposed via `pages` accessor.
     /// Kept as Data (not [PageSpec] direct) for CloudKit compatibility — SwiftData's
     /// CloudKit mirror is conservative about Codable arrays-as-attributes.

@@ -517,12 +517,18 @@ struct TileGridView: View {
     private func handleTileTap(_ entry: TileEntry) {
         let key = entry.key
         guard let tile = tileLookup[key] else { return }
+        // Resolve the symbolic "<home>" link to the active scene's homePageKey
+        // at navigation time (Step J). Tiles store "<home>" literally so a
+        // runtime change of homePageKey is honored without rebuilding pages.
+        let resolvedLink = entry.link == "<home>"
+            ? (activeScene?.homePageKey ?? "home")
+            : entry.link
         // An "audible nav tile" is a single gesture that both adds a tile to the active group
         // AND navigates. We treat it as such in recordings only when the tile key matches the
         // link key (the conventional case for nav tiles like <drinks isAudible=t/>).
         let isAudibleNavTile = entry.isAudible
-            && !entry.link.isEmpty
-            && entry.link == key
+            && !resolvedLink.isEmpty
+            && resolvedLink == key
 
         var alreadySelected = false
         if entry.isAudible {
@@ -538,21 +544,21 @@ struct TileGridView: View {
                 engine.addTile(tile)
                 if recorder.state == .recording {
                     if isAudibleNavTile {
-                        recorder.recordAudibleNavigate(pageKey: entry.link)
+                        recorder.recordAudibleNavigate(pageKey: resolvedLink)
                     } else {
                         recorder.recordTap(tileKey: key)
                     }
                 }
             }
         }
-        if !entry.link.isEmpty {
-            coordinator.navigate(to: entry.link)
+        if !resolvedLink.isEmpty {
+            coordinator.navigate(to: resolvedLink)
             if recorder.state == .recording {
                 // Skip a separate navigate record if we already recorded an audible-nav for
                 // this gesture (it covers both the tile and the navigation).
                 let recordedAsAudibleNav = isAudibleNavTile && !alreadySelected
                 if !recordedAsAudibleNav {
-                    recorder.recordNavigate(pageKey: entry.link)
+                    recorder.recordNavigate(pageKey: resolvedLink)
                 }
             }
         }

@@ -23,6 +23,7 @@
           "want"
         ]},
         {"link": "eat", "to": "food_drinks", "audible": true},
+        {"keys": ["banana","goldfish_cracker"]},
         {"link": "play", "to": "play_activities", "audible": true},
         {"keys": [
           "go", "help", "stop", "like", "more", "all", "all_done", "again",
@@ -30,9 +31,8 @@
           "up", "down", "with", "for"
         ]},
         {"link": "weather", "to": "weather", "audible": false},
-        {"keys": ["hot", "cold", "sun", "rain"]},
         {"link": "colors", "to": "colors_shapes", "audible": false},
-        {"keys": ["art", "draw", "paint", "color", "sing", "dance", "read"]}
+        {"keys": ["draw", "paint", "color", "sing", "dance", "read"]}
       ]
     },
     {

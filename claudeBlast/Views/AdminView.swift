@@ -65,6 +65,14 @@ struct AdminView: View {
     @State private var importWarning: String?
     @State private var sceneToExport: BlasterSceneFile?
 
+    /// Whether the bundled Core-First content differs from what's installed.
+    /// Recomputed onAppear and after an update is applied. Drives the
+    /// per-scene "Update Available" affordance.
+    @State private var bundleUpdateAvailable = false
+    /// Set to the system scene the caregiver tapped "Update" on, to drive the
+    /// confirmation dialog.
+    @State private var sceneToUpdate: BlasterScene?
+
     private var envKeyOverride: Bool {
         ProcessInfo.processInfo.environment["OPENAI_API_KEY"] != nil
     }
@@ -206,9 +214,12 @@ struct AdminView: View {
                 Section("Scenes") {
                     ForEach(scenes) { scene in
                         NavigationLink(destination: SceneEditorView(scene: scene)) {
-                            SceneRow(scene: scene) {
-                                activateScene(scene)
-                            }
+                            SceneRow(
+                                scene: scene,
+                                updateAvailable: bundleUpdateAvailable,
+                                onActivate: { activateScene(scene) },
+                                onUpdate: { sceneToUpdate = scene }
+                            )
                         }
                         .swipeActions(edge: .leading) {
                             if !scene.isActive {
@@ -380,6 +391,24 @@ struct AdminView: View {
             // Request speech recognition permission now, while no sheet is open,
             // so the system dialog is never occluded by a presented sheet.
             SFSpeechRecognizer.requestAuthorization { _ in }
+            bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
+        }
+        .confirmationDialog(
+            "Update Core-First?",
+            isPresented: Binding(
+                get: { sceneToUpdate != nil },
+                set: { if !$0 { sceneToUpdate = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Update layout", role: .destructive) {
+                applySystemSceneUpdate()
+            }
+            Button("Cancel", role: .cancel) { sceneToUpdate = nil }
+        } message: {
+            Text("This replaces the Core-First layout with the latest built-in version. "
+                 + "If someone depends on the current layout, duplicate this scene first — "
+                 + "the update overwrites it in place.")
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -469,6 +498,18 @@ struct AdminView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func applySystemSceneUpdate() {
+        sceneToUpdate = nil
+        guard BootstrapLoader.updateSystemScene(context: modelContext) else { return }
+        bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
+        // If the updated scene is active, bounce navigation home so the grid
+        // re-reads the freshly materialized pages.
+        if let active = scenes.first(where: { $0.isActive }) {
+            sentenceEngine.clearSelection()
+            _ = active  // navigation reset handled by TileGridView's onChange(of: pages)
         }
     }
 
@@ -757,7 +798,14 @@ private struct VoiceHelpPopover: View {
 
 struct SceneRow: View {
     let scene: BlasterScene
+    var updateAvailable: Bool = false
     let onActivate: () -> Void
+    var onUpdate: (() -> Void)? = nil
+
+    private var isSystemScene: Bool { !scene.systemSceneKey.isEmpty }
+    /// Show the update affordance only for the system scene, and only when a
+    /// newer bundled version is available.
+    private var showUpdateButton: Bool { isSystemScene && updateAvailable && onUpdate != nil }
 
     var body: some View {
         HStack {
@@ -766,28 +814,43 @@ struct SceneRow: View {
                     Text(scene.name)
                         .font(.headline)
                     if scene.isDefault {
-                        Text("Default")
+                        badge("Default", .blue)
+                    }
+                    if isSystemScene {
+                        badge("System", .purple)
+                    }
+                    if showUpdateButton {
+                        // Inline next to the System badge — a tappable badge
+                        // that drives the same confirmation dialog.
+                        Button {
+                            onUpdate?()
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .imageScale(.small)
+                                Text("Update")
+                            }
                             .font(.caption2)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(.blue.opacity(0.15)))
-                            .foregroundStyle(.blue)
+                            .background(Capsule().fill(Color.orange.opacity(0.18)))
+                            .foregroundStyle(.orange)
+                        }
+                        .buttonStyle(.plain)
                     }
                     if scene.isImported {
-                        Text("Imported")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(.orange.opacity(0.15)))
-                            .foregroundStyle(.orange)
+                        badge("Imported", .orange)
                     }
                 }
                 Text("\(scene.pages.count) pages · \(scene.lastModified, style: .date)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if !scene.descriptionText.isEmpty {
+                if isSystemScene {
+                    Text("Built-in scene — defined by the app. Updates ship with new versions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !scene.descriptionText.isEmpty {
                     Text(scene.descriptionText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -801,14 +864,23 @@ struct SceneRow: View {
                     .foregroundStyle(.green)
                     .font(.title3)
             } else {
-                Button("Activate") {
-                    onActivate()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Button("Activate") { onActivate() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func badge(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.15)))
+            .foregroundStyle(color)
     }
 }
 
