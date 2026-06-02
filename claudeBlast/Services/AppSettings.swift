@@ -21,6 +21,15 @@ enum AppSettingsKey {
     /// this as the sole bootstrap gate — once true, app updates never
     /// auto-replace the user's scene/vocab.
     static let bootstrapInstalled   = "bootstrap_installed"
+    /// Sticky preference for the force-refresh "Save a copy first" toggle.
+    /// Default true (safe). Only read when forceRefreshDuplicateRemembered
+    /// is true; otherwise the dialog opens with the default each time.
+    static let forceRefreshDuplicate           = "force_refresh_duplicate"
+    /// Whether the user checked "Remember this choice" in the force-refresh
+    /// dialog. False = the dialog re-asks every time with the default
+    /// pre-selected. True = the toggle's last value is honored as the
+    /// pre-selected value.
+    static let forceRefreshDuplicateRemembered = "force_refresh_duplicate_remembered"
     static let icloudEnabled     = "icloud_enabled"
     static let openaiApiKey      = "openai_api_key"
     static let providerChoice    = "provider_choice"

@@ -111,4 +111,49 @@ final class BlasterScene {
             defaultScene.isActive = true
         }
     }
+
+    // MARK: - Duplicate
+
+    /// Create a peer copy of `source`. The new scene is inserted into `context`
+    /// and returned.
+    ///
+    /// Conventions:
+    /// - name: "duplicate-of:{source.name}" with a "-2", "-3", … suffix if
+    ///   that name is already taken (collision avoidance).
+    /// - description: "duplicated from {source.name}::{ISO8601 source.created}"
+    ///   so provenance survives even if the source is later renamed or deleted.
+    /// - created: now.
+    /// - isDefault / isActive / isImported: false (a fresh duplicate is never
+    ///   the active scene and is never marked as the default).
+    /// - systemSceneKey: empty. Duplicates of a system scene are user-owned
+    ///   copies; they're not protected by the force-refresh path and won't
+    ///   be touched by bundled updates.
+    /// - pages: deep copy of the source's PageSpec list.
+    @discardableResult
+    static func duplicate(of source: BlasterScene, in context: ModelContext) -> BlasterScene {
+        let baseName = "duplicate-of:\(source.name)"
+        let existingNames: Set<String> = (try? context.fetch(FetchDescriptor<BlasterScene>()))
+            .map { Set($0.map(\.name)) } ?? []
+        var candidate = baseName
+        var n = 2
+        while existingNames.contains(candidate) {
+            candidate = "\(baseName)-\(n)"
+            n += 1
+        }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        let originStamp = iso.string(from: source.created)
+
+        let copy = BlasterScene(
+            name: candidate,
+            descriptionText: "duplicated from \(source.name)::\(originStamp)",
+            homePageKey: source.homePageKey,
+            isDefault: false,
+            isActive: false
+        )
+        copy.pages = source.pages  // deep copy via Codable round-trip in the setter
+        context.insert(copy)
+        return copy
+    }
 }

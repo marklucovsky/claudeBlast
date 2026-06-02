@@ -241,6 +241,12 @@ struct AdminView: View {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
                             .tint(.blue)
+                            Button {
+                                duplicateScene(scene)
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
+                            .tint(.indigo)
                         }
                     }
                 }
@@ -393,22 +399,13 @@ struct AdminView: View {
             SFSpeechRecognizer.requestAuthorization { _ in }
             bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
         }
-        .confirmationDialog(
-            "Update Core-First?",
-            isPresented: Binding(
-                get: { sceneToUpdate != nil },
-                set: { if !$0 { sceneToUpdate = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Update layout", role: .destructive) {
-                applySystemSceneUpdate()
-            }
-            Button("Cancel", role: .cancel) { sceneToUpdate = nil }
-        } message: {
-            Text("This replaces the Core-First layout with the latest built-in version. "
-                 + "If someone depends on the current layout, duplicate this scene first — "
-                 + "the update overwrites it in place.")
+        .sheet(item: $sceneToUpdate) { scene in
+            UpdateConfirmationSheet(
+                sceneName: scene.name,
+                onConfirm: { duplicateFirst, remember in
+                    applySystemSceneUpdate(duplicateFirst: duplicateFirst, remember: remember)
+                }
+            )
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -501,16 +498,34 @@ struct AdminView: View {
         }
     }
 
-    private func applySystemSceneUpdate() {
+    private func applySystemSceneUpdate(duplicateFirst: Bool, remember: Bool) {
+        // Persist the sticky preference state to match the toggle exactly:
+        // - remember ON → store remembered=true + the duplicate value
+        // - remember OFF → store remembered=false (toggling off explicitly
+        //   forgets a previous choice, so the dialog reverts to safe defaults
+        //   next time)
+        let defaults = UserDefaults.standard
+        defaults.set(remember, forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+        if remember {
+            defaults.set(duplicateFirst, forKey: AppSettingsKey.forceRefreshDuplicate)
+        }
+
+        // Snapshot the current Core-First into a duplicate before applying
+        // the bundled overwrite, so the caregiver always has a recovery path.
+        if duplicateFirst, let source = sceneToUpdate {
+            _ = BlasterScene.duplicate(of: source, in: modelContext)
+            try? modelContext.save()
+        }
+
         sceneToUpdate = nil
         guard BootstrapLoader.updateSystemScene(context: modelContext) else { return }
         bundleUpdateAvailable = BootstrapLoader.isBundleUpdateAvailable()
-        // If the updated scene is active, bounce navigation home so the grid
-        // re-reads the freshly materialized pages.
-        if let active = scenes.first(where: { $0.isActive }) {
-            sentenceEngine.clearSelection()
-            _ = active  // navigation reset handled by TileGridView's onChange(of: pages)
-        }
+        sentenceEngine.clearSelection()
+    }
+
+    private func duplicateScene(_ scene: BlasterScene) {
+        _ = BlasterScene.duplicate(of: scene, in: modelContext)
+        try? modelContext.save()
     }
 
     private func activateScene(_ scene: BlasterScene) {
@@ -881,6 +896,95 @@ struct SceneRow: View {
             .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.15)))
             .foregroundStyle(color)
+    }
+}
+
+// MARK: - Update Confirmation Sheet
+
+/// Confirms the caregiver's intent to overwrite the system Core-First scene
+/// with the latest bundled version. Two safety affordances:
+///
+/// - "Save a copy first" toggle (default ON) creates a duplicate of the
+///   current scene before applying the overwrite, preserving any caregiver
+///   customizations as a recoverable peer scene.
+/// - "Remember this choice" persists the toggle's value via UserDefaults so
+///   future updates pre-select accordingly. The dialog is still shown every
+///   time — caregivers shouldn't be conditioned to dismiss without reading.
+struct UpdateConfirmationSheet: View {
+    let sceneName: String
+    /// Callback: (duplicateFirst, remember)
+    let onConfirm: (Bool, Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var duplicateFirst: Bool
+    @State private var rememberChoice: Bool
+
+    private var hasRememberedChoice: Bool {
+        UserDefaults.standard.bool(forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+    }
+
+    init(sceneName: String, onConfirm: @escaping (Bool, Bool) -> Void) {
+        self.sceneName = sceneName
+        self.onConfirm = onConfirm
+        let defaults = UserDefaults.standard
+        let remembered = defaults.bool(forKey: AppSettingsKey.forceRefreshDuplicateRemembered)
+        let initialDuplicate: Bool
+        if remembered {
+            // .bool returns false for missing keys, so use .object check.
+            initialDuplicate = defaults.object(forKey: AppSettingsKey.forceRefreshDuplicate) as? Bool ?? true
+        } else {
+            initialDuplicate = true   // safe default for first-time and unremembered cases
+        }
+        _duplicateFirst = State(initialValue: initialDuplicate)
+        // Pre-check the Remember toggle when a previous choice is stored, so
+        // the caregiver sees the persisted state. Unchecking it on confirm
+        // clears the sticky preference (handled in applySystemSceneUpdate).
+        _rememberChoice = State(initialValue: remembered)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("This replaces the **\(sceneName)** layout with the latest built-in version.")
+                        .font(.callout)
+                    Text("If someone depends on the current layout, save a copy first — the update overwrites in place.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle(isOn: $duplicateFirst) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Save a copy of the current \(sceneName) first")
+                            Text("Recommended")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle("Remember this choice", isOn: $rememberChoice)
+                } footer: {
+                    if hasRememberedChoice {
+                        Text("Last choice was remembered. Change here and check Remember to update.")
+                            .font(.caption2)
+                    }
+                }
+            }
+            .navigationTitle("Update \(sceneName)?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Update") {
+                        onConfirm(duplicateFirst, rememberChoice)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

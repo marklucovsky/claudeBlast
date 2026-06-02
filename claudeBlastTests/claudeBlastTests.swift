@@ -184,6 +184,54 @@ struct claudeBlastTests {
         #expect(scene.systemSceneKey == "")
     }
 
+    @Test func duplicateProducesPeerCopyWithProvenance() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let source = BlasterScene(name: "Core-First",
+                                   descriptionText: "built-in",
+                                   homePageKey: "home",
+                                   isDefault: true,
+                                   isActive: true)
+        source.systemSceneKey = "core_first"
+        source.pages = [PageSpec(key: "home", tiles: [TileEntry(key: "eat")])]
+        context.insert(source)
+
+        let copy = BlasterScene.duplicate(of: source, in: context)
+        #expect(copy.name == "duplicate-of:Core-First")
+        #expect(copy.descriptionText.hasPrefix("duplicated from Core-First::"))
+        #expect(copy.homePageKey == "home")
+        // Duplicates are never the active or default scene, and they shed the
+        // systemSceneKey so they're not protected by the force-refresh path.
+        #expect(copy.isDefault == false)
+        #expect(copy.isActive == false)
+        #expect(copy.systemSceneKey == "")
+        // Deep page copy: same content, independent storage.
+        #expect(copy.pages.count == 1)
+        #expect(copy.pages.first?.tiles.first?.key == "eat")
+    }
+
+    @Test func duplicateCollisionUsesSuffix() throws {
+        let container = try makeTestContainer()
+        let context = container.mainContext
+
+        let source = BlasterScene(name: "Core-First", homePageKey: "home")
+        context.insert(source)
+        try context.save()
+
+        let first = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(first.name == "duplicate-of:Core-First")
+
+        let second = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(second.name == "duplicate-of:Core-First-2")
+
+        let third = BlasterScene.duplicate(of: source, in: context)
+        try context.save()
+        #expect(third.name == "duplicate-of:Core-First-3")
+    }
+
     @Test func sceneActivationDeactivatesOthers() throws {
         let container = try makeTestContainer()
         let context = container.mainContext
