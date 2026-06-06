@@ -33,7 +33,10 @@ struct AdminView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SentenceEngine.self) private var sentenceEngine
 
-    @AppStorage(AppSettingsKey.openaiApiKey) private var apiKey: String = ""
+    // API key lives in the Keychain (per-device, non-synced). @State seeds
+    // from the vault when the view is constructed; writes flow through
+    // OpenAIKeyVault.setKey in the .onChange handler below.
+    @State private var apiKey: String = OpenAIKeyVault.currentKey() ?? ""
     @AppStorage(AppSettingsKey.providerChoice) private var providerChoice: String = "openai"
     @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
@@ -147,7 +150,10 @@ struct AdminView: View {
                     }
                 }
                 .onChange(of: providerChoice) { applyProvider() }
-                .onChange(of: apiKey) { applyProvider() }
+                .onChange(of: apiKey) {
+                    OpenAIKeyVault.setKey(apiKey)
+                    applyProvider()
+                }
                 .onChange(of: audioEnabled) { sentenceEngine.audioEnabled = audioEnabled }
                 .onAppear {
                     sentenceEngine.audioEnabled = audioEnabled
@@ -592,7 +598,7 @@ struct AdminView: View {
     }
 
     private var resolvedAPIKey: String {
-        ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? apiKey
+        OpenAIKeyVault.currentKey() ?? ""
     }
 
     private func createBlankScene(name: String) {

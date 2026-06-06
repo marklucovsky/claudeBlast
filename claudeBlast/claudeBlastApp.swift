@@ -59,20 +59,22 @@ struct claudeBlastApp: App {
             seedLegacy: wasInstalled
         )
 
-        // Select provider: env var wins, then UserDefaults, then Mock.
-        // If the env var is present, persist it so standalone (non-Xcode) launches
-        // on-device can still use the key after the app is force-killed and reopened.
+        // Move any prior UserDefaults-stored API key into the Keychain on
+        // the first launch after upgrade. Idempotent; no-op on fresh installs.
+        OpenAIKeyVault.migrateFromUserDefaultsIfNeeded()
+
+        // Select provider: env var wins (consumed silently — env users get
+        // their key persisted to Keychain so standalone re-launches keep
+        // working), then Keychain, then Mock.
         let provider: any SentenceProvider
-        if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"],
+        if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]?
+            .trimmingCharacters(in: .whitespaces),
            !envKey.isEmpty {
-            if UserDefaults.standard.string(forKey: AppSettingsKey.openaiApiKey) != envKey {
-                UserDefaults.standard.set(envKey, forKey: AppSettingsKey.openaiApiKey)
-            }
+            OpenAIKeyVault.setKey(envKey)
             provider = OpenAISentenceProvider(apiKey: envKey)
         } else {
             let choice = UserDefaults.standard.string(forKey: AppSettingsKey.providerChoice) ?? "openai"
-            let storedKey = UserDefaults.standard.string(forKey: AppSettingsKey.openaiApiKey) ?? ""
-            if choice == "openai", !storedKey.isEmpty {
+            if choice == "openai", let storedKey = OpenAIKeyVault.currentKey() {
                 provider = OpenAISentenceProvider(apiKey: storedKey)
             } else {
                 provider = MockSentenceProvider()

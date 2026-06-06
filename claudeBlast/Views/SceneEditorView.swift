@@ -14,9 +14,8 @@ struct SceneEditorView: View {
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.modelContext) private var modelContext
     @Environment(TileImageResolver.self) private var imageResolver
-    @AppStorage("openai_api_key") private var storedAPIKey: String = ""
     private var resolvedAPIKey: String {
-        ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? storedAPIKey
+        OpenAIKeyVault.currentKey() ?? ""
     }
 
     @State private var isAddingPage = false
