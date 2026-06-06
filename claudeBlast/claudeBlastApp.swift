@@ -38,6 +38,12 @@ struct claudeBlastApp: App {
         let container = setModelContainer(icloudEnabled: icloudEnabled)
         self.modelContainer = container
 
+        // Snapshot the "installed before this launch?" signal BEFORE
+        // BootstrapLoader.markBootstrapComplete flips it. Drives whether
+        // ProfileMigration seeds a Legacy ChildProfile from prior UserDefaults
+        // (returning user) or skips the seed (fresh install).
+        let wasInstalled = UserDefaults.standard.bool(forKey: AppSettingsKey.bootstrapInstalled)
+
         // Bootstrap only on first launch (or after a forced version bump).
         // Always wipe first — on a fresh store this is a no-op; on a version
         // bump it prevents duplicate records when re-seeding from the bundle.
@@ -46,6 +52,11 @@ struct claudeBlastApp: App {
             _ = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
             BootstrapLoader.markBootstrapComplete()
         }
+
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: container.mainContext,
+            seedLegacy: wasInstalled
+        )
 
         // Select provider: env var wins, then UserDefaults, then Mock.
         // If the env var is present, persist it so standalone (non-Xcode) launches

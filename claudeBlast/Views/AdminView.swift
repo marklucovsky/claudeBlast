@@ -665,6 +665,8 @@ struct AdminView: View {
             try modelContext.delete(model: SentenceCache.self)
             try modelContext.delete(model: BlasterScene.self)
             try modelContext.delete(model: TileModel.self)
+            try modelContext.delete(model: ChildProfile.self)
+            try modelContext.delete(model: DeviceProfile.self)
             try modelContext.save()
         } catch {
             print("Factory reset failed: \(error)")

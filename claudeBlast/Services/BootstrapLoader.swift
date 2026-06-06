@@ -88,6 +88,8 @@ enum BootstrapLoader {
             try context.delete(model: SentenceCache.self)
             try context.delete(model: BlasterScene.self)
             try context.delete(model: TileModel.self)
+            try context.delete(model: ChildProfile.self)
+            try context.delete(model: DeviceProfile.self)
             try context.save()
         } catch {
             print("BootstrapLoader.wipeAllData failed: \(error)")
