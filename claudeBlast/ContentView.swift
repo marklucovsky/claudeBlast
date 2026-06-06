@@ -62,7 +62,7 @@ struct ContentView: View {
             .fullScreenCover(item: $activeDestination) { dest in
                 switch dest {
                 case .admin:
-                    AdminView()
+                    AdminGate { AdminView() }
                 case .tileScript:
                     TileScriptView()
                 }

@@ -14,6 +14,9 @@ struct AdminView: View {
     @Query(sort: \BlasterScene.created) var scenes: [BlasterScene]
     @Query(sort: \SentenceCache.hitCount, order: .reverse) var cacheEntries: [SentenceCache]
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
+    @Query private var deviceProfiles: [DeviceProfile]
+    @Query(sort: \ChildProfile.displayName) private var childProfiles: [ChildProfile]
+    @Environment(ChildProfileResolver.self) private var profileResolver
     @Query(
         filter: #Predicate<SentenceCache> { entry in
             entry.hitCount >= 3 || entry.isPinned
@@ -67,6 +70,9 @@ struct AdminView: View {
     @State private var importError: String?
     @State private var importWarning: String?
     @State private var sceneToExport: BlasterSceneFile?
+
+    @State private var isAddingProfile = false
+    @State private var profileToEdit: ChildProfile?
 
     /// Whether the bundled Core-First content differs from what's installed.
     /// Recomputed onAppear and after an update is applied. Drives the
@@ -216,6 +222,9 @@ struct AdminView: View {
                     }
                 }
                 #endif
+
+                deviceSection
+                profilesSection
 
                 Section("Scenes") {
                     ForEach(scenes) { scene in
@@ -584,6 +593,127 @@ struct AdminView: View {
             modelContext.delete(event)
         }
         try? modelContext.save()
+    }
+
+    // MARK: - Device section (role, gating, PIN)
+
+    @ViewBuilder
+    private var deviceSection: some View {
+        if let device = deviceProfiles.first {
+            Section("Device") {
+                LabeledContent("Name", value: device.displayName.isEmpty ? "—" : device.displayName)
+                Picker("Role", selection: Binding(
+                    get: { device.role },
+                    set: { newRole in
+                        device.role = newRole
+                        // Patient devices are always gated. Personal devices
+                        // are never gated. Therapist keeps its current opt-in.
+                        if newRole == .patient { device.requireFaceIDForAdmin = true }
+                        if newRole == .personal { device.requireFaceIDForAdmin = false }
+                    }
+                )) {
+                    ForEach(DeviceRole.allCases, id: \.self) { r in
+                        Text(r.displayName).tag(r)
+                    }
+                }
+                if device.role != .personal {
+                    Toggle("Require Face ID for Admin",
+                           isOn: Binding(
+                            get: { device.requireFaceIDForAdmin },
+                            set: { device.requireFaceIDForAdmin = $0 }
+                           ))
+                    .disabled(device.role == .patient) // patient always on
+                }
+                if device.adminPINHash != nil {
+                    Button("Remove PIN", role: .destructive) {
+                        device.adminPINHash = nil
+                        device.adminPINSalt = nil
+                        device.modifiedAt = .now
+                    }
+                    Text("Removing the PIN means Face ID is the only way in. You'll be prompted to set a new one on next Admin entry if Face ID fails.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if device.requireFaceIDForAdmin {
+                    Text("PIN not set — you'll be asked to create one next time Face ID fails.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Profiles section (child roster)
+
+    @ViewBuilder
+    private var profilesSection: some View {
+        Section {
+            if childProfiles.isEmpty {
+                Text("No child profiles yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(childProfiles) { profile in
+                    profileRow(profile)
+                }
+            }
+            Button {
+                isAddingProfile = true
+            } label: {
+                Label("Add Profile", systemImage: "plus.circle")
+            }
+        } header: {
+            HStack {
+                Text("Child Profiles")
+                Spacer()
+                if let active = profileResolver.active {
+                    Text("Active: \(active.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .sheet(isPresented: $isAddingProfile) {
+            ChildProfileFormSheet(mode: .create) { isAddingProfile = false }
+        }
+        .sheet(item: $profileToEdit) { profile in
+            ChildProfileFormSheet(mode: .edit(profile)) { profileToEdit = nil }
+        }
+    }
+
+    private func profileRow(_ profile: ChildProfile) -> some View {
+        Button {
+            profileResolver.setActive(id: profile.id)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.displayName).font(.body)
+                    Text("Age \(profile.age) · grade \(profile.ageGrade) · max \(profile.maxSelectedTiles) tiles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if profile.isActive {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                Button {
+                    profileToEdit = profile
+                } label: {
+                    Image(systemName: "pencil.circle")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing) {
+            if !profile.isActive {
+                Button(role: .destructive) {
+                    modelContext.delete(profile)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
     }
 
     private func applyProvider() {
@@ -1404,4 +1534,150 @@ private struct StatBox: View {
 #Preview {
     AdminView()
         .previewEnvironment()
+}
+
+// MARK: - Child profile form sheet
+
+/// Compact create/edit form for a `ChildProfile`. Used by the Admin
+/// Profiles section. Captures age in years and synthesizes
+/// `ChildProfile.birthday` via the same helper as onboarding.
+private struct ChildProfileFormSheet: View {
+    enum Mode {
+        case create
+        case edit(ChildProfile)
+    }
+
+    let mode: Mode
+    let onDismiss: () -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(ChildProfileResolver.self) private var profileResolver
+
+    @State private var name: String = ""
+    @State private var ageYears: Int = 5
+    @State private var birthday: Date = ChildProfile.synthesizeBirthday(age: 5)
+    @State private var editingExactBirthday: Bool = false
+    @State private var voiceID: String = ""
+    @State private var maxTiles: Int = 4
+    @State private var ttsRate: Float = 0.5
+    @State private var ttsVolume: Float = 1.0
+    @State private var makeActive: Bool = false
+
+    private var titleText: String {
+        switch mode {
+        case .create: return "New Child Profile"
+        case .edit:   return "Edit Child Profile"
+        }
+    }
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Basics") {
+                    TextField("Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                    Stepper(value: $ageYears, in: 1...21) {
+                        HStack {
+                            Text("Age")
+                            Spacer()
+                            Text("\(ageYears)").foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: ageYears) { _, newValue in
+                        if !editingExactBirthday {
+                            birthday = ChildProfile.synthesizeBirthday(age: newValue)
+                        }
+                    }
+                    DisclosureGroup("Exact birthday", isExpanded: $editingExactBirthday) {
+                        DatePicker("Birthday", selection: $birthday,
+                                   in: ...Date.now, displayedComponents: .date)
+                    }
+                }
+
+                Section("Voice + Tiles") {
+                    Stepper(value: $maxTiles, in: 2...8) {
+                        HStack {
+                            Text("Tiles per group")
+                            Spacer()
+                            Text("\(maxTiles)").foregroundStyle(.secondary)
+                        }
+                    }
+                    VStack(alignment: .leading) {
+                        Text("Speech rate \(String(format: "%.2f", ttsRate))")
+                            .font(.caption)
+                        Slider(value: $ttsRate, in: 0.3...0.7)
+                    }
+                    VStack(alignment: .leading) {
+                        Text("Volume \(String(format: "%.2f", ttsVolume))")
+                            .font(.caption)
+                        Slider(value: $ttsVolume, in: 0.0...1.0)
+                    }
+                }
+
+                if case .create = mode {
+                    Section {
+                        Toggle("Make this profile active", isOn: $makeActive)
+                    }
+                }
+            }
+            .navigationTitle(titleText)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDismiss)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: save).disabled(!canSave)
+                }
+            }
+            .onAppear(perform: load)
+        }
+    }
+
+    private func load() {
+        if case let .edit(profile) = mode {
+            name = profile.displayName
+            birthday = profile.birthday
+            ageYears = ChildProfile.age(from: profile.birthday, asOf: .now)
+            editingExactBirthday = true
+            voiceID = profile.voiceIdentifier
+            maxTiles = profile.maxSelectedTiles
+            ttsRate = profile.ttsRate
+            ttsVolume = profile.ttsVolume
+        }
+    }
+
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        switch mode {
+        case .create:
+            let profile = ChildProfile(
+                displayName: trimmed,
+                birthday: birthday,
+                voiceIdentifier: voiceID,
+                maxSelectedTiles: maxTiles,
+                isActive: false
+            )
+            profile.ttsRate = ttsRate
+            profile.ttsVolume = ttsVolume
+            modelContext.insert(profile)
+            if makeActive {
+                profileResolver.setActive(id: profile.id)
+            }
+        case .edit(let profile):
+            profile.displayName = trimmed
+            profile.birthday = birthday
+            profile.voiceIdentifier = voiceID
+            profile.maxSelectedTiles = maxTiles
+            profile.ttsRate = ttsRate
+            profile.ttsVolume = ttsVolume
+            profile.modifiedAt = .now
+            profileResolver.refresh()
+        }
+        onDismiss()
+    }
 }
