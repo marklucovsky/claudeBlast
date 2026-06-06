@@ -28,7 +28,11 @@ public enum MessageRole: String, Codable {
 }
 
 struct SentencePromptBuilder {
-    var ageGradeLevel: Int = 2
+    /// US grade-level approximation. No default — callers must pass the
+    /// active child's value (or `ChildProfileResolver.fallbackAgeGrade`)
+    /// explicitly. Removing the default prevents silently falling back to
+    /// 2nd-grade when a caller forgets to wire the resolver.
+    var ageGradeLevel: Int
     var repetitionCount: Int = 0
     var conversationContext: [String] = []
 

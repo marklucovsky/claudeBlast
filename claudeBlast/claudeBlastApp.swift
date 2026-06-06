@@ -19,6 +19,7 @@ struct claudeBlastApp: App {
     @State private var scriptRunner = TileScriptRunner()
     @State private var scriptRecorder = TileScriptRecorder()
     @State private var imageResolver = TileImageResolver()
+    @State private var profileResolver = ChildProfileResolver()
 
     init() {
         // Register fallback defaults for any keys the engine reads via
@@ -111,8 +112,13 @@ struct claudeBlastApp: App {
                 .environment(scriptRunner)
                 .environment(scriptRecorder)
                 .environment(imageResolver)
+                .environment(profileResolver)
                 .onAppear {
-                    sentenceEngine.configure(modelContext: modelContainer.mainContext)
+                    profileResolver.configure(modelContext: modelContainer.mainContext)
+                    sentenceEngine.configure(
+                        modelContext: modelContainer.mainContext,
+                        profileResolver: profileResolver
+                    )
                     scriptRunner.configure(
                         engine: sentenceEngine,
                         coordinator: navigationCoordinator,

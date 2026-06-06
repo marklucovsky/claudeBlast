@@ -19,18 +19,24 @@ final class LoggedUtterance {
     var createdAt: Date = Date.now
     var repetitionCount: Int = 0
     var sceneName: String?
+    /// `ChildProfile.id` whose interaction produced this utterance. Nil for
+    /// legacy entries written before commit 3 — therapist analytics that
+    /// filter by child should treat nil as "unknown" rather than "any."
+    var childID: String?
 
     init(
         tileKeys: [String],
         sentence: String,
         repetitionCount: Int = 0,
         sceneName: String? = nil,
+        childID: String? = nil,
         createdAt: Date = .now
     ) {
         self.tileKeys = tileKeys
         self.sentence = sentence
         self.repetitionCount = repetitionCount
         self.sceneName = sceneName
+        self.childID = childID
         self.createdAt = createdAt
     }
 }

@@ -81,8 +81,15 @@ final class SentenceEngine {
     var voiceIdentifier: String = ""
     var compareProviders: Bool = false
 
-    /// Max tiles per group; backed by AppStorage. Read on every check so live setting changes apply.
+    /// Max tiles per group. Prefers the active `ChildProfile.maxSelectedTiles`
+    /// when the resolver has resolved one; otherwise falls back to the
+    /// device-wide `tile_cap_per_group` UserDefault for backward compat
+    /// with installs that haven't completed onboarding yet.
     var maxTilesPerGroup: Int {
+        if let resolver = profileResolver, resolver.active != nil {
+            let cap = resolver.maxSelectedTiles
+            return (2...8).contains(cap) ? cap : 4
+        }
         let stored = UserDefaults.standard.integer(forKey: AppSettingsKey.tileCapPerGroup)
         return (2...8).contains(stored) ? stored : 4
     }
@@ -114,6 +121,10 @@ final class SentenceEngine {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "claudeBlast", category: "SentenceEngine")
     private var cacheManager: SentenceCacheManager?
     private let speechSynthesizer = SpeechSynthesizer()
+    /// Active-child resolver wired in `configure(modelContext:resolver:)`.
+    /// `nil` until configured — `maxTilesPerGroup` and `speak()` handle that
+    /// with UserDefaults fallbacks.
+    private(set) var profileResolver: ChildProfileResolver?
 
     // MARK: - Internal state
 
@@ -142,9 +153,12 @@ final class SentenceEngine {
         self.provider = provider
     }
 
-    /// Must be called after init to wire up SwiftData cache.
-    func configure(modelContext: ModelContext) {
+    /// Must be called after init to wire up SwiftData cache. Pass the shared
+    /// `ChildProfileResolver` so the engine reads age, voice, and tile cap
+    /// from the active child instead of UserDefaults.
+    func configure(modelContext: ModelContext, profileResolver: ChildProfileResolver? = nil) {
         self.cacheManager = SentenceCacheManager(modelContext: modelContext)
+        self.profileResolver = profileResolver
     }
 
     // MARK: - Provider switching
@@ -388,7 +402,8 @@ final class SentenceEngine {
             cacheManager?.logUtterance(
                 tiles: finalized.tiles,
                 sentence: finalized.sentence ?? "",
-                repetitionCount: finalized.repetitionCount
+                repetitionCount: finalized.repetitionCount,
+                childID: profileResolver?.activeChildID
             )
         }
 
@@ -537,8 +552,10 @@ final class SentenceEngine {
             return
         }
 
-        // Build prompt
-        var promptBuilder = SentencePromptBuilder()
+        // Build prompt. Grade comes from the active child profile when
+        // resolver is wired; fallback keeps tests/preview paths working.
+        let grade = profileResolver?.ageGrade ?? ChildProfileResolver.fallbackAgeGrade
+        var promptBuilder = SentencePromptBuilder(ageGradeLevel: grade)
         promptBuilder.repetitionCount = repetition
         promptBuilder.conversationContext = conversationHistory
         let systemPrompt = promptBuilder.buildSystemPrompt()
@@ -582,7 +599,8 @@ final class SentenceEngine {
             let elapsed = apiStart.duration(to: .now)
 
             if repetition == 0 {
-                cacheManager?.store(tiles: tiles, sentence: result.text)
+                cacheManager?.store(tiles: tiles, sentence: result.text,
+                                    childID: profileResolver?.activeChildID)
                 let usedKey = SentenceCacheManager.cacheKey(for: tiles)
                 cacheManager?.logEvent(subjectType: "sentence", subjectKey: usedKey, eventType: .used)
             }
@@ -661,8 +679,13 @@ final class SentenceEngine {
 
     private func speak(_ text: String) {
         guard audioEnabled else { return }
-        let vid = voiceIdentifier.isEmpty ? nil : voiceIdentifier
-        speechSynthesizer.speak(text, voiceIdentifier: vid)
+        // Resolution order: engine override (set by AdminView's voice picker
+        // today, deprecated in commit 7) → active ChildProfile.voiceIdentifier
+        // → nil (system default).
+        let override = voiceIdentifier.isEmpty ? nil : voiceIdentifier
+        let resolverVoice = profileResolver?.voiceIdentifier
+        let fromResolver: String? = (resolverVoice?.isEmpty ?? true) ? nil : resolverVoice
+        speechSynthesizer.speak(text, voiceIdentifier: override ?? fromResolver)
     }
 
     // MARK: - Comparison helpers
