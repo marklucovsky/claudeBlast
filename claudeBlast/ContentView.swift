@@ -16,6 +16,8 @@ struct ContentView: View {
     @Environment(ImportCoordinator.self) private var importCoordinator
     @AppStorage(AppSettingsKey.devShowNav) private var devShowNav: Bool = false
 
+    @Query private var deviceProfiles: [DeviceProfile]
+
     @State private var hamburgerVisible = false
     @State private var hideTask: Task<Void, Never>?
     @State private var showMenuSheet = false
@@ -29,7 +31,24 @@ struct ContentView: View {
 
     private var isHamburgerShown: Bool { hamburgerVisible || devShowNav }
 
+    /// True when the device hasn't gone through onboarding yet — either no
+    /// DeviceProfile exists or its onboardingCompleted flag is false.
+    /// ProfileMigration always materializes a placeholder before any view
+    /// appears, so the "no DeviceProfile" branch is just defensive.
+    private var needsOnboarding: Bool {
+        guard let device = deviceProfiles.first else { return true }
+        return !device.onboardingCompleted
+    }
+
     var body: some View {
+        if needsOnboarding {
+            OnboardingView()
+        } else {
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
         TileGridView()
             .overlay(alignment: .topLeading) {
                 hamburgerOverlay
