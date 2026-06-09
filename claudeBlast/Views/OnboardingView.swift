@@ -22,7 +22,7 @@ struct OnboardingView: View {
     // Step machine -----------------------------------------------------------
 
     private enum Step: Int, CaseIterable {
-        case welcome, role, deviceName, childProfile, apiKey, icloud, done
+        case welcome, role, deviceName, childProfile, apiKey, icloud, pinSetup, done
     }
 
     @State private var step: Step = .welcome
@@ -41,7 +41,19 @@ struct OnboardingView: View {
     @State private var skipChildProfile: Bool = false
 
     @State private var apiKey: String = ""
-    @State private var icloudEnabled: Bool = false
+    /// Default ON. The iCloud step is hidden in release builds — the user
+    /// gets sync without being asked. Toggle is exposed in DEBUG for testing
+    /// the local-only path.
+    @State private var icloudEnabled: Bool = true
+
+    @State private var pinInput: String = ""
+    @State private var pinConfirm: String = ""
+    @State private var pinSetupStage: PINSetupStage = .enter
+
+    private enum PINSetupStage {
+        case enter
+        case confirm
+    }
 
     // Derived ----------------------------------------------------------------
 
@@ -72,6 +84,7 @@ struct OnboardingView: View {
                     case .childProfile:  childProfileStep
                     case .apiKey:        apiKeyStep
                     case .icloud:        icloudStep
+                    case .pinSetup:      pinSetupStep
                     case .done:          doneStep
                     }
                 }
@@ -87,6 +100,15 @@ struct OnboardingView: View {
                 .background(.bar)
         }
         .onAppear(perform: prefillFromExistingProfileIfAny)
+        .onChange(of: step) { _, newStep in
+            // First time the user lands on the device-name step with an
+            // empty field, seed it with the role's suggested name so
+            // Continue is enabled out of the gate. The user can accept,
+            // edit, or wipe and retype.
+            if newStep == .deviceName && deviceName.isEmpty {
+                deviceName = deviceNamePlaceholder
+            }
+        }
     }
 
     // MARK: - Progress bar
@@ -101,8 +123,27 @@ struct OnboardingView: View {
 
     private func isStepVisible(_ s: Step) -> Bool {
         switch s {
-        case .childProfile: return role != .personal
+        case .childProfile:
+            // Only Patient mode needs a real child profile up front.
+            // Caregiver mode uses the Sandbox profile until the user adds
+            // a real patient from Admin → Profiles.
+            return role == .patient
         case .apiKey:       return !hasEnvKey
+        case .icloud:
+            // iCloud is on by default; we don't ask in release. DEBUG
+            // builds keep the step so we can flip the toggle off during
+            // local-only testing.
+            #if DEBUG
+            return true
+            #else
+            return false
+            #endif
+        case .pinSetup:
+            // Patient devices are always Face-ID gated; capture the PIN
+            // here so AdminGate doesn't pop a setup sheet the first time
+            // someone taps Admin. Caregivers stay PIN-less unless they
+            // opt in from Admin → Device.
+            return role == .patient
         default:            return true
         }
     }
@@ -148,12 +189,31 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("How will this device be used?")
                 .font(.title.bold())
-            Text("Tap one. You can change this later from Admin.")
+            Text("Tap one. The two modes are designed to be switched between — nothing here is permanent.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             VStack(spacing: 12) {
                 ForEach(DeviceRole.allCases, id: \.self) { option in
                     roleCard(option)
+                }
+            }
+            Divider().padding(.vertical, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                Label {
+                    Text(DeviceRole.reversibilityNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(.blue)
+                }
+                Label {
+                    Text("Caregiver mode includes a built-in Sandbox profile so the app works out of the box. Add real patient profiles whenever you're ready.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.blue)
                 }
             }
         }
@@ -203,22 +263,22 @@ struct OnboardingView: View {
     }
 
     private var deviceNamePlaceholder: String {
+        // "iPad" vs "iPhone" comes from UIDevice — the placeholder reads
+        // right whether the user is on a tablet or repurposing an iPhone.
+        let model = UIDevice.current.model
         switch role {
-        case .patient:   return "Sammy's iPad"
-        case .therapist: return "Dr. Yalcin's iPad"
-        case .personal:  return "My iPad"
+        case .patient:   return "Sammy's \(model)"
+        case .caregiver: return "Dr. Yalcin's \(model)"
         }
     }
 
     private var childProfileStep: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(role == .therapist ? "Add your first patient" : "About the child")
+            // Only Patient mode reaches this step now; copy is tuned for
+            // that single audience. Caregiver mode skips it entirely and
+            // adds patients later from Admin → Profiles.
+            Text("About the child")
                 .font(.title.bold())
-            if role == .therapist {
-                Text("Optional — you can add patients later from Admin → Profiles.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Name").font(.headline)
@@ -282,43 +342,15 @@ struct OnboardingView: View {
     }
 
     private var voicePicker: some View {
-        let voices = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix("en") }
-            .sorted { $0.name < $1.name }
-        return HStack {
-            Picker("Voice", selection: $childVoiceID) {
-                Text("System Default").tag("")
-                ForEach(voices, id: \.identifier) { v in
-                    Text("\(v.name) (\(v.language))").tag(v.identifier)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            Spacer()
-            Button {
-                previewVoice()
-            } label: {
-                Label("Preview", systemImage: "speaker.wave.2.fill")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-    }
-
-    @State private var previewSynth = AVSpeechSynthesizer()
-
-    private func previewVoice() {
-        previewSynth.stopSpeaking(at: .immediate)
-        let phrase = childName.isEmpty
-            ? "Hi, this is the voice I'll use."
-            : "Hi \(childName), I'll be your voice."
-        let utt = AVSpeechUtterance(string: phrase)
-        if !childVoiceID.isEmpty,
-           let v = AVSpeechSynthesisVoice(identifier: childVoiceID) {
-            utt.voice = v
-        }
-        previewSynth.speak(utt)
+        // Use the shared picker so onboarding, Admin → Now, and the child
+        // profile form behave the same way: premium / enhanced voices
+        // first, auto-preview on selection.
+        VoicePickerSection(
+            voiceIdentifier: $childVoiceID,
+            previewPhrase: childName.trimmingCharacters(in: .whitespaces).isEmpty
+                ? "Hi, I'll be your voice."
+                : "Hi \(childName.trimmingCharacters(in: .whitespaces)), I'll be your voice."
+        )
     }
 
     private var apiKeyStep: some View {
@@ -376,6 +408,65 @@ struct OnboardingView: View {
         }
     }
 
+    private var pinSetupStep: some View {
+        VStack(spacing: 20) {
+            Text("Set an Admin PIN")
+                .font(.title.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Used to unlock Admin when Face ID isn't available. Pick a number you'll remember — recovering a forgotten PIN means reinstalling.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            switch pinSetupStage {
+            case .enter:
+                Text("Enter a 4–6 digit PIN")
+                    .font(.headline)
+                NumericKeypad(pin: $pinInput, maxLength: 6) {
+                    // Auto-advance when the user reaches the cap; for 4
+                    // and 5 digit PINs they tap Next manually.
+                    if PINAuth.isValidPINShape(pinInput) {
+                        pinSetupStage = .confirm
+                    }
+                }
+                Button("Next") {
+                    pinSetupStage = .confirm
+                }
+                // .borderedProminent makes the affordance obvious the
+                // moment the PIN reaches a valid 4–6 digit shape, so the
+                // user doesn't keep typing past the digit they intended.
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!PINAuth.isValidPINShape(pinInput))
+
+            case .confirm:
+                Text("Enter the same PIN again")
+                    .font(.headline)
+                NumericKeypad(pin: $pinConfirm, maxLength: pinInput.count) {
+                    // Auto-confirm on full match is handled by canAdvance —
+                    // no extra action needed here.
+                }
+                if !pinConfirm.isEmpty && !pinInput.hasPrefix(pinConfirm) {
+                    Text("Doesn't match — try again")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Button("Back") {
+                    pinConfirm = ""
+                    pinSetupStage = .enter
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
+        }
+    }
+
+    private var canAdvancePINSetup: Bool {
+        pinSetupStage == .confirm
+            && PINAuth.isValidPINShape(pinInput)
+            && pinInput == pinConfirm
+    }
+
     private var doneStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
@@ -394,10 +485,8 @@ struct OnboardingView: View {
             return childName.isEmpty
                 ? "Your patient device is set up. Tap Open Blaster to start."
                 : "\(childName)'s device is ready. Tap Open Blaster to start."
-        case .therapist:
-            return "Therapist mode is on. Add more patients from Admin → Profiles."
-        case .personal:
-            return "Personal mode. No child profile, no auth gate."
+        case .caregiver:
+            return "Caregiver mode is on. The Sandbox profile is active; add real patient profiles anytime from Admin → Profiles."
         }
     }
 
@@ -428,7 +517,8 @@ struct OnboardingView: View {
 
     private var canSkip: Bool {
         switch step {
-        case .childProfile: return role == .therapist
+        // Patient mode requires a child profile, and Caregiver mode hides
+        // the step entirely — so there's nothing to skip from this card now.
         case .apiKey:       return true
         default:            return false
         }
@@ -450,6 +540,7 @@ struct OnboardingView: View {
         case .childProfile: return !childName.trimmingCharacters(in: .whitespaces).isEmpty
         case .apiKey:       return true
         case .icloud:       return true
+        case .pinSetup:     return canAdvancePINSetup
         case .done:         return true
         }
     }
@@ -498,8 +589,13 @@ struct OnboardingView: View {
     // MARK: - Pre-fill from Legacy seed
 
     private func prefillFromExistingProfileIfAny() {
-        let existing = (try? modelContext.fetch(FetchDescriptor<ChildProfile>())) ?? []
-        guard let legacy = existing.first else { return }
+        // Only pre-fill from a *real* profile. The Sandbox always exists
+        // post-migration, but treating it as "the user's prior input"
+        // would seed the patient form with "Sandbox" as the child's name.
+        let realProfiles = (try? modelContext.fetch(
+            FetchDescriptor<ChildProfile>(predicate: #Predicate { !$0.isSystem })
+        )) ?? []
+        guard let legacy = realProfiles.first else { return }
         childName = legacy.displayName == "Legacy" ? "" : legacy.displayName
         childBirthday = legacy.birthday
         childAgeYears = ChildProfile.age(from: legacy.birthday, asOf: .now)
@@ -519,13 +615,14 @@ struct OnboardingView: View {
         let inputs = OnboardingInputs(
             role: role,
             deviceName: deviceName,
-            createChild: role != .personal && !skipChildProfile,
+            createChild: role == .patient && !skipChildProfile,
             childName: childName,
             childBirthday: childBirthday,
             childVoiceID: childVoiceID,
             childMaxTiles: childMaxTiles,
             apiKey: hasEnvKey ? nil : apiKey, // env-var path keeps its launch-persisted key
-            icloudEnabled: icloudEnabled
+            icloudEnabled: icloudEnabled,
+            adminPIN: role == .patient ? pinInput : nil
         )
         OnboardingCommit.apply(inputs, context: modelContext)
         profileResolver.refresh()

@@ -48,16 +48,33 @@ final class ChildProfileResolver {
 
     /// Re-read the active profile from SwiftData. Called from
     /// `configure` and after mutations.
+    ///
+    /// Resolution order:
+    /// 1. Any *real* (`isSystem == false`) profile marked active wins, with
+    ///    `ChildProfile.resolveActive` picking the canonical one under a
+    ///    CloudKit race.
+    /// 2. Otherwise the Sandbox (`isSystem == true`) profile becomes
+    ///    active. ProfileMigration guarantees it exists.
+    /// 3. If neither exists (bootstrap hasn't run yet), `active` is nil
+    ///    and the synchronous getters use safe fallbacks.
     func refresh() {
         guard let ctx = context else {
             active = nil
             return
         }
-        let descriptor = FetchDescriptor<ChildProfile>(
-            predicate: #Predicate { $0.isActive }
+        let activeFetch = FetchDescriptor<ChildProfile>(
+            predicate: #Predicate { $0.isActive && !$0.isSystem }
         )
-        let candidates = (try? ctx.fetch(descriptor)) ?? []
-        active = ChildProfile.resolveActive(from: candidates)
+        let realActive = (try? ctx.fetch(activeFetch)) ?? []
+        if let winner = ChildProfile.resolveActive(from: realActive) {
+            active = winner
+            return
+        }
+        let sandboxFetch = FetchDescriptor<ChildProfile>(
+            predicate: #Predicate { $0.isSystem }
+        )
+        let sandboxes = (try? ctx.fetch(sandboxFetch)) ?? []
+        active = sandboxes.first
     }
 
     // MARK: - Synchronous getters with safe fallbacks

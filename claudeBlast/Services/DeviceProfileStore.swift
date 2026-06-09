@@ -10,7 +10,7 @@ import Foundation
 
 /// Thin singleton accessor for the per-device `DeviceProfile`. The device
 /// store should hold exactly one row; this helper enforces that and
-/// guarantees a row always exists (creates a `.personal` placeholder with
+/// guarantees a row always exists (creates a `.caregiver` placeholder with
 /// `onboardingCompleted = false` on first access).
 ///
 /// The placeholder lets the onboarding gate read `onboardingCompleted` on
@@ -42,7 +42,7 @@ enum DeviceProfileStore {
         } catch {
             // Fall through to create.
         }
-        let placeholder = DeviceProfile(role: .personal, displayName: "",
+        let placeholder = DeviceProfile(role: .caregiver, displayName: "",
                                         onboardingCompleted: false)
         context.insert(placeholder)
         return placeholder

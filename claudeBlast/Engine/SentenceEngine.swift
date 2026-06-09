@@ -679,13 +679,20 @@ final class SentenceEngine {
 
     private func speak(_ text: String) {
         guard audioEnabled else { return }
-        // Resolution order: engine override (set by AdminView's voice picker
-        // today, deprecated in commit 7) → active ChildProfile.voiceIdentifier
-        // → nil (system default).
+        // Resolution order for voice: engine override (still set by some
+        // AdminView code paths) → active ChildProfile.voiceIdentifier →
+        // nil (system default). Rate + volume come straight from the
+        // resolver when an active profile exists; otherwise nil leaves
+        // the AVSpeechUtterance defaults in place.
         let override = voiceIdentifier.isEmpty ? nil : voiceIdentifier
         let resolverVoice = profileResolver?.voiceIdentifier
         let fromResolver: String? = (resolverVoice?.isEmpty ?? true) ? nil : resolverVoice
-        speechSynthesizer.speak(text, voiceIdentifier: override ?? fromResolver)
+        let rate: Float? = profileResolver?.active != nil ? profileResolver?.ttsRate : nil
+        let volume: Float? = profileResolver?.active != nil ? profileResolver?.ttsVolume : nil
+        speechSynthesizer.speak(text,
+                                voiceIdentifier: override ?? fromResolver,
+                                rate: rate,
+                                volume: volume)
     }
 
     // MARK: - Comparison helpers

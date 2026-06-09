@@ -26,7 +26,15 @@ final class SpeechSynthesizer: NSObject {
         synthesizer.delegate = self
     }
 
-    func speak(_ text: String, voiceIdentifier: String?) {
+    /// Speak `text`. All voice attributes are optional — pass `nil` to use the
+    /// `AVSpeechUtterance` defaults. The engine routes the active child's
+    /// `voiceIdentifier`, `ttsRate`, and `ttsVolume` through here on every
+    /// utterance so per-child prefs are honored without the synthesizer
+    /// needing to know about the resolver.
+    func speak(_ text: String,
+               voiceIdentifier: String?,
+               rate: Float? = nil,
+               volume: Float? = nil) {
         synthesizer.stopSpeaking(at: .immediate)
         // .playback + .spokenAudio ensures speech is audible regardless of
         // the ringer/silent switch — critical for an AAC communication app.
@@ -39,6 +47,15 @@ final class SpeechSynthesizer: NSObject {
         if let id = voiceIdentifier,
            let voice = AVSpeechSynthesisVoice(identifier: id) {
             utterance.voice = voice
+        }
+        if let rate {
+            // Clamp to the framework's documented bounds. Out-of-range
+            // values throw a runtime assertion in some AVFoundation builds.
+            utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate,
+                                 max(AVSpeechUtteranceMinimumSpeechRate, rate))
+        }
+        if let volume {
+            utterance.volume = min(1.0, max(0.0, volume))
         }
         synthesizer.speak(utterance)
         isSpeaking = true

@@ -48,9 +48,12 @@ struct ProfileMigrationTests {
 
         // DeviceProfile always materialized.
         #expect(try ctx.fetch(FetchDescriptor<DeviceProfile>()).count == 1)
-        // Legacy NOT seeded on a fresh install — onboarding will collect
-        // child info from scratch.
-        #expect(try ctx.fetch(FetchDescriptor<ChildProfile>()).isEmpty)
+        // Sandbox profile is always present; no real (Legacy) profile on
+        // a fresh install.
+        let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
+        #expect(kids.count == 1)
+        #expect(kids[0].isSystem == true)
+        #expect(kids[0].isActive == true) // Sandbox is the resolver fallback
     }
 
     @Test func returningUser_seedsLegacyFromUserDefaults() throws {
@@ -71,13 +74,17 @@ struct ProfileMigrationTests {
         )
 
         let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
-        #expect(kids.count == 1)
-        let legacy = kids[0]
+        // Legacy real profile + Sandbox.
+        #expect(kids.count == 2)
+        let legacy = kids.first(where: { !$0.isSystem })!
         #expect(legacy.displayName == "Legacy")
         #expect(legacy.isActive == true)
         #expect(legacy.voiceIdentifier == "com.apple.voice.compact.en-US.Samantha")
         #expect(legacy.maxSelectedTiles == 5)
-        #expect(legacy.age == 7) // seeded from age=7 by spec
+        #expect(legacy.age == 7)
+        // Sandbox exists but is NOT active (Legacy owns the active slot).
+        let sandbox = kids.first(where: { $0.isSystem })!
+        #expect(sandbox.isActive == false)
     }
 
     @Test func returningUser_withUnsetDefaults_seedsLegacyWithSafeDefaults() throws {
@@ -93,9 +100,11 @@ struct ProfileMigrationTests {
         )
 
         let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
-        #expect(kids.count == 1)
-        #expect(kids[0].voiceIdentifier == "")
-        #expect(kids[0].maxSelectedTiles == 4) // safe fallback
+        // Legacy real profile + Sandbox.
+        #expect(kids.count == 2)
+        let legacy = kids.first(where: { !$0.isSystem })!
+        #expect(legacy.voiceIdentifier == "")
+        #expect(legacy.maxSelectedTiles == 4) // safe fallback
     }
 
     @Test func returningUser_clampsOutOfRangeTileCap() throws {
@@ -111,7 +120,8 @@ struct ProfileMigrationTests {
         )
 
         let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
-        #expect(kids[0].maxSelectedTiles == 8) // clamped to engine max
+        let legacy = kids.first(where: { !$0.isSystem })!
+        #expect(legacy.maxSelectedTiles == 8) // clamped to engine max
     }
 
     @Test func idempotent_doesNotSeedLegacyTwice() throws {
@@ -126,7 +136,11 @@ struct ProfileMigrationTests {
         ProfileMigration.ensureProfilesAfterBootstrap(
             context: ctx, seedLegacy: true, defaults: defaults)
 
-        #expect(try ctx.fetch(FetchDescriptor<ChildProfile>()).count == 1)
+        // Legacy + Sandbox, never duplicated.
+        let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
+        #expect(kids.count == 2)
+        #expect(kids.filter { $0.isSystem }.count == 1)
+        #expect(kids.filter { !$0.isSystem }.count == 1)
         #expect(try ctx.fetch(FetchDescriptor<DeviceProfile>()).count == 1)
     }
 
@@ -151,8 +165,63 @@ struct ProfileMigrationTests {
             context: ctx, seedLegacy: true, defaults: defaults)
 
         let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
-        #expect(kids.count == 1)
-        #expect(kids[0].displayName == "Aubrey") // unchanged
-        #expect(kids[0].voiceIdentifier == "real-voice")
+        // Aubrey (existing real) + Sandbox. Legacy not seeded since real exists.
+        #expect(kids.count == 2)
+        let aubrey = kids.first(where: { !$0.isSystem })!
+        #expect(aubrey.displayName == "Aubrey") // unchanged
+        #expect(aubrey.voiceIdentifier == "real-voice")
+    }
+
+    // MARK: - Sandbox + role normalization
+
+    @Test func sandboxProfile_seededOnce() throws {
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let defaults = isolatedDefaults()
+
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: ctx, seedLegacy: false, defaults: defaults)
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: ctx, seedLegacy: false, defaults: defaults)
+
+        let sandboxes = try ctx.fetch(FetchDescriptor<ChildProfile>(
+            predicate: #Predicate { $0.isSystem }
+        ))
+        #expect(sandboxes.count == 1)
+        #expect(sandboxes[0].displayName == kSandboxProfileDefaultName)
+    }
+
+    @Test func legacyRoleValues_normalizeToCaregiver() throws {
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let defaults = isolatedDefaults()
+
+        // Plant a DeviceProfile with the old "personal" raw value.
+        let device = DeviceProfile(role: .caregiver)
+        device.roleRaw = "personal"
+        ctx.insert(device)
+
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: ctx, seedLegacy: false, defaults: defaults)
+
+        let fetched = try ctx.fetch(FetchDescriptor<DeviceProfile>())[0]
+        #expect(fetched.roleRaw == "caregiver")
+        #expect(fetched.role == .caregiver)
+    }
+
+    @Test func legacyTherapistRoleValue_normalizes() throws {
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let defaults = isolatedDefaults()
+
+        let device = DeviceProfile(role: .caregiver)
+        device.roleRaw = "therapist"
+        ctx.insert(device)
+
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: ctx, seedLegacy: false, defaults: defaults)
+
+        let fetched = try ctx.fetch(FetchDescriptor<DeviceProfile>())[0]
+        #expect(fetched.roleRaw == "caregiver")
     }
 }

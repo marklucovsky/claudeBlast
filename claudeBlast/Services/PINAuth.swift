@@ -8,6 +8,7 @@
 import Foundation
 import CommonCrypto
 import Security
+import SwiftUI
 
 /// PBKDF2-SHA256 PIN hashing for the Admin gate fallback.
 ///
@@ -90,5 +91,22 @@ enum PINAuth {
     static func isValidPINShape(_ pin: String) -> Bool {
         let digitCount = pin.unicodeScalars.filter(CharacterSet.decimalDigits.contains).count
         return digitCount == pin.count && (4...6).contains(pin.count)
+    }
+}
+
+extension Binding where Value == String {
+    /// Wraps a `String` binding so the underlying state can only ever
+    /// contain ASCII digits, capped at `maxLength`. Used on every PIN
+    /// SecureField so a hardware/Bluetooth keyboard or a paste of mixed
+    /// text can't sneak letters past the `.oneTimeCode` content-type hint
+    /// (which only changes the on-screen keyboard, not what's accepted).
+    func digitsOnly(maxLength: Int = 6) -> Binding<String> {
+        Binding<String>(
+            get: { wrappedValue },
+            set: { newValue in
+                let digits = newValue.filter { $0.isASCII && $0.isNumber }
+                wrappedValue = String(digits.prefix(maxLength))
+            }
+        )
     }
 }

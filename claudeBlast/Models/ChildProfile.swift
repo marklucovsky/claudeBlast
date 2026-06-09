@@ -45,13 +45,18 @@ final class ChildProfile {
     /// using a deterministic tiebreaker (most-recently-modified wins) to
     /// survive CloudKit races where two devices both set isActive.
     var isActive: Bool = false
+    /// True for the per-device Sandbox profile — the always-present
+    /// fallback the resolver returns when no real child is active. Created
+    /// by `ProfileMigration.ensureProfilesAfterBootstrap` and visible (but
+    /// undeletable) in the Admin Profiles list.
+    var isSystem: Bool = false
     var createdAt: Date = Date.now
     /// Bumped on every mutation. Drives the resolver's tiebreaker.
     var modifiedAt: Date = Date.now
 
     init(displayName: String, birthday: Date, voiceIdentifier: String = "",
          maxSelectedTiles: Int = 4, defaultSceneKey: String = "",
-         notes: String = "", isActive: Bool = false) {
+         notes: String = "", isActive: Bool = false, isSystem: Bool = false) {
         self.displayName = displayName
         self.birthday = birthday
         self.voiceIdentifier = voiceIdentifier
@@ -59,6 +64,7 @@ final class ChildProfile {
         self.defaultSceneKey = defaultSceneKey
         self.notes = notes
         self.isActive = isActive
+        self.isSystem = isSystem
     }
 
     // MARK: - Derived getters

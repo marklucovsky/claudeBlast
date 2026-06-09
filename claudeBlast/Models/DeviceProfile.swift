@@ -17,10 +17,12 @@ final class DeviceProfile {
     var id: String = UUID().uuidString
     /// `DeviceRole.rawValue`. Stored as String for SwiftData/CloudKit compat
     /// even though this entity is local-only — keeps modeling consistent.
-    var roleRaw: String = DeviceRole.personal.rawValue
+    /// Legacy "personal" / "therapist" values from earlier worktree builds
+    /// are migrated to "caregiver" by `ProfileMigration`.
+    var roleRaw: String = DeviceRole.caregiver.rawValue
     var displayName: String = ""
-    /// Patient devices: always true (forced at onboarding). Therapist devices:
-    /// optional toggle. Personal devices: always false.
+    /// Patient devices: always true (forced at onboarding). Caregiver
+    /// devices: false by default; the therapist can opt in.
     var requireFaceIDForAdmin: Bool = false
     /// PBKDF2-hashed PIN used as Face ID fallback. nil = no PIN set yet.
     /// Wired in commit 6; declared here so the schema is stable.
@@ -31,11 +33,11 @@ final class DeviceProfile {
     var modifiedAt: Date = Date.now
 
     var role: DeviceRole {
-        get { DeviceRole(rawValue: roleRaw) ?? .personal }
+        get { DeviceRole.fromRawValue(roleRaw) }
         set { roleRaw = newValue.rawValue; modifiedAt = .now }
     }
 
-    init(role: DeviceRole = .personal, displayName: String = "",
+    init(role: DeviceRole = .caregiver, displayName: String = "",
          requireFaceIDForAdmin: Bool = false, onboardingCompleted: Bool = false) {
         self.roleRaw = role.rawValue
         self.displayName = displayName
@@ -44,27 +46,48 @@ final class DeviceProfile {
     }
 }
 
+/// Two-mode model after the role simplification:
+///
+/// - `.patient` — the device is in the hands of a non-verbal child. The
+///   engine uses the active ChildProfile (a real kid). Admin is gated.
+/// - `.caregiver` — the device belongs to an adult (therapist, parent,
+///   tester). The engine uses the Sandbox ChildProfile by default; adults
+///   can also activate any real patient profile for preview / management.
+///   Admin is ungated unless the therapist opts in.
+///
+/// Legacy values (`.personal`, `.therapist`) are mapped to `.caregiver` by
+/// `fromRawValue` so existing dev installs migrate transparently.
 enum DeviceRole: String, CaseIterable, Codable {
     case patient
-    case therapist
-    case personal
+    case caregiver
+
+    static func fromRawValue(_ raw: String) -> DeviceRole {
+        switch raw {
+        case "patient":                          return .patient
+        case "caregiver", "therapist", "personal": return .caregiver
+        default:                                 return .caregiver
+        }
+    }
 
     var displayName: String {
         switch self {
         case .patient:   return "Patient"
-        case .therapist: return "Therapist"
-        case .personal:  return "Personal"
+        case .caregiver: return "Caregiver"
         }
     }
 
     var summary: String {
         switch self {
         case .patient:
-            return "This device belongs to one child. Admin is locked behind Face ID; parents get a safe-subset settings sheet."
-        case .therapist:
-            return "This device manages a roster of patients. Admin is open by default; Face ID is opt-in."
-        case .personal:
-            return "Your own device for demos, testing, and tuning. No child profile, no auth gate."
+            return "This device is for a non-verbal child to use as their voice. Admin is locked behind Face ID + PIN so the child can't change things by accident. The child's profile drives the voice and AI prompts."
+        case .caregiver:
+            return "This device is for you — a therapist, parent, or family member. The Sandbox profile drives generic use; you can add real patient profiles and switch between them to tune scenes. Admin is open by default."
         }
+    }
+
+    /// Used as the onboarding step-2 footer so the user knows nothing they
+    /// pick here is permanent. Reinforces that the modes are reversible.
+    static var reversibilityNote: String {
+        "You can switch a device between Patient and Caregiver mode anytime from Admin → Device. None of these choices are permanent."
     }
 }

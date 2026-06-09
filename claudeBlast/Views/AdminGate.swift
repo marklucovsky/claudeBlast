@@ -24,6 +24,7 @@ import LocalAuthentication
 /// "cold-launch" posture; a soft re-entry timeout could relax that later.
 struct AdminGate<Content: View>: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Query private var deviceProfiles: [DeviceProfile]
 
     @State private var didAuth = false
@@ -33,7 +34,13 @@ struct AdminGate<Content: View>: View {
     @State private var pinInput = ""
     @State private var pinConfirm = ""
     @State private var errorMessage: String?
+    @State private var pinSetupStage: PINSetupStage = .enter
     @FocusState private var pinFieldFocused: Bool
+
+    private enum PINSetupStage {
+        case enter
+        case confirm
+    }
 
     @ViewBuilder let content: () -> Content
 
@@ -47,6 +54,16 @@ struct AdminGate<Content: View>: View {
         Group {
             if didAuth || !needsAuth {
                 content()
+                    .onAppear {
+                        // Lock in "access granted" for the lifetime of this
+                        // Admin presentation. Without this, the gate
+                        // re-evaluates needsAuth on every parent re-render —
+                        // and if the user flips the device role to Patient
+                        // from inside Admin, requireFaceIDForAdmin turns on
+                        // mid-session and forces them back through the
+                        // challenge they already cleared.
+                        if !didAuth { didAuth = true }
+                    }
             } else {
                 challengeView
             }
@@ -56,11 +73,18 @@ struct AdminGate<Content: View>: View {
     // MARK: - Challenge UI
 
     private var challengeView: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             // Opaque backdrop so the underlying tile grid doesn't bleed
             // through the fullScreenCover. systemBackground adapts to light
             // and dark mode.
             Color(uiColor: .systemBackground).ignoresSafeArea()
+
+            // Cancel — lets the user back out of the gate without
+            // authenticating. Tapped Admin by mistake? Hit Cancel and
+            // return to the grid. Sits in the top-leading corner like a
+            // sheet's cancellation action.
+            Button("Cancel") { dismiss() }
+                .padding()
 
             VStack(spacing: 24) {
                 Spacer()
@@ -94,6 +118,11 @@ struct AdminGate<Content: View>: View {
                         .padding(.horizontal, 32)
                 }
                 Spacer()
+
+                if showingPIN && hasPIN {
+                    forgotPINHint
+                        .padding(.bottom, 24)
+                }
             }
             .frame(maxWidth: 400)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,6 +132,23 @@ struct AdminGate<Content: View>: View {
                 biometricsAttempted = true
                 await tryBiometrics()
             }
+        }
+    }
+
+    /// Quiet hint at the bottom of the PIN entry view. Recovery v1 is
+    /// "delete the app and reinstall" — iCloud-synced state (child
+    /// profiles, scenes, history) restores on next launch; the API key
+    /// and device-mode setup are local and must be re-entered.
+    private var forgotPINHint: some View {
+        VStack(spacing: 4) {
+            Text("Forgot your PIN?")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("Delete Blaster from this device and reinstall it. iCloud-synced data (profiles, scenes, history) restores automatically. The API key and device mode need to be re-entered.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
         }
     }
 
@@ -128,39 +174,67 @@ struct AdminGate<Content: View>: View {
     }
 
     private var pinEntryView: some View {
-        VStack(spacing: 12) {
-            SecureField("4–6 digit PIN", text: $pinInput)
-                .multilineTextAlignment(.center)
-                .textFieldStyle(.roundedBorder)
-                .focused($pinFieldFocused)
-                .onSubmit(submitPINEntry)
+        VStack(spacing: 16) {
+            // Custom keypad — see NumericKeypad.swift for the iPad rationale
+            // (system .keyboardType(.numberPad) doesn't actually give a
+            // digits-only keyboard on iPad). `.typedOnly` shows one filled
+            // dot per typed digit so the user gets feedback, without
+            // pre-showing 6 hollow dots that would lie about how many
+            // digits their stored PIN has.
+            NumericKeypad(pin: $pinInput, maxLength: 6, dotStyle: .typedOnly) {
+                if PINAuth.isValidPINShape(pinInput) { submitPINEntry() }
+            }
             Button("Unlock", action: submitPINEntry)
                 .buttonStyle(.borderedProminent)
                 .disabled(!PINAuth.isValidPINShape(pinInput))
         }
-        .padding(.horizontal, 32)
     }
 
     private var pinSetupView: some View {
-        VStack(spacing: 12) {
-            Text("Choose a 4–6 digit PIN. Use it when Face ID isn't available.")
+        VStack(spacing: 16) {
+            Text(pinSetupCopy)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            SecureField("PIN", text: $pinInput)
-                .multilineTextAlignment(.center)
-                .textFieldStyle(.roundedBorder)
-                .focused($pinFieldFocused)
-            SecureField("Confirm PIN", text: $pinConfirm)
-                .multilineTextAlignment(.center)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(submitPINSetup)
-            Button("Set PIN", action: submitPINSetup)
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSubmitPINSetup)
+            if pinSetupStage == .enter {
+                NumericKeypad(pin: $pinInput, maxLength: 6) {
+                    if PINAuth.isValidPINShape(pinInput) {
+                        pinSetupStage = .confirm
+                    }
+                }
+                Button("Next") { pinSetupStage = .confirm }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!PINAuth.isValidPINShape(pinInput))
+            } else {
+                NumericKeypad(pin: $pinConfirm, maxLength: pinInput.count) {
+                    if canSubmitPINSetup { submitPINSetup() }
+                }
+                if !pinConfirm.isEmpty && !pinInput.hasPrefix(pinConfirm) {
+                    Text("Doesn't match — try again")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                HStack {
+                    Button("Back") {
+                        pinConfirm = ""
+                        pinSetupStage = .enter
+                    }
+                    .buttonStyle(.borderless)
+                    Button("Set PIN", action: submitPINSetup)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canSubmitPINSetup)
+                }
+            }
         }
-        .padding(.horizontal, 32)
+    }
+
+    private var pinSetupCopy: String {
+        switch pinSetupStage {
+        case .enter:   return "Choose a 4–6 digit PIN. Use it when Face ID isn't available."
+        case .confirm: return "Enter the same PIN again to confirm."
+        }
     }
 
     private var canSubmitPINSetup: Bool {

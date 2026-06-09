@@ -36,7 +36,8 @@ struct OnboardingCommitTests {
         Calendar.current.date(from: DateComponents(year: y, month: m, day: d))!
     }
 
-    private func patientInputs(name: String = "Aubrey", age: Int = 5) -> OnboardingInputs {
+    private func patientInputs(name: String = "Aubrey", age: Int = 5,
+                               pin: String? = "1234") -> OnboardingInputs {
         OnboardingInputs(
             role: .patient,
             deviceName: "  Sammy's iPad  ",
@@ -46,8 +47,83 @@ struct OnboardingCommitTests {
             childVoiceID: "com.apple.voice.Samantha",
             childMaxTiles: 6,
             apiKey: "sk-onboarding",
-            icloudEnabled: false
+            icloudEnabled: false,
+            adminPIN: pin
         )
+    }
+
+    @Test func patient_withOnlySandbox_createsNewProfileAndDeactivatesSandbox() throws {
+        // Regression: caregiver mode leaves a Sandbox row behind, and a
+        // subsequent patient onboarding used to repurpose it instead of
+        // creating a new real profile. The Sandbox must keep its identity;
+        // a fresh ChildProfile is the patient.
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let secret = InMemorySecretStore()
+        let defaults = isolatedDefaults()
+
+        // Seed the Sandbox the way ProfileMigration would.
+        let sandbox = ChildProfile(
+            displayName: "Sandbox",
+            birthday: ChildProfile.synthesizeBirthday(age: 8),
+            isActive: true,
+            isSystem: true
+        )
+        ctx.insert(sandbox)
+
+        OnboardingCommit.apply(patientInputs(name: "Aubrey"),
+                               context: ctx, defaults: defaults, secretStore: secret)
+
+        let all = try ctx.fetch(FetchDescriptor<ChildProfile>())
+        #expect(all.count == 2) // Sandbox + new real profile
+        let sandboxAfter = all.first(where: { $0.isSystem })!
+        let aubrey = all.first(where: { !$0.isSystem })!
+        #expect(sandboxAfter.displayName == "Sandbox")  // unchanged
+        #expect(sandboxAfter.isActive == false)          // deactivated
+        #expect(aubrey.displayName == "Aubrey")
+        #expect(aubrey.isActive == true)
+    }
+
+    @Test func patient_supplyingPIN_hashesAndStoresIt() throws {
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let secret = InMemorySecretStore()
+        let defaults = isolatedDefaults()
+
+        OnboardingCommit.apply(patientInputs(pin: "654321"),
+                               context: ctx, defaults: defaults, secretStore: secret)
+
+        let device = try ctx.fetch(FetchDescriptor<DeviceProfile>())[0]
+        #expect(device.adminPINSalt != nil)
+        #expect(device.adminPINHash != nil)
+        // Verifying with the supplied PIN must succeed.
+        #expect(PINAuth.verify(pin: "654321",
+                               hash: device.adminPINHash!,
+                               salt: device.adminPINSalt!))
+        #expect(!PINAuth.verify(pin: "0000",
+                                hash: device.adminPINHash!,
+                                salt: device.adminPINSalt!))
+    }
+
+    @Test func patient_skipPIN_leavesExistingPINUntouched() throws {
+        // Returning patient device that already has a PIN from a prior
+        // onboarding pass. Re-running commit without a PIN must not wipe it.
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        let secret = InMemorySecretStore()
+        let defaults = isolatedDefaults()
+
+        let device = DeviceProfileStore.ensure(context: ctx)
+        let priorSalt = PINAuth.newSalt()
+        let priorHash = PINAuth.hash(pin: "9999", salt: priorSalt)!
+        device.adminPINSalt = priorSalt
+        device.adminPINHash = priorHash
+
+        OnboardingCommit.apply(patientInputs(pin: nil),
+                               context: ctx, defaults: defaults, secretStore: secret)
+
+        #expect(device.adminPINSalt == priorSalt)
+        #expect(device.adminPINHash == priorHash)
     }
 
     @Test func patient_createsDeviceAndChild_andForcesFaceID() throws {
@@ -78,42 +154,25 @@ struct OnboardingCommitTests {
         #expect(defaults.bool(forKey: AppSettingsKey.icloudEnabled) == false)
     }
 
-    @Test func personal_skipsChildProfileCreation() throws {
+    @Test func caregiver_skipsChildProfileCreation() throws {
+        // Caregiver mode (formerly therapist + personal merged) doesn't
+        // create a real ChildProfile during onboarding; the Sandbox
+        // profile seeded by ProfileMigration carries the engine.
         let container = try makeContainer()
         let ctx = container.mainContext
         let secret = InMemorySecretStore()
         let defaults = isolatedDefaults()
 
-        var inputs = patientInputs()
-        inputs.role = .personal
+        var inputs = patientInputs(pin: nil)
+        inputs.role = .caregiver
         inputs.createChild = false
+        inputs.adminPIN = nil
 
         OnboardingCommit.apply(inputs, context: ctx, defaults: defaults, secretStore: secret)
 
         let devices = try ctx.fetch(FetchDescriptor<DeviceProfile>())
-        #expect(devices.first?.role == .personal)
+        #expect(devices.first?.role == .caregiver)
         #expect(devices.first?.requireFaceIDForAdmin == false)
-
-        let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
-        #expect(kids.isEmpty)
-    }
-
-    @Test func therapist_skippingChildProfile_leavesNoChild() throws {
-        let container = try makeContainer()
-        let ctx = container.mainContext
-        let secret = InMemorySecretStore()
-        let defaults = isolatedDefaults()
-
-        var inputs = patientInputs()
-        inputs.role = .therapist
-        inputs.createChild = false
-        inputs.childName = "" // skip set this
-
-        OnboardingCommit.apply(inputs, context: ctx, defaults: defaults, secretStore: secret)
-
-        let devices = try ctx.fetch(FetchDescriptor<DeviceProfile>())
-        #expect(devices.first?.role == .therapist)
-        #expect(devices.first?.requireFaceIDForAdmin == false) // therapist opt-in only
 
         let kids = try ctx.fetch(FetchDescriptor<ChildProfile>())
         #expect(kids.isEmpty)

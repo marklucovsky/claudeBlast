@@ -41,10 +41,25 @@ struct ContentView: View {
     }
 
     var body: some View {
-        if needsOnboarding {
-            OnboardingView()
-        } else {
-            mainContent
+        Group {
+            if needsOnboarding {
+                OnboardingView()
+            } else {
+                mainContent
+            }
+        }
+        .onChange(of: needsOnboarding) { _, isNeeded in
+            // Defensive reset when transitioning out of onboarding.
+            // activeDestination is @State on ContentView and survives data
+            // wipes (Factory Reset clears SwiftData but not @State). Without
+            // this, a session that had Admin open before a reset would
+            // instantly re-present AdminGate the moment mainContent mounts,
+            // because $activeDestination's binding is still .admin.
+            if !isNeeded {
+                activeDestination = nil
+                showMenuSheet = false
+                pendingImportSheet = nil
+            }
         }
     }
 

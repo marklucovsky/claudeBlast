@@ -174,7 +174,7 @@ struct ChildProfileTests {
         let ctx = container.mainContext
 
         let created = DeviceProfileStore.ensure(context: ctx)
-        #expect(created.role == .personal)
+        #expect(created.role == .caregiver)
         #expect(created.onboardingCompleted == false)
 
         let fetched = try ctx.fetch(FetchDescriptor<DeviceProfile>())
@@ -186,11 +186,11 @@ struct ChildProfileTests {
         let ctx = container.mainContext
 
         let first = DeviceProfileStore.ensure(context: ctx)
-        first.role = .therapist
+        first.role = .caregiver
         first.displayName = "Dr. Yalcin"
 
         let second = DeviceProfileStore.ensure(context: ctx)
-        #expect(second.role == .therapist)
+        #expect(second.role == .caregiver)
         #expect(second.displayName == "Dr. Yalcin")
 
         let count = try ctx.fetch(FetchDescriptor<DeviceProfile>()).count
@@ -203,10 +203,10 @@ struct ChildProfileTests {
 
         // Simulate two devices both seeding a row (would happen on a CloudKit
         // race even though we explicitly disable sync — defensive).
-        let early = DeviceProfile(role: .personal, displayName: "Early")
+        let early = DeviceProfile(role: .caregiver, displayName: "Early")
         early.createdAt = date(2026, 1, 1)
         ctx.insert(early)
-        let late = DeviceProfile(role: .therapist, displayName: "Late")
+        let late = DeviceProfile(role: .caregiver, displayName: "Late")
         late.createdAt = date(2026, 6, 1)
         ctx.insert(late)
 

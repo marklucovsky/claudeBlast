@@ -33,6 +33,13 @@ struct claudeBlastApp: App {
             AppSettingsKey.idleDebounceMs: 2500,
             AppSettingsKey.trayBufferSize: 100,
             AppSettingsKey.tileCapPerGroup: 4,
+            // iCloud sync defaults ON. For an AAC app whose threat model is
+            // "stop a curious child," the safety value of cross-device sync
+            // (reinstall recovers data, therapist's iPad + family iPhone
+            // stay in sync, reduces PIN-loss blast radius) far outweighs the
+            // marginal privacy concern of storing data in the user's own
+            // iCloud account. Toggle in DEBUG only.
+            AppSettingsKey.icloudEnabled: true,
         ])
 
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)

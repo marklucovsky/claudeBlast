@@ -116,6 +116,60 @@ struct ChildProfileResolverTests {
         #expect(resolver.active?.displayName == "Newer")
     }
 
+    @Test func noRealActive_fallsBackToSandbox() throws {
+        // When no real profile is active, the resolver returns the
+        // Sandbox profile (isSystem == true). Engine never sees nil.
+        let container = try makeContainer()
+        let ctx = container.mainContext
+
+        let sandbox = ChildProfile(
+            displayName: "Sandbox",
+            birthday: date(2018, 1, 1),
+            isActive: false, // intentionally false; resolver still picks it
+            isSystem: true
+        )
+        ctx.insert(sandbox)
+        let inactive = ChildProfile(
+            displayName: "Aubrey",
+            birthday: date(2020, 1, 1),
+            isActive: false
+        )
+        ctx.insert(inactive)
+
+        let resolver = ChildProfileResolver()
+        resolver.configure(modelContext: ctx)
+
+        #expect(resolver.active?.displayName == "Sandbox")
+        #expect(resolver.active?.isSystem == true)
+    }
+
+    @Test func realActive_preemptsSandbox() throws {
+        // A real active profile takes precedence even when a Sandbox
+        // exists in the store.
+        let container = try makeContainer()
+        let ctx = container.mainContext
+
+        let sandbox = ChildProfile(
+            displayName: "Sandbox",
+            birthday: date(2018, 1, 1),
+            isActive: true,
+            isSystem: true
+        )
+        ctx.insert(sandbox)
+        let aubrey = ChildProfile(
+            displayName: "Aubrey",
+            birthday: date(2020, 1, 1),
+            isActive: true
+        )
+        ctx.insert(aubrey)
+
+        let resolver = ChildProfileResolver()
+        resolver.configure(modelContext: ctx)
+
+        #expect(resolver.active?.displayName == "Aubrey")
+        #expect(resolver.active?.isSystem == false)
+    }
+
     @Test func refresh_picksUpExternalChanges() throws {
         let container = try makeContainer()
         let ctx = container.mainContext
