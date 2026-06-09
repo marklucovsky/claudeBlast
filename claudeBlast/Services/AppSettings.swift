@@ -58,28 +58,50 @@ enum AppSettingsKey {
 // flag (RELEASE). See BootstrapLoader.needsBootstrap().
 
 func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
-    // PageModel + PageTileModel are gone — BlasterScene.pages is now an
-    // inline [PageSpec] attribute (JSON-encoded Data), not a relationship.
-    let schema = Schema([
+    // Two-config split: DeviceProfile is per-device and must never sync
+    // (role differs between an iPad-in-clinic and the therapist's iPhone).
+    // Everything else (including ChildProfile, BlasterScene, caches) can
+    // sync via CloudKit when opt-in is on.
+    //
+    // The "synced" configuration keeps the default name/URL so existing
+    // installs continue to read the same store file — only the new local
+    // configuration gets a distinct on-disk location.
+    let syncedSchema = Schema([
         TileModel.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
+        ChildProfile.self,
     ])
-    let localConfig = ModelConfiguration(schema: schema,
+    let localSchema = Schema([DeviceProfile.self])
+    let allSchema = Schema([
+        TileModel.self,
+        SentenceCache.self, BlasterScene.self, MetricEvent.self,
+        RecordedScript.self, LoggedUtterance.self,
+        ChildProfile.self,
+        DeviceProfile.self,
+    ])
+
+    let localConfig = ModelConfiguration("DeviceLocal",
+                                         schema: localSchema,
                                          isStoredInMemoryOnly: false,
                                          cloudKitDatabase: .none)
-    let cloudKitConfig = ModelConfiguration(schema: schema,
-                                            isStoredInMemoryOnly: false,
-                                            cloudKitDatabase: .automatic)
+    let syncedLocalConfig = ModelConfiguration(schema: syncedSchema,
+                                               isStoredInMemoryOnly: false,
+                                               cloudKitDatabase: .none)
+    let syncedCloudConfig = ModelConfiguration(schema: syncedSchema,
+                                               isStoredInMemoryOnly: false,
+                                               cloudKitDatabase: .automatic)
     // iCloud defaults OFF. Toggle available on debug builds so CloudKit sync
     // can be tested on real devices without a special build. try? falls back
     // gracefully if the CloudKit entitlement is absent.
     if icloudEnabled,
-       let container = try? ModelContainer(for: schema, configurations: [cloudKitConfig]) {
+       let container = try? ModelContainer(for: allSchema,
+                                           configurations: [localConfig, syncedCloudConfig]) {
         return container
     }
     do {
-        return try ModelContainer(for: schema, configurations: [localConfig])
+        return try ModelContainer(for: allSchema,
+                                  configurations: [localConfig, syncedLocalConfig])
     } catch {
         fatalError("Could not create ModelContainer: \(error)")
     }

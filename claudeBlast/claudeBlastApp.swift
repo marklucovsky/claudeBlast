@@ -19,6 +19,7 @@ struct claudeBlastApp: App {
     @State private var scriptRunner = TileScriptRunner()
     @State private var scriptRecorder = TileScriptRecorder()
     @State private var imageResolver = TileImageResolver()
+    @State private var profileResolver = ChildProfileResolver()
 
     init() {
         // Register fallback defaults for any keys the engine reads via
@@ -32,11 +33,24 @@ struct claudeBlastApp: App {
             AppSettingsKey.idleDebounceMs: 2500,
             AppSettingsKey.trayBufferSize: 100,
             AppSettingsKey.tileCapPerGroup: 4,
+            // iCloud sync defaults ON. For an AAC app whose threat model is
+            // "stop a curious child," the safety value of cross-device sync
+            // (reinstall recovers data, therapist's iPad + family iPhone
+            // stay in sync, reduces PIN-loss blast radius) far outweighs the
+            // marginal privacy concern of storing data in the user's own
+            // iCloud account. Toggle in DEBUG only.
+            AppSettingsKey.icloudEnabled: true,
         ])
 
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
         let container = setModelContainer(icloudEnabled: icloudEnabled)
         self.modelContainer = container
+
+        // Snapshot the "installed before this launch?" signal BEFORE
+        // BootstrapLoader.markBootstrapComplete flips it. Drives whether
+        // ProfileMigration seeds a Legacy ChildProfile from prior UserDefaults
+        // (returning user) or skips the seed (fresh install).
+        let wasInstalled = UserDefaults.standard.bool(forKey: AppSettingsKey.bootstrapInstalled)
 
         // Bootstrap only on first launch (or after a forced version bump).
         // Always wipe first — on a fresh store this is a no-op; on a version
@@ -47,20 +61,27 @@ struct claudeBlastApp: App {
             BootstrapLoader.markBootstrapComplete()
         }
 
-        // Select provider: env var wins, then UserDefaults, then Mock.
-        // If the env var is present, persist it so standalone (non-Xcode) launches
-        // on-device can still use the key after the app is force-killed and reopened.
+        ProfileMigration.ensureProfilesAfterBootstrap(
+            context: container.mainContext,
+            seedLegacy: wasInstalled
+        )
+
+        // Move any prior UserDefaults-stored API key into the Keychain on
+        // the first launch after upgrade. Idempotent; no-op on fresh installs.
+        OpenAIKeyVault.migrateFromUserDefaultsIfNeeded()
+
+        // Select provider: env var wins (consumed silently — env users get
+        // their key persisted to Keychain so standalone re-launches keep
+        // working), then Keychain, then Mock.
         let provider: any SentenceProvider
-        if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"],
+        if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]?
+            .trimmingCharacters(in: .whitespaces),
            !envKey.isEmpty {
-            if UserDefaults.standard.string(forKey: AppSettingsKey.openaiApiKey) != envKey {
-                UserDefaults.standard.set(envKey, forKey: AppSettingsKey.openaiApiKey)
-            }
+            OpenAIKeyVault.setKey(envKey)
             provider = OpenAISentenceProvider(apiKey: envKey)
         } else {
             let choice = UserDefaults.standard.string(forKey: AppSettingsKey.providerChoice) ?? "openai"
-            let storedKey = UserDefaults.standard.string(forKey: AppSettingsKey.openaiApiKey) ?? ""
-            if choice == "openai", !storedKey.isEmpty {
+            if choice == "openai", let storedKey = OpenAIKeyVault.currentKey() {
                 provider = OpenAISentenceProvider(apiKey: storedKey)
             } else {
                 provider = MockSentenceProvider()
@@ -100,8 +121,13 @@ struct claudeBlastApp: App {
                 .environment(scriptRunner)
                 .environment(scriptRecorder)
                 .environment(imageResolver)
+                .environment(profileResolver)
                 .onAppear {
-                    sentenceEngine.configure(modelContext: modelContainer.mainContext)
+                    profileResolver.configure(modelContext: modelContainer.mainContext)
+                    sentenceEngine.configure(
+                        modelContext: modelContainer.mainContext,
+                        profileResolver: profileResolver
+                    )
                     scriptRunner.configure(
                         engine: sentenceEngine,
                         coordinator: navigationCoordinator,

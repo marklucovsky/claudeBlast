@@ -52,7 +52,10 @@ final class SentenceCacheManager {
     }
 
     /// Store or update a cached sentence for the given tiles.
-    func store(tiles: [TileSelection], sentence: String, audioData: String = "") {
+    /// `childID` is stamped on new entries so future per-child analytics can
+    /// filter on it. Existing entries retain their original `childID`.
+    func store(tiles: [TileSelection], sentence: String, audioData: String = "",
+               childID: String? = nil) {
         let key = Self.cacheKey(for: tiles)
         var descriptor = FetchDescriptor<SentenceCache>(
             predicate: #Predicate { $0.cacheKey == key }
@@ -65,7 +68,8 @@ final class SentenceCacheManager {
             existing.lastUsed = .now
         } else {
             let tileKeys = tiles.map(\.key)
-            let entry = SentenceCache(tileKeys: tileKeys, sentence: sentence, audioData: audioData)
+            let entry = SentenceCache(tileKeys: tileKeys, sentence: sentence,
+                                      audioData: audioData, childID: childID)
             context.insert(entry)
         }
     }
@@ -108,14 +112,17 @@ final class SentenceCacheManager {
     }
 
     /// Persist a finalized utterance for therapist review. Captures the active scene name
-    /// at commit time so logs remain meaningful after scene edits.
-    func logUtterance(tiles: [TileSelection], sentence: String, repetitionCount: Int) {
+    /// at commit time so logs remain meaningful after scene edits. `childID` is stamped
+    /// for per-child review filtering.
+    func logUtterance(tiles: [TileSelection], sentence: String,
+                      repetitionCount: Int, childID: String? = nil) {
         let sceneName = activeSceneName()
         let entry = LoggedUtterance(
             tileKeys: tiles.map(\.key),
             sentence: sentence,
             repetitionCount: repetitionCount,
-            sceneName: sceneName
+            sceneName: sceneName,
+            childID: childID
         )
         context.insert(entry)
     }

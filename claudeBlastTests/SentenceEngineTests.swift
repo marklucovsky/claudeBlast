@@ -25,13 +25,21 @@ struct SentenceEngineTests {
     // MARK: - SentencePromptBuilder
 
     @Test func promptBuilderIncludesGradeLevel() {
-        let builder = SentencePromptBuilder()
+        let builder = SentencePromptBuilder(ageGradeLevel: 2)
         let prompt = builder.buildSystemPrompt()
         #expect(prompt.contains(where: { $0.content.contains("2nd-grade") }))
     }
 
+    @Test func promptBuilderHonorsExplicitGradeLevel() {
+        // Catch silent regression to the old hardcoded grade default.
+        let builder = SentencePromptBuilder(ageGradeLevel: 5)
+        let prompt = builder.buildSystemPrompt()
+        #expect(prompt.contains(where: { $0.content.contains("5th-grade") }))
+        #expect(!prompt.contains(where: { $0.content.contains("2nd-grade") }))
+    }
+
     @Test func promptBuilderIncludesRepetition() {
-        var builder = SentencePromptBuilder()
+        var builder = SentencePromptBuilder(ageGradeLevel: 2)
         builder.repetitionCount = 2
         let prompt = builder.buildSystemPrompt()
         #expect(prompt.contains(where: { $0.content.contains("repeated") }))
@@ -39,7 +47,7 @@ struct SentenceEngineTests {
     }
 
     @Test func promptBuilderFormatsUserPrompt() {
-        let builder = SentencePromptBuilder()
+        let builder = SentencePromptBuilder(ageGradeLevel: 2)
         let tiles = [
             TileSelection(key: "eat", value: "eat", wordClass: "actions"),
             TileSelection(key: "pizza", value: "pizza", wordClass: "food"),

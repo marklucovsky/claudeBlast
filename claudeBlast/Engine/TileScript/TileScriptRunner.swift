@@ -587,8 +587,7 @@ final class TileScriptRunner {
         case "mock":
             engine?.switchProvider(MockSentenceProvider())
         case "openai":
-            let key = UserDefaults.standard.string(forKey: AppSettingsKey.openaiApiKey) ?? ""
-            if !key.isEmpty {
+            if let key = OpenAIKeyVault.currentKey() {
                 engine?.switchProvider(OpenAISentenceProvider(apiKey: key))
             }
         default:

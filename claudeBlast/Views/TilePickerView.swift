@@ -25,9 +25,8 @@ struct TilePickerView: View {
     @State private var suggestionError: String? = nil
     @Environment(\.isSearching) private var isSearching
 
-    @AppStorage("openai_api_key") private var storedAPIKey: String = ""
     private var apiKey: String {
-        ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? storedAPIKey
+        OpenAIKeyVault.currentKey() ?? ""
     }
 
     private var existingKeys: Set<String> {

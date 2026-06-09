@@ -16,6 +16,8 @@ struct ContentView: View {
     @Environment(ImportCoordinator.self) private var importCoordinator
     @AppStorage(AppSettingsKey.devShowNav) private var devShowNav: Bool = false
 
+    @Query private var deviceProfiles: [DeviceProfile]
+
     @State private var hamburgerVisible = false
     @State private var hideTask: Task<Void, Never>?
     @State private var showMenuSheet = false
@@ -29,7 +31,39 @@ struct ContentView: View {
 
     private var isHamburgerShown: Bool { hamburgerVisible || devShowNav }
 
+    /// True when the device hasn't gone through onboarding yet — either no
+    /// DeviceProfile exists or its onboardingCompleted flag is false.
+    /// ProfileMigration always materializes a placeholder before any view
+    /// appears, so the "no DeviceProfile" branch is just defensive.
+    private var needsOnboarding: Bool {
+        guard let device = deviceProfiles.first else { return true }
+        return !device.onboardingCompleted
+    }
+
     var body: some View {
+        Group {
+            if needsOnboarding {
+                OnboardingView()
+            } else {
+                mainContent
+            }
+        }
+        .onChange(of: needsOnboarding) { _, isNeeded in
+            // Defensive reset when transitioning out of onboarding.
+            // activeDestination is @State on ContentView and survives data
+            // wipes (Factory Reset clears SwiftData but not @State). Without
+            // this, a session that had Admin open before a reset would
+            // instantly re-present AdminGate the moment mainContent mounts,
+            // because $activeDestination's binding is still .admin.
+            if !isNeeded {
+                activeDestination = nil
+                showMenuSheet = false
+                pendingImportSheet = nil
+            }
+        }
+    }
+
+    private var mainContent: some View {
         TileGridView()
             .overlay(alignment: .topLeading) {
                 hamburgerOverlay
@@ -43,7 +77,7 @@ struct ContentView: View {
             .fullScreenCover(item: $activeDestination) { dest in
                 switch dest {
                 case .admin:
-                    AdminView()
+                    AdminGate { AdminView() }
                 case .tileScript:
                     TileScriptView()
                 }
