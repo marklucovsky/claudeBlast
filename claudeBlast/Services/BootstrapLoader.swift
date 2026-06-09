@@ -80,6 +80,35 @@ enum BootstrapLoader {
         defaults.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
     }
 
+    /// One-time backfill of `TileModel.isSystem` for installs that predate the
+    /// flag. Fresh bootstraps already set it; this only matters for RELEASE
+    /// users who installed before the field existed (their bundled tiles read
+    /// as `false`). Marks every stored tile whose key is in the current bundled
+    /// vocabulary as system; caregiver-added / imported tiles (keys not in the
+    /// bundle) keep `isSystem == false`. Idempotent and gated by a flag so it
+    /// runs at most once. Cheap: one fetch + a Set-membership pass.
+    static func backfillTileProvenance(context: ModelContext) {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: AppSettingsKey.tileProvenanceBackfilled) else { return }
+
+        defer { defaults.set(true, forKey: AppSettingsKey.tileProvenanceBackfilled) }
+
+        guard let url = Bundle.main.url(forResource: "vocabulary", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let codable = try? JSONDecoder().decode([TileModelCodable].self, from: data)
+        else { return }
+
+        let bundledKeys = Set(codable.map(\.key))
+        guard let tiles = try? context.fetch(FetchDescriptor<TileModel>()) else { return }
+
+        var changed = false
+        for tile in tiles where !tile.isSystem && bundledKeys.contains(tile.key) {
+            tile.isSystem = true
+            changed = true
+        }
+        if changed { try? context.save() }
+    }
+
     /// Wipe all app-owned SwiftData records. Relationship-safe order matches
     /// performFactoryReset in AdminView. Safe to call on a fresh store (no-op).
     static func wipeAllData(context: ModelContext) {
@@ -114,7 +143,9 @@ enum BootstrapLoader {
             var seenTileKeys = Set<String>()
             let allTiles: [TileModel] = codableTiles.compactMap { codable in
                 guard seenTileKeys.insert(codable.key).inserted else { return nil }
-                return TileModel(from: codable)
+                let tile = TileModel(from: codable)
+                tile.isSystem = true
+                return tile
             }
             let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
 

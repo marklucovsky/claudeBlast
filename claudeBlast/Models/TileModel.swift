@@ -30,6 +30,13 @@ final class TileModel: Identifiable {
     var key: String = ""
     var wordClass: String = ""
 
+    /// True for tiles seeded from the bundled vocabulary (BootstrapLoader);
+    /// false for caregiver-added words and tiles brought in by scene import.
+    /// Lets authoring surfaces distinguish system vocabulary from extensions.
+    /// Defaulted Bool so the schema migrates cleanly under CloudKit (same
+    /// shape as `ChildProfile.isSystem`).
+    var isSystem: Bool = false
+
     var userImage: UIImage? {
         guard let userImageData else { return nil }
         return UIImage(data: userImageData)

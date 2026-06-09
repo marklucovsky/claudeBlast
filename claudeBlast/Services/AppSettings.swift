@@ -21,6 +21,11 @@ enum AppSettingsKey {
     /// this as the sole bootstrap gate — once true, app updates never
     /// auto-replace the user's scene/vocab.
     static let bootstrapInstalled   = "bootstrap_installed"
+    /// Set once after the one-time tile-provenance backfill runs. Existing
+    /// installs predate `TileModel.isSystem`, so their bundled tiles default
+    /// to `false`; the backfill marks the ones matching bundled vocabulary as
+    /// system. See `BootstrapLoader.backfillTileProvenance`.
+    static let tileProvenanceBackfilled = "tile_provenance_backfilled"
     /// Sticky preference for the force-refresh "Save a copy first" toggle.
     /// Default true (safe). Only read when forceRefreshDuplicateRemembered
     /// is true; otherwise the dialog opens with the default each time.

@@ -66,6 +66,10 @@ struct claudeBlastApp: App {
             seedLegacy: wasInstalled
         )
 
+        // One-time: mark bundled tiles as system on installs that predate
+        // TileModel.isSystem. No-op on fresh bootstraps (already flagged).
+        BootstrapLoader.backfillTileProvenance(context: container.mainContext)
+
         // Move any prior UserDefaults-stored API key into the Keychain on
         // the first launch after upgrade. Idempotent; no-op on fresh installs.
         OpenAIKeyVault.migrateFromUserDefaultsIfNeeded()
@@ -124,6 +128,7 @@ struct claudeBlastApp: App {
                 .environment(profileResolver)
                 .onAppear {
                     profileResolver.configure(modelContext: modelContainer.mainContext)
+                    imageResolver.configure(modelContext: modelContainer.mainContext)
                     sentenceEngine.configure(
                         modelContext: modelContainer.mainContext,
                         profileResolver: profileResolver

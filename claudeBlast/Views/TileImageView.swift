@@ -17,6 +17,9 @@ struct TileImageView: View {
     @Environment(TileImageResolver.self) private var resolver
 
     var body: some View {
+        // Touch `revision` so adding/removing a photo override re-renders this
+        // tile — NSCache mutations alone are not observable.
+        let _ = resolver.revision
         if let uiImage = resolver.image(for: key) {
             Image(uiImage: uiImage)
                 .resizable()

@@ -162,6 +162,18 @@ struct TilePropertiesSheet: View {
     let tileKey: String
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(TileImageResolver.self) private var resolver
+
+    /// Image awaiting a square crop. Owned here (the sheet root), not inside the
+    /// photo Section, so the cropper presents off a stable anchor.
+    @State private var cropTarget: CropTarget?
+    @State private var photoError: String?
+
+    private struct CropTarget: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
 
     private var tile: TileModel? {
         allTiles.first { $0.key == tileKey }
@@ -208,12 +220,25 @@ struct TilePropertiesSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tile?.displayName ?? tileKey)
                                 .font(.headline)
-                            Text(tile?.wordClass ?? "")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(tile?.wordClass ?? "")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let tile, !tile.isSystem {
+                                    Label("Added", systemImage: "person.crop.circle.badge.plus")
+                                        .font(.caption2)
+                                        .foregroundStyle(.purple)
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                if let tile {
+                    TilePhotoSection(tile: tile) { picked in
+                        cropTarget = CropTarget(image: picked)
+                    }
                 }
 
                 Section("Behavior") {
@@ -241,6 +266,27 @@ struct TilePropertiesSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .fullScreenCover(item: $cropTarget) { target in
+                SquareImageCropper(
+                    image: target.image,
+                    onCrop: { square in
+                        cropTarget = nil
+                        if let tile {
+                            photoError = TilePhotoCommit.apply(
+                                square, to: tile,
+                                context: modelContext, resolver: resolver)
+                        }
+                    },
+                    onCancel: { cropTarget = nil }
+                )
+            }
+            .alert("Couldn't Save Photo",
+                   isPresented: Binding(get: { photoError != nil },
+                                        set: { if !$0 { photoError = nil } })) {
+                Button("OK", role: .cancel) { photoError = nil }
+            } message: {
+                Text(photoError ?? "")
             }
         }
     }
