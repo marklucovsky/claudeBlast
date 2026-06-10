@@ -4,11 +4,11 @@
 //  AddWordSheet.swift
 //  claudeBlast
 //
-//  Create a caregiver vocabulary word inline while authoring a page. Handles the
-//  key/word-class collision rule (see decision in the vocab-extensions plan):
-//   - no collision               → plain new key
-//   - collision, SAME word class → it's the same item; offer to add the existing one
-//   - collision, DIFFERENT class → homograph; mint `<key>_<wordClass>`, label unchanged
+//  Create a caregiver vocabulary word inline while authoring a page. Collisions
+//  are prevented in the UI: any word class already used by this key is disabled
+//  in the type picker, so you can only land on a free class. Creating then makes
+//  either a plain new key (no collision) or a homograph `<key>_<wordClass>` (the
+//  key exists in another class), label unchanged.
 //  Optionally attaches a photo (pick → square crop → CloudKit-safe compress) so a
 //  word + its picture can land in one step.
 //
@@ -21,8 +21,6 @@ import UIKit
 struct AddWordSheet: View {
     let initialWord: String
     let existingTiles: [TileModel]
-    /// Selectable word classes (no "all").
-    let wordClasses: [String]
     let defaultWordClass: String
     /// Called with the created (or existing-duplicate) tile to place on the page.
     let onCommit: (TileModel) -> Void
@@ -33,7 +31,6 @@ struct AddWordSheet: View {
 
     @State private var displayName: String
     @State private var wordClass: String
-    @State private var duplicateMessage: String?
 
     // Inline photo (held until the word is created).
     @State private var pickerItem: PhotosPickerItem?
@@ -49,20 +46,46 @@ struct AddWordSheet: View {
 
     init(initialWord: String,
          existingTiles: [TileModel],
-         wordClasses: [String],
          defaultWordClass: String,
          onCommit: @escaping (TileModel) -> Void) {
         self.initialWord = initialWord
         self.existingTiles = existingTiles
-        self.wordClasses = wordClasses
         self.defaultWordClass = defaultWordClass
         self.onCommit = onCommit
-        _displayName = State(initialValue: initialWord.trimmingCharacters(in: .whitespacesAndNewlines))
-        _wordClass = State(initialValue: defaultWordClass)
+        let name = initialWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        _displayName = State(initialValue: name)
+        // Start on a caregiver-selectable class that isn't already taken by this
+        // key (structural classes can't leak in via the caller's default).
+        let selectable = VocabularyClasses.caregiverSelectable.map(\.name)
+        let taken = Self.takenClasses(for: name, in: existingTiles)
+        let preferred = (selectable.contains(defaultWordClass) && !taken.contains(defaultWordClass))
+            ? defaultWordClass : nil
+        let initial = preferred
+            ?? selectable.first { !taken.contains($0) }
+            ?? selectable.first ?? "describe"
+        _wordClass = State(initialValue: initial)
     }
 
     private var trimmedName: String {
         displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Word classes already used by this word — disabled in the picker so a
+    /// same-word/same-class duplicate can't be created (only a homograph in a
+    /// free class, or a brand-new key). Homographs share the displayName, not
+    /// the key (pony/animal is key "pony", pony/food is key "pony_food"), so we
+    /// match on displayName (plus the exact base key for safety).
+    private var takenClasses: Set<String> {
+        Self.takenClasses(for: trimmedName, in: existingTiles)
+    }
+
+    private static func takenClasses(for name: String, in tiles: [TileModel]) -> Set<String> {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let base = TileModel.normalizeKey(trimmed)
+        return Set(tiles
+            .filter { $0.key == base || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame }
+            .map(\.wordClass))
     }
 
     var body: some View {
@@ -73,10 +96,24 @@ struct AddWordSheet: View {
                         .textInputAutocapitalization(.never)
                 }
 
-                Section("Type") {
-                    Picker("Word class", selection: $wordClass) {
-                        ForEach(wordClasses, id: \.self) { Text($0).tag($0) }
+                Section {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 96), spacing: 8)],
+                        alignment: .leading, spacing: 8
+                    ) {
+                        ForEach(VocabularyClasses.caregiverSelectable) { cls in
+                            classChip(cls)
+                        }
                     }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Type")
+                } footer: {
+                    // Show the scheme rather than a free color control: tile color
+                    // is derived from the word class (no manual picker yet).
+                    Text(takenClasses.isEmpty
+                         ? "Tile color is set by the word class."
+                         : "Tile color is set by the word class. Greyed types already exist for “\(trimmedName)”.")
                 }
 
                 Section("Photo") {
@@ -108,13 +145,6 @@ struct AddWordSheet: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let duplicateMessage {
-                    Section {
-                        Text(duplicateMessage)
-                            .font(.callout)
-                        Button("Add the existing word") { addExistingDuplicate() }
-                    }
-                }
             }
             .navigationTitle("New Word")
             .navigationBarTitleDisplayMode(.inline)
@@ -124,11 +154,16 @@ struct AddWordSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { create() }
-                        .disabled(trimmedName.isEmpty)
+                        .disabled(trimmedName.isEmpty || takenClasses.contains(wordClass))
                 }
             }
-            .onChange(of: displayName) { _, _ in duplicateMessage = nil }
-            .onChange(of: wordClass) { _, _ in duplicateMessage = nil }
+            .onChange(of: displayName) { _, _ in
+                // If editing the word made the current class collide, hop to a free one.
+                if takenClasses.contains(wordClass) {
+                    wordClass = VocabularyClasses.caregiverSelectable
+                        .map(\.name).first { !takenClasses.contains($0) } ?? wordClass
+                }
+            }
             .onChange(of: pickerItem) { _, item in
                 guard let item else { return }
                 Task { await loadPhoto(item) }
@@ -146,24 +181,45 @@ struct AddWordSheet: View {
         }
     }
 
+    /// A selectable, color-coded word-class chip. Classes already used by this
+    /// key are greyed and non-tappable (collision prevention).
+    @ViewBuilder
+    private func classChip(_ cls: VocabularyClass) -> some View {
+        let taken = takenClasses.contains(cls.name)
+        let selected = wordClass == cls.name
+        Button {
+            wordClass = cls.name
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(cls.color).frame(width: 11, height: 11)
+                Text(cls.label).font(.subheadline)
+                if taken {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .background(Capsule().fill(selected ? cls.color.opacity(0.22) : Color.secondary.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(selected ? cls.color : .clear, lineWidth: 2))
+            .opacity(taken ? 0.4 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(taken)
+    }
+
     // MARK: - Create
 
     private func create() {
         let base = TileModel.normalizeKey(trimmedName)
-        guard !base.isEmpty else { return }
+        guard !base.isEmpty, !takenClasses.contains(wordClass) else { return }
 
-        let finalKey: String
-        if let existing = existingTiles.first(where: { $0.key == base }) {
-            if existing.wordClass == wordClass {
-                // Same item already in the system — don't duplicate.
-                duplicateMessage = "“\(existing.displayName)” already exists as a \(existing.wordClass) tile."
-                return
-            }
-            // Homograph: same spelling, different class → mint a distinct key.
-            finalKey = uniqueKey(base: "\(base)_\(wordClass)")
-        } else {
-            finalKey = base
-        }
+        // Key exists in another class → homograph; otherwise a brand-new key.
+        let finalKey = existingTiles.contains(where: { $0.key == base })
+            ? uniqueKey(base: "\(base)_\(wordClass)")
+            : base
 
         let tile = TileModel(key: finalKey, value: trimmedName, wordClass: wordClass)
         tile.isSystem = false
@@ -176,14 +232,6 @@ struct AddWordSheet: View {
             resolver.invalidatePhoto(for: finalKey)
         }
         onCommit(tile)
-        dismiss()
-    }
-
-    private func addExistingDuplicate() {
-        let base = TileModel.normalizeKey(trimmedName)
-        guard let existing = existingTiles.first(where: { $0.key == base && $0.wordClass == wordClass })
-        else { return }
-        onCommit(existing)
         dismiss()
     }
 

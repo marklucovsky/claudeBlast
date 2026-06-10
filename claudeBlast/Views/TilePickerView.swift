@@ -78,7 +78,6 @@ struct TilePickerView: View {
                 AddWordSheet(
                     initialWord: searchText,
                     existingTiles: allTiles,
-                    wordClasses: wordClasses.filter { $0 != "all" },
                     defaultWordClass: addWordDefaultClass
                 ) { tile in
                     placeTileOnPage(tile.key)
@@ -125,19 +124,79 @@ struct TilePickerView: View {
         if trimmed.isEmpty {
             ContentUnavailableView("No tiles found", systemImage: "magnifyingglass")
         } else {
-            ContentUnavailableView {
-                Label("No match for “\(trimmed)”", systemImage: "magnifyingglass")
-            } description: {
-                Text("Add it as a new word in your vocabulary.")
-            } actions: {
-                Button {
-                    showAddWord = true
-                } label: {
-                    Label("Add “\(trimmed)” as a new word", systemImage: "plus.circle.fill")
+            // The grid hides tiles already on the page / filtered by class, so an
+            // empty grid doesn't mean the word is new. Check the whole vocabulary
+            // for an exact match and surface it rather than claiming it's new.
+            let normalized = TileModel.normalizeKey(trimmed)
+            let matches = allTiles.filter {
+                $0.key == normalized || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
+            }
+            if matches.isEmpty {
+                ContentUnavailableView {
+                    Label("No match for “\(trimmed)”", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Add it as a new word in your vocabulary.")
+                } actions: {
+                    Button {
+                        showAddWord = true
+                    } label: {
+                        Label("Add “\(trimmed)” as a new word", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
+            } else {
+                existingWordView(trimmed, matches)
             }
         }
+    }
+
+    /// The searched word already exists. Show which classes it exists as (and
+    /// whether already on this page), let the user add an off-page one directly,
+    /// and offer to create a different-type homograph.
+    @ViewBuilder
+    private func existingWordView(_ trimmed: String, _ matches: [TileModel]) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.seal")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("“\(trimmed)” is already in your vocabulary")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 10) {
+                ForEach(matches) { tile in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(TileColorResolver.color(for: tile.wordClass))
+                            .frame(width: 10, height: 10)
+                        Text(tile.wordClass)
+                        Spacer()
+                        if existingKeys.contains(tile.key) {
+                            Text("On this page")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button("Add to page") {
+                                placeTileOnPage(tile.key)
+                                searchText = ""
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+
+            Button {
+                showAddWord = true
+            } label: {
+                Label("Add “\(trimmed)” as a different type", systemImage: "plus.circle")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding()
+        .frame(maxWidth: 440)
     }
 
     private func placeTileOnPage(_ key: String) {
