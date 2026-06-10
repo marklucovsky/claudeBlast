@@ -43,42 +43,15 @@ SLEEP_SECONDS = 15
 # ---------------------------------------------------------------------------
 # Style definitions
 # ---------------------------------------------------------------------------
+#
+# Single source of truth, shared with the app: the iOS TileImageGenerator reads
+# the SAME image_styles.json from its bundle, so offline-generated sets and
+# in-app "Generate with AI" stay in sync. Edit image_styles.json, not here.
+# (It also carries an "arasaac" style the app uses; this tool only generates the
+# two non-default sets.)
 
-STYLE_PLAYFUL_3D = (
-    "3D clay/plasticine sculpture, soft rounded shapes, gentle lighting, subtle shadows, "
-    "pastel-bright colors. Friendly and approachable, like a Pixar prop. "
-    "Clean solid-color background, nothing cluttered. "
-    "CRITICAL: Absolutely no text, no letters, no numbers, no words, no labels, no signs, "
-    "no symbols, no icons, no WiFi arcs, no app elements, no writing of any kind anywhere. "
-    "Pure visual sculpture only. Square format. Single clear subject centered."
-)
-
-STYLE_HIGH_CONTRAST = (
-    "High-contrast accessibility pictogram for non-verbal children. "
-    "The entire image is a pure solid #000000 black canvas that bleeds seamlessly "
-    "from center to all four edges and corners. There is NO frame, NO border, NO "
-    "rounded rectangle inset, NO white outline around the canvas, NO inner panel — "
-    "the black is one continuous flat field touching every edge. "
-    "ONE giant subject is centered and fills most of the canvas (roughly 80% of "
-    "the area), drawn in bold white with thick clean lines and generous filled "
-    "shapes. Bold accent colors (bright red, blue, green, yellow, orange) are "
-    "encouraged on meaningful parts (e.g. red apple, golden bread, red heart, red "
-    "roof) — white on black remains dominant. Simple flat shapes, maximum clarity. "
-    "ABSOLUTELY FORBIDDEN, the image MUST NOT contain any of these: any frame or "
-    "border around the subject; any rounded rectangle inset; any white outline "
-    "around the canvas; any text, letters, numbers, or words; any secondary icons; "
-    "any scattered small symbols, stars, sparkles, dots, snowflakes, asterisks, "
-    "circles, triangles, or shape clusters in the background; any second copy of "
-    "the subject; any wheelchair symbols, WiFi arcs, app/UI elements, currency "
-    "symbols, medical accessory icons (clipboards, ambulances, EKG lines), or any "
-    "decorative motifs anywhere. The black background is completely uniform and "
-    "empty everywhere except for the one centered subject. Square format."
-)
-
-STYLES = {
-    "playful_3d": STYLE_PLAYFUL_3D,
-    "high_contrast": STYLE_HIGH_CONTRAST,
-}
+STYLES_FILE = Path("claudeBlast/Resources/image_styles.json")
+STYLES: dict[str, str] = json.loads(STYLES_FILE.read_text())
 
 # Per-tile subject overrides for tiles where the shared cross-style subject
 # (extracted from prompts.json) doesn't translate well to high_contrast — e.g.
