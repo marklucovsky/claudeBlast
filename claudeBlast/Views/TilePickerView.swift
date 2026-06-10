@@ -60,6 +60,14 @@ struct TilePickerView: View {
                 wordClassFilter
                     .padding(.vertical, 8)
 
+                // When a search has matches the grid shows them, which otherwise
+                // hides the "create" path — so an existing word (any class, with
+                // or without spaces) couldn't be extended without changing the
+                // filter to empty the grid. Surface create here too.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty && !filteredTiles.isEmpty {
+                    addWordBanner
+                }
+
                 if filteredTiles.isEmpty {
                     emptyState
                         .padding(.top, 40)
@@ -109,6 +117,30 @@ struct TilePickerView: View {
                 }
             }
         }
+    }
+
+    /// Always-available "create" affordance shown above the grid during an
+    /// active search. Routes to the New Word sheet (which disables any classes
+    /// the word already uses, so this only ever makes a free-class homograph or
+    /// a brand-new word).
+    @ViewBuilder
+    private var addWordBanner: some View {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        let normalized = TileModel.normalizeKey(trimmed)
+        let exists = allTiles.contains {
+            $0.key == normalized || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
+        }
+        Button {
+            showAddWord = true
+        } label: {
+            Label(exists ? "Add “\(trimmed)” as a different type" : "Add “\(trimmed)” as a new word",
+                  systemImage: "plus.circle")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .padding(.horizontal)
+        .padding(.bottom, 4)
     }
 
     /// Word class to pre-select when adding a new word: the active filter if one
