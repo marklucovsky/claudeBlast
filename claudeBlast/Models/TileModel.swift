@@ -42,10 +42,17 @@ final class TileModel: Identifiable {
         return UIImage(data: userImageData)
     }
 
+    /// Canonical tile key from arbitrary text: lowercased, trimmed, with internal
+    /// whitespace collapsed to underscores. The key is the asset/reference id, so
+    /// it must be stable and space-free; the human label lives in `displayName`.
+    static func normalizeKey(_ raw: String) -> String {
+        raw.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: "_")
+    }
+
     convenience init(key: String, wordClass: String) {
-        let normalizedKey = key
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedKey = TileModel.normalizeKey(key)
         let normalizedValue = normalizedKey
             .replacingOccurrences(of: "_", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

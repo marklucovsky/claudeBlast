@@ -23,6 +23,7 @@ struct TilePickerView: View {
     @State private var suggestionGoal = ""
     @State private var isSuggesting = false
     @State private var suggestionError: String? = nil
+    @State private var showAddWord = false
     @Environment(\.isSearching) private var isSearching
 
     private var apiKey: String {
@@ -60,7 +61,7 @@ struct TilePickerView: View {
                     .padding(.vertical, 8)
 
                 if filteredTiles.isEmpty {
-                    ContentUnavailableView("No tiles found", systemImage: "magnifyingglass")
+                    emptyState
                         .padding(.top, 40)
                 } else {
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -73,6 +74,17 @@ struct TilePickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search tiles")
+            .sheet(isPresented: $showAddWord) {
+                AddWordSheet(
+                    initialWord: searchText,
+                    existingTiles: allTiles,
+                    wordClasses: wordClasses.filter { $0 != "all" },
+                    defaultWordClass: addWordDefaultClass
+                ) { tile in
+                    placeTileOnPage(tile.key)
+                    searchText = ""
+                }
+            }
             .onAppear {
                 if !initialSelectedKeys.isEmpty {
                     selectedKeys = initialSelectedKeys.subtracting(existingKeys)
@@ -98,6 +110,43 @@ struct TilePickerView: View {
                 }
             }
         }
+    }
+
+    /// Word class to pre-select when adding a new word: the active filter if one
+    /// is chosen, otherwise the first real class.
+    private var addWordDefaultClass: String {
+        if selectedWordClass != "all" { return selectedWordClass }
+        return wordClasses.first { $0 != "all" } ?? "describe"
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            ContentUnavailableView("No tiles found", systemImage: "magnifyingglass")
+        } else {
+            ContentUnavailableView {
+                Label("No match for “\(trimmed)”", systemImage: "magnifyingglass")
+            } description: {
+                Text("Add it as a new word in your vocabulary.")
+            } actions: {
+                Button {
+                    showAddWord = true
+                } label: {
+                    Label("Add “\(trimmed)” as a new word", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private func placeTileOnPage(_ key: String) {
+        var pages = scene.pages
+        guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
+        guard !pages[idx].tiles.contains(where: { $0.key == key }) else { return }
+        pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+        scene.pages = pages
+        try? modelContext.save()
     }
 
     private var wordClassFilter: some View {
