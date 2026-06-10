@@ -33,14 +33,21 @@ struct claudeBlastApp: App {
             AppSettingsKey.idleDebounceMs: 2500,
             AppSettingsKey.trayBufferSize: 100,
             AppSettingsKey.tileCapPerGroup: 4,
-            // iCloud sync defaults ON. For an AAC app whose threat model is
-            // "stop a curious child," the safety value of cross-device sync
-            // (reinstall recovers data, therapist's iPad + family iPhone
-            // stay in sync, reduces PIN-loss blast radius) far outweighs the
-            // marginal privacy concern of storing data in the user's own
-            // iCloud account. Toggle in DEBUG only.
-            AppSettingsKey.icloudEnabled: true,
         ])
+        // iCloud sync default depends on build:
+        // - RELEASE: ON. For an AAC app whose threat model is "stop a curious
+        //   child," cross-device sync (reinstall recovers data, therapist's
+        //   iPad + family iPhone stay in sync, reduces PIN-loss blast radius)
+        //   outweighs the marginal privacy concern of the user's own iCloud.
+        // - DEBUG: OFF. Local-only store makes testing deterministic — a
+        //   factory reset stays local and nothing re-syncs test data back, and
+        //   it avoids a dev device clobbering a synced device on the same
+        //   account. Toggle in Admin to exercise sync explicitly.
+        #if DEBUG
+        UserDefaults.standard.register(defaults: [AppSettingsKey.icloudEnabled: false])
+        #else
+        UserDefaults.standard.register(defaults: [AppSettingsKey.icloudEnabled: true])
+        #endif
 
         let icloudEnabled = UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
         let container = setModelContainer(icloudEnabled: icloudEnabled)

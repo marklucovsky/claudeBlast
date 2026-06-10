@@ -41,10 +41,13 @@ struct OnboardingView: View {
     @State private var skipChildProfile: Bool = false
 
     @State private var apiKey: String = ""
-    /// Default ON. The iCloud step is hidden in release builds — the user
-    /// gets sync without being asked. Toggle is exposed in DEBUG for testing
-    /// the local-only path.
-    @State private var icloudEnabled: Bool = true
+    /// Seeded from the registered default (RELEASE: ON, DEBUG: OFF — see
+    /// claudeBlastApp.init) so onboarding reflects the build's sync posture
+    /// rather than forcing ON. The iCloud step is hidden in release builds —
+    /// the user gets sync without being asked; DEBUG exposes the toggle so the
+    /// local-only path can be tested.
+    @State private var icloudEnabled: Bool =
+        UserDefaults.standard.bool(forKey: AppSettingsKey.icloudEnabled)
 
     @State private var pinInput: String = ""
     @State private var pinConfirm: String = ""

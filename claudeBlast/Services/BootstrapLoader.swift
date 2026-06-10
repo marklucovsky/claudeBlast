@@ -111,6 +111,15 @@ enum BootstrapLoader {
 
     /// Wipe all app-owned SwiftData records. Relationship-safe order matches
     /// performFactoryReset in AdminView. Safe to call on a fresh store (no-op).
+    ///
+    /// Intentionally uses batch `delete(model:)`: these deletions are LOCAL and
+    /// are not mirrored to CloudKit. So a factory reset mimics a fresh install —
+    /// it clears this device, preserves the user's cloud data, and on a synced
+    /// device the records re-hydrate from iCloud. Do NOT switch to per-object
+    /// deletes: that WOULD propagate to CloudKit and delete shared records on the
+    /// user's other devices (e.g. a therapist's live patient iPad). Deleting a
+    /// specific cloud record (e.g. a caregiver word) is a separate, explicit
+    /// per-word delete action — not part of reset.
     static func wipeAllData(context: ModelContext) {
         do {
             try context.delete(model: MetricEvent.self)
