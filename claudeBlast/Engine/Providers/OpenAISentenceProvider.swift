@@ -87,7 +87,9 @@ struct OpenAISentenceProvider: SentenceProvider {
             "model": "gpt-4o-mini",
             "messages": messages,
             "max_tokens": 500,
-            "temperature": 0.7,
+            // Lower temperature so the model is more obedient to the word-class
+            // annotation rule rather than drifting to a word's common meaning.
+            "temperature": 0.3,
         ]
     }
 
