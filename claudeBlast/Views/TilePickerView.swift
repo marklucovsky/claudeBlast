@@ -23,6 +23,7 @@ struct TilePickerView: View {
     @State private var suggestionGoal = ""
     @State private var isSuggesting = false
     @State private var suggestionError: String? = nil
+    @State private var showAddWord = false
     @Environment(\.isSearching) private var isSearching
 
     private var apiKey: String {
@@ -59,8 +60,16 @@ struct TilePickerView: View {
                 wordClassFilter
                     .padding(.vertical, 8)
 
+                // When a search has matches the grid shows them, which otherwise
+                // hides the "create" path — so an existing word (any class, with
+                // or without spaces) couldn't be extended without changing the
+                // filter to empty the grid. Surface create here too.
+                if !searchText.trimmingCharacters(in: .whitespaces).isEmpty && !filteredTiles.isEmpty {
+                    addWordBanner
+                }
+
                 if filteredTiles.isEmpty {
-                    ContentUnavailableView("No tiles found", systemImage: "magnifyingglass")
+                    emptyState
                         .padding(.top, 40)
                 } else {
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -73,6 +82,16 @@ struct TilePickerView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search tiles")
+            .sheet(isPresented: $showAddWord) {
+                AddWordSheet(
+                    initialWord: searchText,
+                    existingTiles: allTiles,
+                    defaultWordClass: addWordDefaultClass
+                ) { tile in
+                    placeTileOnPage(tile.key)
+                    searchText = ""
+                }
+            }
             .onAppear {
                 if !initialSelectedKeys.isEmpty {
                     selectedKeys = initialSelectedKeys.subtracting(existingKeys)
@@ -98,6 +117,127 @@ struct TilePickerView: View {
                 }
             }
         }
+    }
+
+    /// Always-available "create" affordance shown above the grid during an
+    /// active search. Routes to the New Word sheet (which disables any classes
+    /// the word already uses, so this only ever makes a free-class homograph or
+    /// a brand-new word).
+    @ViewBuilder
+    private var addWordBanner: some View {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        let normalized = TileModel.normalizeKey(trimmed)
+        let exists = allTiles.contains {
+            $0.key == normalized || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
+        }
+        Button {
+            showAddWord = true
+        } label: {
+            Label(exists ? "Add “\(trimmed)” as a different type" : "Add “\(trimmed)” as a new word",
+                  systemImage: "plus.circle")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .padding(.horizontal)
+        .padding(.bottom, 4)
+    }
+
+    /// Word class to pre-select when adding a new word: the active filter if one
+    /// is chosen, otherwise the first real class.
+    private var addWordDefaultClass: String {
+        if selectedWordClass != "all" { return selectedWordClass }
+        return wordClasses.first { $0 != "all" } ?? "describe"
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            ContentUnavailableView("No tiles found", systemImage: "magnifyingglass")
+        } else {
+            // The grid hides tiles already on the page / filtered by class, so an
+            // empty grid doesn't mean the word is new. Check the whole vocabulary
+            // for an exact match and surface it rather than claiming it's new.
+            let normalized = TileModel.normalizeKey(trimmed)
+            let matches = allTiles.filter {
+                $0.key == normalized || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
+            }
+            if matches.isEmpty {
+                ContentUnavailableView {
+                    Label("No match for “\(trimmed)”", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Add it as a new word in your vocabulary.")
+                } actions: {
+                    Button {
+                        showAddWord = true
+                    } label: {
+                        Label("Add “\(trimmed)” as a new word", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else {
+                existingWordView(trimmed, matches)
+            }
+        }
+    }
+
+    /// The searched word already exists. Show which classes it exists as (and
+    /// whether already on this page), let the user add an off-page one directly,
+    /// and offer to create a different-type homograph.
+    @ViewBuilder
+    private func existingWordView(_ trimmed: String, _ matches: [TileModel]) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.seal")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("“\(trimmed)” is already in your vocabulary")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 10) {
+                ForEach(matches) { tile in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(TileColorResolver.color(for: tile.wordClass))
+                            .frame(width: 10, height: 10)
+                        Text(tile.wordClass)
+                        Spacer()
+                        if existingKeys.contains(tile.key) {
+                            Text("On this page")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button("Add to page") {
+                                placeTileOnPage(tile.key)
+                                searchText = ""
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+
+            Button {
+                showAddWord = true
+            } label: {
+                Label("Add “\(trimmed)” as a different type", systemImage: "plus.circle")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding()
+        .frame(maxWidth: 440)
+    }
+
+    private func placeTileOnPage(_ key: String) {
+        var pages = scene.pages
+        guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
+        guard !pages[idx].tiles.contains(where: { $0.key == key }) else { return }
+        pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+        scene.pages = pages
+        try? modelContext.save()
     }
 
     private var wordClassFilter: some View {

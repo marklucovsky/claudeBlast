@@ -30,15 +30,29 @@ final class TileModel: Identifiable {
     var key: String = ""
     var wordClass: String = ""
 
+    /// True for tiles seeded from the bundled vocabulary (BootstrapLoader);
+    /// false for caregiver-added words and tiles brought in by scene import.
+    /// Lets authoring surfaces distinguish system vocabulary from extensions.
+    /// Defaulted Bool so the schema migrates cleanly under CloudKit (same
+    /// shape as `ChildProfile.isSystem`).
+    var isSystem: Bool = false
+
     var userImage: UIImage? {
         guard let userImageData else { return nil }
         return UIImage(data: userImageData)
     }
 
+    /// Canonical tile key from arbitrary text: lowercased, trimmed, with internal
+    /// whitespace collapsed to underscores. The key is the asset/reference id, so
+    /// it must be stable and space-free; the human label lives in `displayName`.
+    static func normalizeKey(_ raw: String) -> String {
+        raw.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: "_")
+    }
+
     convenience init(key: String, wordClass: String) {
-        let normalizedKey = key
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedKey = TileModel.normalizeKey(key)
         let normalizedValue = normalizedKey
             .replacingOccurrences(of: "_", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

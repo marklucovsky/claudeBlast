@@ -17,6 +17,9 @@ struct TileImageView: View {
     @Environment(TileImageResolver.self) private var resolver
 
     var body: some View {
+        // Touch `revision` so adding/removing a photo override re-renders this
+        // tile — NSCache mutations alone are not observable.
+        let _ = resolver.revision
         if let uiImage = resolver.image(for: key) {
             Image(uiImage: uiImage)
                 .resizable()
@@ -50,26 +53,9 @@ struct TileImageView: View {
 
 // MARK: - Word Class Colors (shared)
 
-/// Word-class color mapping used by TileView and TileImageView.
-/// Factored out so both the image placeholder and the tile card background use the same colors.
+/// Word-class color used by TileView and TileImageView. Thin shim over the
+/// single source of truth so callers stay unchanged; see TileColorResolver /
+/// VocabularyClasses for the canonical mapping.
 func colorForWordClass(_ wordClass: String) -> Color {
-    switch wordClass {
-    case "actions": return .orange
-    case "describe": return .green
-    case "people": return .purple
-    case "food", "meals", "fruit", "veggie", "snacks": return .red
-    case "places": return .blue
-    case "social", "feeling", "question": return .pink
-    case "navigation": return .indigo
-    case "drinks": return .cyan
-    case "weather": return Color(red: 0.3, green: 0.6, blue: 0.9)
-    case "colors": return .mint
-    case "shape": return .teal
-    case "body", "health": return Color(red: 0.9, green: 0.5, blue: 0.5)
-    case "toy", "games", "sports": return .yellow
-    case "art": return Color(red: 0.7, green: 0.4, blue: 0.8)
-    case "play": return .yellow
-    case "core": return Color(red: 0.95, green: 0.88, blue: 0.55)
-    default: return .gray
-    }
+    TileColorResolver.color(for: wordClass)
 }

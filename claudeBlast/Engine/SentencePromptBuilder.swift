@@ -49,7 +49,12 @@ struct SentencePromptBuilder {
     
     func formatUserPrompt(tiles: [TileSelection]) -> String {
         let tileDescriptions = tiles.map { "\($0.value) (\($0.wordClass))" }
-        return tileDescriptions.joined(separator: ", ")
+            .joined(separator: ", ")
+        // Restate the rule in the user turn (highest recency) — a small model
+        // otherwise lets its prior for a word override a surprising category,
+        // e.g. "pony (food)" coming out as a pet instead of something to eat.
+        return tileDescriptions
+            + "\n\n(The category in parentheses is each word's intended meaning — honor it even when unusual.)"
     }
 
     private func gradeDescription(_ grade: Int) -> String {

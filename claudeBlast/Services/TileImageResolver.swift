@@ -9,6 +9,7 @@
 
 import SwiftUI
 import UIKit
+import SwiftData
 import Observation
 
 // MARK: - Image Set Identifier
@@ -39,6 +40,8 @@ enum ImageSetID: String, CaseIterable, Identifiable {
 
 // MARK: - Tile Image Resolver
 
+
+
 @Observable
 @MainActor
 final class TileImageResolver {
@@ -46,17 +49,47 @@ final class TileImageResolver {
     /// The currently active image set. Changing this causes all tiles to re-render.
     var activeSet: ImageSetID = .arasaac
 
+    /// Bumped whenever a per-key photo override is added or removed so SwiftUI
+    /// views that read it (TileImageView) re-render. NSCache reads/writes are
+    /// not observable on their own, so this is the explicit invalidation signal.
+    private(set) var revision = 0
+
     /// In-memory cache for non-asset-catalog images (keyed by "setID:tileKey").
     private var cache = NSCache<NSString, UIImage>()
 
+    /// SwiftData context used to fetch per-tile photo overrides
+    /// (`TileModel.userImageData`). Wired via `configure` at launch, mirroring
+    /// `ChildProfileResolver`. Nil before configuration → overrides are skipped.
+    private var context: ModelContext?
+
+    /// Decoded photo overrides, keyed "override:<tileKey>".
+    private var overrideCache = NSCache<NSString, UIImage>()
+
+    /// Keys known to have NO photo override. Without this negative cache every
+    /// render of every photo-less tile (the vast majority) would issue a fetch.
+    private var overrideMisses = Set<String>()
+
     init() {
         cache.countLimit = 600 // ~500 tiles + headroom
+        overrideCache.countLimit = 600
+    }
+
+    /// Wire the SwiftData context so photo overrides can be resolved. Safe to
+    /// call multiple times; clears any cached override state so a fresh store
+    /// is re-read.
+    func configure(modelContext: ModelContext) {
+        self.context = modelContext
+        overrideCache.removeAllObjects()
+        overrideMisses.removeAll()
     }
 
     /// Resolve a UIImage for the given tile key in the active image set.
-    /// Returns nil if the tile has no image in the active set (sparse set support).
+    /// A caregiver-supplied photo override (`TileModel.userImageData`) wins
+    /// over every image set, so it is consulted first. Returns nil if the tile
+    /// has no override and no image in the active set (sparse set support).
     func image(for key: String) -> UIImage? {
-        image(for: key, in: activeSet)
+        if let photo = userPhoto(for: key) { return photo }
+        return image(for: key, in: activeSet)
     }
 
     /// Resolve a UIImage for the given tile key in a specific image set.
@@ -74,9 +107,43 @@ final class TileImageResolver {
         }
     }
 
-    /// Check whether a tile has an image in the active set.
+    /// Check whether a tile has an image *in the active image set*. Deliberately
+    /// bypasses photo overrides: callers (e.g. export's `defaultTileKeys`) use
+    /// this to decide whether a tile relies on bundled art, and a caregiver
+    /// photo must not make a custom tile look bundled.
     func hasImage(for key: String) -> Bool {
-        image(for: key) != nil
+        image(for: key, in: activeSet) != nil
+    }
+
+    // MARK: - Photo overrides
+
+    /// Resolve a caregiver-supplied photo override for `key`, or nil. Uses a
+    /// positive cache + a negative (`overrideMisses`) cache so photo-less tiles
+    /// — almost all of them — cost at most one fetch ever.
+    private func userPhoto(for key: String) -> UIImage? {
+        guard context != nil else { return nil }
+        if overrideMisses.contains(key) { return nil }
+        let cacheKey = NSString(string: "override:\(key)")
+        if let cached = overrideCache.object(forKey: cacheKey) { return cached }
+
+        var descriptor = FetchDescriptor<TileModel>(predicate: #Predicate { $0.key == key })
+        descriptor.fetchLimit = 1
+        if let tile = try? context?.fetch(descriptor).first,
+           let data = tile.userImageData,
+           let img = UIImage(data: data) {
+            overrideCache.setObject(img, forKey: cacheKey)
+            return img
+        }
+        overrideMisses.insert(key)
+        return nil
+    }
+
+    /// Invalidate the cached override for `key` after its photo is added or
+    /// removed, and bump `revision` so views showing that tile re-render.
+    func invalidatePhoto(for key: String) {
+        overrideCache.removeObject(forKey: NSString(string: "override:\(key)"))
+        overrideMisses.remove(key)
+        revision &+= 1
     }
 
     // MARK: - Private
