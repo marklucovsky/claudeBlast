@@ -1628,6 +1628,20 @@ private struct ScenePreviewView: View {
         preview.pages[min(selectedPageIndex, preview.pages.count - 1)]
     }
 
+    /// Distinct proposed-new word display names across the whole scene.
+    private var newWords: [String] {
+        var seen = Set<String>()
+        var names: [String] = []
+        for page in preview.pages {
+            for tile in page.tiles where tile.isProposedNew {
+                if let name = tile.displayName, seen.insert(tile.key).inserted {
+                    names.append(name)
+                }
+            }
+        }
+        return names
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -1643,6 +1657,18 @@ private struct ScenePreviewView: View {
             }
             .padding(.top, 12)
             .padding(.horizontal)
+
+            // New-word summary: tells the author what will be added to vocabulary.
+            if !newWords.isEmpty {
+                Label("Adds \(newWords.count) new word\(newWords.count == 1 ? "" : "s"): \(newWords.joined(separator: ", "))",
+                      systemImage: "sparkles")
+                    .font(.caption2)
+                    .foregroundStyle(.purple)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+            }
 
             // Page picker
             if preview.pages.count > 1 {
@@ -1693,7 +1719,11 @@ private struct ScenePreviewView: View {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(currentPage.tiles, id: \.key) { genTile in
                         if let tile = tileLookup[genTile.key] {
-                            GeneratedTileCell(tile: tile, link: genTile.link)
+                            GeneratedTileCell(key: tile.bundleImage, displayName: tile.displayName,
+                                              wordClass: tile.wordClass, link: genTile.link)
+                        } else if let name = genTile.displayName, let wc = genTile.wordClass {
+                            GeneratedTileCell(key: genTile.key, displayName: name,
+                                              wordClass: wc, link: genTile.link, isNew: true)
                         }
                     }
                 }
@@ -1720,22 +1750,38 @@ private struct ScenePreviewView: View {
 }
 
 // Lightweight tile cell for AI-generated preview grids (no SwiftData dependency).
+// Renders existing tiles and proposed-new words alike; `isNew` adds a badge and
+// the word renders as its letter placeholder (no art until generated/added).
 private struct GeneratedTileCell: View {
-    let tile: TileModel
+    let key: String
+    let displayName: String
+    let wordClass: String
     let link: String
+    var isNew: Bool = false
 
     private var isNav: Bool { !link.isEmpty }
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
+                TileImageView(key: key, wordClass: wordClass)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(isNav ? Color.blue.opacity(0.6) : Color.clear, lineWidth: 2)
                 )
+                .overlay(alignment: .topLeading) {
+                    if isNew {
+                        Text("NEW")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(.purple))
+                            .padding(3)
+                    }
+                }
                 .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
 
                 if isNav {
@@ -1746,7 +1792,7 @@ private struct GeneratedTileCell: View {
                 }
             }
 
-            Text(tile.displayName)
+            Text(displayName)
                 .font(.system(size: 9, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.secondary)

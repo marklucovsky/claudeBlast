@@ -69,7 +69,16 @@ struct PageGeneratorService {
         prefer a flat page for focused, single-topic goals.
 
         Tile rules:
-        - Use ONLY tile keys from the provided vocabulary. Never invent keys.
+        - Prefer existing tile keys from the provided vocabulary; reuse an existing word \
+          rather than proposing a new one whenever a suitable match already exists.
+        - When the goal NAMES specific concrete things (animals, foods, places, objects), \
+          include EVERY one named — reuse an existing key if present, otherwise declare it new.
+        - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, \
+          object, food, place, or person). NEVER make abstract concepts, feelings, or actions new.
+        - Declare every new word ONCE in the top-level "newWords" array with its "displayName" \
+          and "wordClass" (one of: \(VocabularyClasses.caregiverSelectable.map(\.name).joined(separator: ", "))), \
+          then reference it by the same "key" in tiles. Every tile key MUST be either an existing \
+          vocabulary key or a key declared in "newWords".
         - Audible tiles (isAudible=true) contribute to the sentence tray.
         - Navigation tiles must have isAudible=false and a non-empty link matching a key in newPages.
         - Aim for 8–24 tiles on the primary page.
@@ -77,8 +86,12 @@ struct PageGeneratorService {
         Return ONLY valid JSON — no markdown, no prose:
         {
           "key": "string",
+          "newWords": [
+            { "key": "horse", "displayName": "horse", "wordClass": "animal" }
+          ],
           "tiles": [
-            { "key": "string", "isAudible": true, "link": "" }
+            { "key": "eat", "isAudible": true, "link": "" },
+            { "key": "horse", "isAudible": true, "link": "" }
           ],
           "newPages": [
             {
@@ -135,8 +148,11 @@ struct PageGeneratorService {
         }
 
         let raw = try JSONDecoder().decode(GeneratedPageResponse.self, from: jsonData)
+        let newWords = GeneratedNewWord.lookup(from: raw.newWords)
 
-        let validPrimary = raw.tiles.filter { validKeys.contains($0.key) }
+        let validPrimary = raw.tiles.compactMap {
+            GeneratedTile.sanitize($0, validKeys: validKeys, newWords: newWords)
+        }
         guard !validPrimary.isEmpty else {
             throw OpenAIError.decodingError("No valid tiles found in generated page")
         }
@@ -144,7 +160,9 @@ struct PageGeneratorService {
         let primaryPage = GeneratedPage(key: pageName, tiles: validPrimary)
 
         let subPages = raw.newPages.map { sub in
-            let validTiles = sub.tiles.filter { validKeys.contains($0.key) }
+            let validTiles = sub.tiles.compactMap {
+                GeneratedTile.sanitize($0, validKeys: validKeys, newWords: newWords)
+            }
             return GeneratedPage(key: sub.key, tiles: validTiles)
         }.filter { !$0.tiles.isEmpty }
 

@@ -79,7 +79,18 @@ struct SceneGeneratorService {
         - Navigation tiles must have isAudible=false and a non-empty link matching another page key.
 
         Tile rules:
-        - Use ONLY tile keys from the provided vocabulary. Never invent keys.
+        - Prefer existing tile keys from the provided vocabulary; reuse an existing word \
+          rather than proposing a new one whenever a suitable match already exists.
+        - When the description NAMES specific concrete things (animals, foods, places, objects), \
+          include EVERY one named — reuse an existing key if present, otherwise declare it as a \
+          new word. Do not omit or summarize named items.
+        - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, \
+          object, food, place, or person). NEVER make abstract concepts, feelings, or actions \
+          into new words.
+        - Declare every new word ONCE in the top-level "newWords" array with its "displayName" \
+          and "wordClass" (one of: \(VocabularyClasses.caregiverSelectable.map(\.name).joined(separator: ", "))), \
+          then reference it by the same "key" in page tiles. Every page-tile key MUST be either \
+          an existing vocabulary key or a key declared in "newWords".
         - Prefer audible tiles (isAudible=true) for communicative vocabulary.
         - Limit each page to 12–30 tiles so the grid is not overwhelming.
 
@@ -88,11 +99,15 @@ struct SceneGeneratorService {
           "name": "string",
           "description": "string",
           "homePageKey": "string",
+          "newWords": [
+            { "key": "horse", "displayName": "horse", "wordClass": "animal" }
+          ],
           "pages": [
             {
               "key": "string",
               "tiles": [
-                { "key": "string", "isAudible": true, "link": "" }
+                { "key": "eat", "isAudible": true, "link": "" },
+                { "key": "horse", "isAudible": true, "link": "" }
               ]
             }
           ]
@@ -145,12 +160,13 @@ struct SceneGeneratorService {
         }
 
         let raw = try JSONDecoder().decode(GeneratedScene.self, from: jsonData)
+        let newWords = GeneratedNewWord.lookup(from: raw.newWords)
 
-        // Filter tiles to only valid vocabulary keys and sanitize links
+        // Keep existing-vocab tiles; admit tiles whose key was declared in
+        // newWords (carrying displayName + wordClass); drop hallucinated keys.
         let sanitizedPages = raw.pages.map { page in
-            let validTiles = page.tiles.compactMap { tile -> GeneratedTile? in
-                guard validKeys.contains(tile.key) else { return nil }
-                return tile
+            let validTiles = page.tiles.compactMap { tile in
+                GeneratedTile.sanitize(tile, validKeys: validKeys, newWords: newWords)
             }
             return GeneratedPage(key: page.key, tiles: validTiles)
         }.filter { !$0.tiles.isEmpty }
