@@ -105,7 +105,9 @@ struct SceneEditorView: View {
     }
 
     private func exportScene() {
-        let defaultKeys = Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
+        // Bundled (system) keys aren't packaged; caregiver words are. Provenance-
+        // based so it's independent of the active image set.
+        let defaultKeys = Set(allTiles.filter(\.isSystem).map(\.key))
         let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
         guard let data = try? SceneExporter.exportJSON(scene,
                                                        defaultTileKeys: defaultKeys,

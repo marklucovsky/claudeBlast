@@ -38,6 +38,41 @@ enum SceneImporter {
         let skippedKeys: [String]
         let newTileCount: Int
         let oversizedImages: [String]  // tile keys where imageData exceeded cap
+        /// Existing tiles whose image was filled or replaced — the caller should
+        /// invalidate the image resolver's cache for these so they re-render.
+        let imageUpdatedKeys: [String]
+    }
+
+    /// How the file's custom tiles relate to THIS device's vocabulary — used to
+    /// preview the import and to drive per-word image-collision consent.
+    struct ImportAnalysis {
+        /// Keys not on the device — will be created.
+        let newWords: [ExportableTile]
+        /// On the device with NO custom image; the file carries one → auto-fill.
+        let fillWords: [ExportableTile]
+        /// On the device WITH a custom image, and the file carries a (different)
+        /// one → needs the importer's consent; never replaced without it.
+        let collisions: [ExportableTile]
+    }
+
+    /// Categorize the file's custom tiles against the device's tiles. Word
+    /// identity (key/displayName/wordClass) is never changed by import; this only
+    /// governs images.
+    static func analyze(_ exportable: ExportableScene, deviceTiles: [TileModel]) -> ImportAnalysis {
+        let lookup = Dictionary(uniqueKeysWithValues: deviceTiles.map { ($0.key, $0) })
+        var newWords: [ExportableTile] = []
+        var fillWords: [ExportableTile] = []
+        var collisions: [ExportableTile] = []
+        for tile in exportable.tiles ?? [] {
+            if let existing = lookup[tile.key] {
+                guard tile.imageData != nil else { continue }   // nothing to offer
+                if existing.userImageData == nil { fillWords.append(tile) }
+                else { collisions.append(tile) }
+            } else {
+                newWords.append(tile)
+            }
+        }
+        return ImportAnalysis(newWords: newWords, fillWords: fillWords, collisions: collisions)
     }
 
     /// Import a scene from JSON data.
@@ -45,7 +80,10 @@ enum SceneImporter {
     ///   - data: Raw JSON data in the ExportableScene format.
     ///   - context: The ModelContext to insert new objects into.
     /// - Returns: An ImportResult with the new scene and any warnings.
-    static func importJSON(_ data: Data, context: ModelContext, sourceURL: String = "") throws -> ImportResult {
+    static func importJSON(_ data: Data,
+                           context: ModelContext,
+                           sourceURL: String = "",
+                           acceptedImageCollisions: Set<String> = []) throws -> ImportResult {
         let decoder = JSONDecoder()
         let exportable: ExportableScene
         do {
@@ -68,39 +106,47 @@ enum SceneImporter {
             throw SceneImportError.noPages
         }
 
-        // Fetch existing tiles
-        let allTiles = try context.fetch(FetchDescriptor<TileModel>())
-        var tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        // Fetch existing tiles + categorize the file's custom tiles.
+        let deviceTiles = try context.fetch(FetchDescriptor<TileModel>())
+        var tileLookup = Dictionary(uniqueKeysWithValues: deviceTiles.map { ($0.key, $0) })
+        let analysis = analyze(exportable, deviceTiles: deviceTiles)
 
-        // Merge new tiles from the tiles array
         var newTileCount = 0
         var oversizedImages: [String] = []
+        var imageUpdatedKeys: [String] = []
 
-        if let incomingTiles = exportable.tiles {
-            for incoming in incomingTiles {
-                // Device wins — skip if key already exists
-                guard tileLookup[incoming.key] == nil else { continue }
-
-                let tile = TileModel(
-                    key: incoming.key,
-                    value: incoming.displayName,
-                    wordClass: incoming.wordClass
-                )
-
-                // Decode optional image data
-                if let base64 = incoming.imageData,
-                   let decoded = Data(base64Encoded: base64) {
-                    if decoded.count <= BlasterSceneFormat.maxImageDataSize {
-                        tile.userImageData = decoded
-                    } else {
-                        oversizedImages.append(incoming.key)
-                    }
-                }
-
-                context.insert(tile)
-                tileLookup[tile.key] = tile
-                newTileCount += 1
+        // Decode a tile's image if present and within the size cap.
+        func decodedImage(_ tile: ExportableTile) -> Data? {
+            guard let base64 = tile.imageData, let decoded = Data(base64Encoded: base64) else { return nil }
+            guard decoded.count <= BlasterSceneFormat.maxImageDataSize else {
+                oversizedImages.append(tile.key)
+                return nil
             }
+            return decoded
+        }
+
+        // 1. New words → create the tile (with image if carried).
+        for incoming in analysis.newWords {
+            let tile = TileModel(key: incoming.key, value: incoming.displayName, wordClass: incoming.wordClass)
+            if let image = decodedImage(incoming) { tile.userImageData = image }
+            context.insert(tile)
+            tileLookup[tile.key] = tile
+            newTileCount += 1
+        }
+
+        // 2. Fill-if-empty → existing tile has no image; apply the shared one.
+        for incoming in analysis.fillWords {
+            guard let tile = tileLookup[incoming.key], let image = decodedImage(incoming) else { continue }
+            tile.userImageData = image
+            imageUpdatedKeys.append(incoming.key)
+        }
+
+        // 3. Collisions → only replace where the importer consented. Word
+        //    identity is never touched.
+        for incoming in analysis.collisions where acceptedImageCollisions.contains(incoming.key) {
+            guard let tile = tileLookup[incoming.key], let image = decodedImage(incoming) else { continue }
+            tile.userImageData = image
+            imageUpdatedKeys.append(incoming.key)
         }
 
         // Build pages as inline PageSpec values. Tiles missing from the import
@@ -142,7 +188,8 @@ enum SceneImporter {
             scene: scene,
             skippedKeys: skippedKeys,
             newTileCount: newTileCount,
-            oversizedImages: oversizedImages
+            oversizedImages: oversizedImages,
+            imageUpdatedKeys: imageUpdatedKeys
         )
     }
 

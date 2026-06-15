@@ -69,7 +69,7 @@ struct AdminView: View {
     @State private var isCreatingScene = false
     @State private var isImporting = false
     @State private var importError: String?
-    @State private var importWarning: String?
+    @State private var pendingImportURL: ImportSheetURL?
     @State private var sceneToExport: BlasterSceneFile?
 
     @State private var profileSheet: ProfileSheet?
@@ -365,6 +365,9 @@ struct AdminView: View {
         ) { result in
             handleFileImport(result)
         }
+        .sheet(item: $pendingImportURL) { item in
+            SceneImportSheet(url: item.url) { pendingImportURL = nil }
+        }
         .alert("Import Error", isPresented: Binding(
             get: { importError != nil },
             set: { if !$0 { importError = nil } }
@@ -372,14 +375,6 @@ struct AdminView: View {
             Button("OK") { importError = nil }
         } message: {
             Text(importError ?? "")
-        }
-        .alert("Import Complete", isPresented: Binding(
-            get: { importWarning != nil },
-            set: { if !$0 { importWarning = nil } }
-        )) {
-            Button("OK") { importWarning = nil }
-        } message: {
-            Text(importWarning ?? "")
         }
     }
 
@@ -1119,9 +1114,12 @@ struct AdminView: View {
         navigateToNewScene = scene
     }
 
-    /// Set of tile keys from the default vocabulary (used to determine which tiles need exporting).
+    /// Bundled (system) vocabulary keys — the importer already has these, so they
+    /// aren't packaged. Caregiver-added words (isSystem=false) ARE exported.
+    /// Provenance-based and image-set-independent (unlike a bundled-art check,
+    /// which would over-export on a sparse set).
     private var defaultTileKeys: Set<String> {
-        Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
+        Set(allTiles.filter(\.isSystem).map(\.key))
     }
 
     private func exportScene(_ scene: BlasterScene) {
@@ -1143,30 +1141,10 @@ struct AdminView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
-
-            do {
-                let data = try Data(contentsOf: url)
-                let importResult = try SceneImporter.importJSON(data, context: modelContext)
-                navigateToNewScene = importResult.scene
-
-                var warnings: [String] = []
-                if !importResult.skippedKeys.isEmpty {
-                    warnings.append("\(importResult.skippedKeys.count) tile(s) not found: \(importResult.skippedKeys.joined(separator: ", "))")
-                }
-                if importResult.newTileCount > 0 {
-                    warnings.append("\(importResult.newTileCount) new tile(s) added to vocabulary")
-                }
-                if !importResult.oversizedImages.isEmpty {
-                    warnings.append("\(importResult.oversizedImages.count) image(s) exceeded size limit")
-                }
-                if !warnings.isEmpty {
-                    importWarning = warnings.joined(separator: "\n")
-                }
-            } catch {
-                importError = error.localizedDescription
-            }
+            // Route through the same confirmation sheet as the file-open/iMessage
+            // path so an in-app import is previewed (new words, images) before it
+            // lands — rather than importing immediately.
+            pendingImportURL = ImportSheetURL(url: url)
         case .failure(let error):
             importError = error.localizedDescription
         }
