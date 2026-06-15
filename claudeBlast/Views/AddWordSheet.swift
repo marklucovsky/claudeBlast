@@ -38,6 +38,10 @@ struct AddWordSheet: View {
     @State private var processedPhoto: Data?
     @State private var photoPreview: UIImage?
     @State private var photoError: String?
+    @State private var isGenerating = false
+    @State private var imageDetail = ""
+
+    private var apiKey: String { OpenAIKeyVault.currentKey() ?? "" }
 
     private struct CropTarget: Identifiable {
         let id = UUID()
@@ -137,10 +141,46 @@ struct AddWordSheet: View {
                         Label(photoPreview == nil ? "Add Photo" : "Replace Photo",
                               systemImage: "photo.badge.plus")
                     }
+                    .disabled(isGenerating)
+
+                    if !apiKey.isEmpty {
+                        Button {
+                            Task { await generateImage() }
+                        } label: {
+                            Label(photoPreview == nil ? "Generate with AI" : "Regenerate with AI",
+                                  systemImage: "wand.and.stars")
+                        }
+                        .disabled(isGenerating || trimmedName.isEmpty)
+
+                        TextField("Add a detail to refine (optional)", text: $imageDetail, axis: .vertical)
+                            .font(.caption)
+                            .lineLimit(1...2)
+                            .disabled(isGenerating)
+                            .onChange(of: imageDetail) { _, value in
+                                if value.count > TileImageGenerator.maxDetailLength {
+                                    imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
+                                }
+                            }
+                        if imageDetail.count >= TileImageGenerator.detailCounterThreshold {
+                            Text("\(imageDetail.count)/\(TileImageGenerator.maxDetailLength)")
+                                .font(.caption2)
+                                .foregroundStyle(imageDetail.count >= TileImageGenerator.maxDetailLength ? .red : .secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
+
+                    if isGenerating {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Generating image…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     if let photoError {
                         Text(photoError).font(.caption).foregroundStyle(.red)
                     }
-                    Text("Optional. A photo shows on this tile everywhere it appears.")
+                    Text("Optional. A photo or AI image shows on this tile everywhere it appears.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -271,6 +311,27 @@ struct AddWordSheet: View {
             photoError = err.errorDescription
         } catch {
             photoError = "Couldn't process that photo."
+        }
+    }
+
+    // MARK: - AI image
+
+    /// Generate a first-pass image for the word (no crop step — already square).
+    private func generateImage() async {
+        isGenerating = true
+        photoError = nil
+        defer { isGenerating = false }
+        do {
+            let image = try await TileImageGenerator.generate(
+                displayName: trimmedName, wordClass: wordClass,
+                imageSet: resolver.activeSet, detail: imageDetail, apiKey: apiKey)
+            let data = try TilePhotoProcessor.process(image)
+            processedPhoto = data
+            photoPreview = UIImage(data: data)
+        } catch let err as TilePhotoProcessor.ProcessError {
+            photoError = err.errorDescription
+        } catch {
+            photoError = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
         }
     }
 }

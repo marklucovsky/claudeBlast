@@ -12,11 +12,12 @@ import SwiftData
 
 enum SceneBuilder {
     /// Build a BlasterScene from AI output, insert it into `context`, and return it.
+    /// Proposed NEW words (tiles carrying displayName + wordClass that aren't in
+    /// `tileLookup`) are materialized as caregiver TileModels (isSystem=false)
+    /// before the pages are mapped, so they wire up like any existing tile.
     /// - Parameters:
     ///   - generated: The AI-generated scene structure.
-    ///   - tileLookup: Dictionary mapping tile key → TileModel. Used only to
-    ///     validate that every generated key exists in vocabulary; the resulting
-    ///     PageSpec.tiles store keys directly (no PageTileModel/TileModel refs).
+    ///   - tileLookup: Existing tile key → TileModel.
     ///   - context: The ModelContext to insert into.
     @discardableResult
     static func build(
@@ -32,16 +33,30 @@ enum SceneBuilder {
             isActive: false
         )
 
-        let pages: [PageSpec] = generated.pages.map { genPage in
-            let tiles = genPage.tiles.compactMap { genTile -> TileEntry? in
-                guard tileLookup[genTile.key] != nil else { return nil }
-                return TileEntry(key: genTile.key, link: genTile.link, isAudible: genTile.isAudible)
-            }
-            return PageSpec(key: genPage.key, tiles: tiles)
-        }
-        scene.pages = pages
-
         try context.transaction {
+            var lookup = tileLookup
+
+            // Materialize any proposed-new words first (dedupe by key).
+            for genPage in generated.pages {
+                for genTile in genPage.tiles where genTile.isProposedNew {
+                    guard lookup[genTile.key] == nil,
+                          let displayName = genTile.displayName,
+                          let wordClass = genTile.wordClass else { continue }
+                    let tile = TileModel(key: genTile.key, value: displayName, wordClass: wordClass)
+                    tile.isSystem = false
+                    context.insert(tile)
+                    lookup[genTile.key] = tile
+                }
+            }
+
+            scene.pages = generated.pages.map { genPage in
+                let tiles = genPage.tiles.compactMap { genTile -> TileEntry? in
+                    guard lookup[genTile.key] != nil else { return nil }
+                    return TileEntry(key: genTile.key, link: genTile.link, isAudible: genTile.isAudible)
+                }
+                return PageSpec(key: genPage.key, tiles: tiles)
+            }
+
             context.insert(scene)
         }
 

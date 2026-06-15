@@ -32,6 +32,10 @@ struct TilePhotoSection: View {
     @State private var pickerItem: PhotosPickerItem?
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var isGenerating = false
+    @State private var imageDetail = ""
+
+    private var apiKey: String { OpenAIKeyVault.currentKey() ?? "" }
 
     var body: some View {
         Section("Photo") {
@@ -47,9 +51,42 @@ struct TilePhotoSection: View {
                 Label(tile.userImageData == nil ? "Add Photo" : "Replace Photo",
                       systemImage: "photo.badge.plus")
             }
-            .disabled(isLoading)
+            .disabled(isLoading || isGenerating)
 
-            if isLoading { ProgressView() }
+            if !apiKey.isEmpty {
+                Button {
+                    Task { await generateImage() }
+                } label: {
+                    Label(tile.userImageData == nil ? "Generate with AI" : "Regenerate with AI",
+                          systemImage: "wand.and.stars")
+                }
+                .disabled(isLoading || isGenerating)
+
+                TextField("Add a detail to refine (optional)", text: $imageDetail, axis: .vertical)
+                    .font(.caption)
+                    .lineLimit(1...2)
+                    .disabled(isLoading || isGenerating)
+                    .onChange(of: imageDetail) { _, value in
+                        if value.count > TileImageGenerator.maxDetailLength {
+                            imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
+                        }
+                    }
+                if imageDetail.count >= TileImageGenerator.detailCounterThreshold {
+                    Text("\(imageDetail.count)/\(TileImageGenerator.maxDetailLength)")
+                        .font(.caption2)
+                        .foregroundStyle(imageDetail.count >= TileImageGenerator.maxDetailLength ? .red : .secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+
+            if isLoading || isGenerating {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    if isGenerating {
+                        Text("Generating image…").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
@@ -82,6 +119,23 @@ struct TilePhotoSection: View {
             onPick(image)
         } catch {
             errorMessage = "Couldn't read that photo."
+        }
+    }
+
+    /// Generate a first-pass image for this tile and store it directly — the
+    /// result is already a centered square, so no crop step.
+    private func generateImage() async {
+        isGenerating = true
+        errorMessage = nil
+        defer { isGenerating = false }
+        do {
+            let image = try await TileImageGenerator.generate(
+                displayName: tile.displayName, wordClass: tile.wordClass,
+                imageSet: resolver.activeSet, detail: imageDetail, apiKey: apiKey)
+            errorMessage = TilePhotoCommit.apply(
+                image, to: tile, context: modelContext, resolver: resolver)
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
         }
     }
 

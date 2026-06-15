@@ -105,7 +105,9 @@ struct SceneEditorView: View {
     }
 
     private func exportScene() {
-        let defaultKeys = Set(allTiles.filter { imageResolver.hasImage(for: $0.bundleImage) }.map(\.key))
+        // Bundled (system) keys aren't packaged; caregiver words are. Provenance-
+        // based so it's independent of the active image set.
+        let defaultKeys = Set(allTiles.filter(\.isSystem).map(\.key))
         let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
         guard let data = try? SceneExporter.exportJSON(scene,
                                                        defaultTileKeys: defaultKeys,
@@ -269,7 +271,21 @@ private struct PageGeneratorSheet: View {
     private func buildAndAccept(_ result: GeneratedPageResult, editMode: Bool) {
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
-        let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        var lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+
+        // Materialize proposed-new words (both paths) so they're real tiles —
+        // wired onto the page (accept) or pre-selectable in the picker (edit).
+        for genPage in [result.primaryPage] + result.subPages {
+            for gen in genPage.tiles where gen.isProposedNew {
+                guard lookup[gen.key] == nil,
+                      let displayName = gen.displayName,
+                      let wordClass = gen.wordClass else { continue }
+                let tile = TileModel(key: gen.key, value: displayName, wordClass: wordClass)
+                tile.isSystem = false
+                modelContext.insert(tile)
+                lookup[gen.key] = tile
+            }
+        }
 
         if editMode {
             // Edit path: create empty page, pass pre-selected keys to caller.
@@ -279,13 +295,13 @@ private struct PageGeneratorSheet: View {
             // to the scene's inline pages array.
             var pages = scene.pages
             let primaryTiles: [TileEntry] = result.primaryPage.tiles.compactMap { gen in
-                guard tileLookup[gen.key] != nil else { return nil }
+                guard lookup[gen.key] != nil else { return nil }
                 return TileEntry(key: gen.key, link: gen.link, isAudible: gen.isAudible)
             }
             pages.append(PageSpec(key: key, tiles: primaryTiles))
             for genSub in result.subPages {
                 let subTiles: [TileEntry] = genSub.tiles.compactMap { gen in
-                    guard tileLookup[gen.key] != nil else { return nil }
+                    guard lookup[gen.key] != nil else { return nil }
                     return TileEntry(key: gen.key, link: gen.link, isAudible: gen.isAudible)
                 }
                 pages.append(PageSpec(key: genSub.key, tiles: subTiles))
@@ -294,6 +310,7 @@ private struct PageGeneratorSheet: View {
             if scene.homePageKey.isEmpty { scene.homePageKey = key }
             onCreate(key, [])
         }
+        try? modelContext.save()
         dismiss()
     }
 
@@ -386,7 +403,11 @@ private struct PagePreviewView: View {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(currentTiles, id: \.key) { genTile in
                         if let tile = tileLookup[genTile.key] {
-                            GeneratedTileCell(tile: tile, link: genTile.link)
+                            GeneratedTileCell(key: tile.bundleImage, displayName: tile.displayName,
+                                              wordClass: tile.wordClass, link: genTile.link)
+                        } else if let name = genTile.displayName, let wc = genTile.wordClass {
+                            GeneratedTileCell(key: genTile.key, displayName: name,
+                                              wordClass: wc, link: genTile.link, isNew: true)
                         }
                     }
                 }
@@ -415,21 +436,35 @@ private struct PagePreviewView: View {
 
 // Lightweight tile cell for AI preview grids (no SwiftData dependency).
 private struct GeneratedTileCell: View {
-    let tile: TileModel
+    let key: String
+    let displayName: String
+    let wordClass: String
     let link: String
+    var isNew: Bool = false
 
     private var isNav: Bool { !link.isEmpty }
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
+                TileImageView(key: key, wordClass: wordClass)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(isNav ? Color.blue.opacity(0.6) : Color.clear, lineWidth: 2)
                 )
+                .overlay(alignment: .topLeading) {
+                    if isNew {
+                        Text("NEW")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(.purple))
+                            .padding(3)
+                    }
+                }
                 .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
 
                 if isNav {
@@ -440,7 +475,7 @@ private struct GeneratedTileCell: View {
                 }
             }
 
-            Text(tile.displayName)
+            Text(displayName)
                 .font(.system(size: 9, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
