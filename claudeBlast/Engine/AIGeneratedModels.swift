@@ -28,6 +28,29 @@ struct GeneratedTile: Codable {
     var isProposedNew: Bool { displayName != nil && wordClass != nil }
 }
 
+extension GeneratedTile {
+    private enum CodingKeys: String, CodingKey { case key, isAudible, link, displayName, wordClass }
+
+    /// Decode tolerantly: the model usually emits tile objects, but occasionally
+    /// emits a bare key string (e.g. "fish"). Accept both so one stray string
+    /// doesn't fail the whole scene. (Custom init lives in an extension so the
+    /// memberwise initializer is preserved for call sites that build tiles.)
+    init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(), let key = try? single.decode(String.self) {
+            self.init(key: key, isAudible: true, link: "")
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            key: try c.decode(String.self, forKey: .key),
+            isAudible: (try? c.decode(Bool.self, forKey: .isAudible)) ?? true,
+            link: (try? c.decode(String.self, forKey: .link)) ?? "",
+            displayName: try? c.decodeIfPresent(String.self, forKey: .displayName),
+            wordClass: try? c.decodeIfPresent(String.self, forKey: .wordClass)
+        )
+    }
+}
+
 /// A new vocabulary word the AI declares ONCE in the response's `newWords`
 /// array (rather than inlining metadata per tile — gpt-4o-mini does that
 /// unreliably). Page tiles reference it by `key`.
@@ -38,13 +61,18 @@ struct GeneratedNewWord: Codable {
 }
 
 extension GeneratedNewWord {
-    /// Build a normalized-key → new word map, dropping entries whose word class
-    /// isn't a known VocabularyClass. The map key is normalized so page tiles
-    /// resolve regardless of the model's casing/spacing.
+    /// Build a normalized-key → new word map. The map key is normalized so page
+    /// tiles resolve regardless of the model's casing/spacing.
+    ///
+    /// We keep words whose wordClass isn't a known VocabularyClass rather than
+    /// dropping them: the model occasionally reaches for a sensible-but-untaxon­
+    /// omized class (e.g. "plant" for seaweed, "tools" for a bucket), and a tile
+    /// with a neutral tint plus a good image-gen sense hint beats a silently
+    /// missing word. Only entries with an empty key or class are skipped.
     static func lookup(from words: [GeneratedNewWord]?) -> [String: GeneratedNewWord] {
         var map: [String: GeneratedNewWord] = [:]
         for word in words ?? [] {
-            guard VocabularyClasses.known(word.wordClass) != nil else { continue }
+            guard !word.wordClass.isEmpty else { continue }
             let source = word.displayName.isEmpty ? word.key : word.displayName
             let key = TileModel.normalizeKey(source)
             guard !key.isEmpty else { continue }
@@ -99,6 +127,65 @@ struct GeneratedScene: Codable {
     /// sanitized scene returned to callers — by then the metadata lives on the
     /// individual tiles.
     var newWords: [GeneratedNewWord]? = nil
+}
+
+extension GeneratedScene {
+    /// Decode a model's JSON content into a sanitized, scaffolded scene. Shared
+    /// by SceneGeneratorService and SceneRefinerService: strips surrounding prose,
+    /// drops hallucinated tile keys, admits declared new words, then hands off to
+    /// SceneNavigation.scaffold to build the familiar core board around the
+    /// topical tiles. Throws OpenAIError.decodingError on unusable output.
+    ///
+    /// `extraNewWords` carries new words that already exist on the scene being
+    /// refined but aren't in base vocabulary yet (an un-accepted preview's
+    /// proposed words). Merging them keeps those tiles from being dropped when
+    /// the model references them by key without re-declaring them.
+    static func parse(content: String, allTiles: [TileModel],
+                      extraNewWords: [GeneratedNewWord] = [],
+                      profile: SceneNavigation.Profile = .full) throws -> GeneratedScene {
+        let validKeys = Set(allTiles.map(\.key))
+
+        let jsonText: String
+        if let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}") {
+            jsonText = String(content[start...end])
+        } else {
+            jsonText = content
+        }
+        guard let jsonData = jsonText.data(using: .utf8) else {
+            throw OpenAIError.decodingError("Response JSON was not valid UTF-8")
+        }
+
+        let raw = try JSONDecoder().decode(GeneratedScene.self, from: jsonData)
+        var newWords = GeneratedNewWord.lookup(from: raw.newWords)
+        // Carried-over words the model may reference without re-declaring; the
+        // model's own declarations win on key collision.
+        for (key, word) in GeneratedNewWord.lookup(from: extraNewWords) where newWords[key] == nil {
+            newWords[key] = word
+        }
+
+        let sanitizedPages = raw.pages.map { page in
+            let validTiles = page.tiles.compactMap { tile in
+                GeneratedTile.sanitize(tile, validKeys: validKeys, newWords: newWords)
+            }
+            return GeneratedPage(key: page.key, tiles: validTiles)
+        }.filter { !$0.tiles.isEmpty }
+
+        guard !sanitizedPages.isEmpty else {
+            throw OpenAIError.decodingError("No valid tiles found in generated scene")
+        }
+
+        let homeKey = sanitizedPages.contains(where: { $0.key == raw.homePageKey })
+            ? raw.homePageKey
+            : sanitizedPages[0].key
+
+        let scene = GeneratedScene(
+            name: raw.name,
+            description: raw.description,
+            homePageKey: homeKey,
+            pages: sanitizedPages
+        )
+        return SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys, profile: profile)
+    }
 }
 
 /// Raw AI response for a page (includes optional sub-pages via `newPages`).

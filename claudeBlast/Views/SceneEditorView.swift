@@ -14,11 +14,30 @@ struct SceneEditorView: View {
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.modelContext) private var modelContext
     @Environment(TileImageResolver.self) private var imageResolver
+    @Environment(SceneArtCoordinator.self) private var sceneArtCoordinator
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Per-scene art controller from the app-level coordinator, so a background
+    /// run survives this editor being dismissed and re-entered.
+    private var artController: SceneImageBatchController {
+        sceneArtCoordinator.controller(for: scene.id)
+    }
     private var resolvedAPIKey: String {
         OpenAIKeyVault.currentKey() ?? ""
     }
 
     @State private var isAddingPage = false
+    @State private var isRefining = false
+    @State private var isGeneratingArt = false
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    /// Caregiver words this scene introduced that still have no art.
+    private var tilesNeedingArt: [TileModel] {
+        SceneImageBatch.tilesNeedingArt(in: scene, tileLookup: tileLookup)
+    }
     /// Identifier of a freshly-created page to navigate into. Stored as the
     /// page key string now that pages are inline structs rather than
     /// SwiftData entities.
@@ -28,6 +47,49 @@ struct SceneEditorView: View {
 
     var body: some View {
         List {
+            if artController.isActive {
+                Section {
+                    Button {
+                        isGeneratingArt = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            if artController.phase == .paused {
+                                Image(systemName: "pause.circle.fill").foregroundStyle(.orange)
+                            } else {
+                                ProgressView()
+                            }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(artController.phase == .paused ? "Art paused" : "Creating new-word art…")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("\(artController.completed) of \(artController.total) done · tap to manage")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("In progress")
+                } footer: {
+                    Text(artController.phase == .paused
+                         ? "Paused. Tap to resume, continue in the background, or cancel."
+                         : "Running in the background. Tap to view progress, pause, or cancel.")
+                }
+            } else if !tilesNeedingArt.isEmpty {
+                Section {
+                    Button {
+                        artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
+                                            context: modelContext, resolver: imageResolver)
+                        isGeneratingArt = true
+                    } label: {
+                        Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
+                              systemImage: "sparkles")
+                    }
+                    .disabled(resolvedAPIKey.isEmpty)
+                } footer: {
+                    Text("These words were added by AI and don't have pictures yet.")
+                }
+            }
+
             Section("Scene Info") {
                 LabeledContent("Name") {
                     TextField("Scene name", text: $scene.name)
@@ -44,6 +106,17 @@ struct SceneEditorView: View {
                         }
                     }
                 }
+            }
+
+            Section {
+                Toggle(isOn: Binding(get: { scene.isFocused }, set: { setProfile(focused: $0) })) {
+                    Text("Focused board")
+                }
+                .disabled(scene.isDefault)
+            } header: {
+                Text("Board")
+            } footer: {
+                Text("Focused trims the board for 1:1 sessions: the topical tiles plus a short needs strip (hungry/thirsty, help, feelings) and the body & health page. Off uses the full familiar board (people, food, drinks, body & health).")
             }
 
             Section("Pages (\(scene.pages.count))") {
@@ -84,6 +157,14 @@ struct SceneEditorView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    isRefining = true
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .accessibilityLabel("Refine with AI")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     exportScene()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
@@ -92,6 +173,24 @@ struct SceneEditorView: View {
         }
         .sheet(item: $sceneToExport) { file in
             ActivityView(items: [file.temporaryFileURL()])
+        }
+        .sheet(isPresented: $isRefining) {
+            SceneRefinementSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey)
+        }
+        .sheet(isPresented: $isGeneratingArt) {
+            SceneImageBatchSheet(controller: artController)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active: artController.appBecameActive()
+            case .background: artController.appMovedToBackground()
+            default: break
+            }
+        }
+        .onChange(of: isGeneratingArt) { _, shown in
+            // Clear a finished run once its summary is dismissed so the banner
+            // returns to its idle state.
+            if !shown, artController.phase == .finished { artController.reset() }
         }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
@@ -128,6 +227,35 @@ struct SceneEditorView: View {
             scene.homePageKey = scene.pages.first?.key ?? ""
         }
         try? modelContext.save()
+    }
+
+    /// Re-scaffold the scene at the chosen board profile. Pure local transform:
+    /// the topical layer is preserved and the core board is rebuilt full or lean.
+    private func setProfile(focused: Bool) {
+        let lookup = tileLookup
+        let topical = SceneNavigation.topicalKeys(of: scene).map { key -> GeneratedTile in
+            let tile = lookup[key]
+            let isCaregiverWord = (tile?.isSystem == false)
+            return GeneratedTile(key: key, isAudible: true, link: "",
+                                 displayName: tile?.value,
+                                 wordClass: isCaregiverWord ? tile?.wordClass : nil)
+        }
+        let base = GeneratedScene(
+            name: scene.name,
+            description: scene.descriptionText,
+            homePageKey: scene.homePageKey,
+            pages: [GeneratedPage(key: scene.homePageKey, tiles: topical)]
+        )
+        let scaffolded = SceneNavigation.scaffold(base, allTiles: allTiles,
+                                                  validKeys: Set(allTiles.map(\.key)),
+                                                  profile: focused ? .focused : .full)
+        do {
+            try SceneBuilder.update(scene, from: scaffolded, tileLookup: lookup, context: modelContext)
+            scene.isFocused = focused
+            try? modelContext.save()
+        } catch {
+            // Leave the scene unchanged on failure.
+        }
     }
 }
 
@@ -257,9 +385,12 @@ private struct PageGeneratorSheet: View {
         generationError = nil
         let service = PageGeneratorService(apiKey: apiKey)
         let tiles = allTiles
+        let pages = scene.pages
+        let homeKey = scene.homePageKey
         Task {
             do {
-                let result = try await service.generate(pageGoal: goal, pageName: name, allTiles: tiles)
+                let result = try await service.generate(pageGoal: goal, pageName: name, allTiles: tiles,
+                                                        scenePages: pages, homePageKey: homeKey)
                 await MainActor.run { preview = result }
             } catch {
                 await MainActor.run { generationError = error.localizedDescription }
@@ -479,6 +610,125 @@ private struct GeneratedTileCell: View {
                 .font(.system(size: 9, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Scene Refinement Sheet
+
+/// Iteratively refine the active scene with a natural-language instruction
+/// ("add a fish pond and a creek"). Refinement rewrites the scene's topical
+/// layer and re-scaffolds the familiar core board around it (see
+/// SceneRefinerService / SceneNavigation). The change is previewed before it is
+/// applied in place.
+private struct SceneRefinementSheet: View {
+    let scene: BlasterScene
+    let allTiles: [TileModel]
+    let apiKey: String
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var instruction = ""
+    @State private var isRefining = false
+    @State private var errorMessage: String? = nil
+    @State private var preview: GeneratedScene? = nil
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    private var profile: SceneNavigation.Profile { scene.isFocused ? .focused : .full }
+
+    var body: some View {
+        NavigationStack {
+            if let preview {
+                ScenePreviewView(
+                    preview: preview,
+                    allTiles: allTiles,
+                    apiKey: apiKey,
+                    profile: profile,
+                    onAccept: { scene in apply(scene) },
+                    onCancel: { dismiss() }
+                )
+            } else {
+                form
+            }
+        }
+    }
+
+    private var form: some View {
+        Form {
+            Section {
+                TextField("Describe the change…", text: $instruction, axis: .vertical)
+                    .lineLimit(3...6)
+            } header: {
+                Text("Refine \(scene.name.isEmpty ? "Scene" : scene.name)")
+            } footer: {
+                Text("e.g. \u{201C}add a fish pond and a creek\u{201D} — the activity tiles update; the familiar core board stays the same.")
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).font(.caption).foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button {
+                    runRefine()
+                } label: {
+                    HStack {
+                        if isRefining { ProgressView().padding(.trailing, 4) }
+                        Text(isRefining ? "Refining\u{2026}" : "Refine")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty || apiKey.isEmpty || isRefining)
+            }
+        }
+        .navigationTitle("Refine Scene")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
+    }
+
+    private func runRefine() {
+        let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !apiKey.isEmpty else { return }
+        isRefining = true
+        errorMessage = nil
+        let service = SceneRefinerService(apiKey: apiKey)
+        let lookup = tileLookup
+        let topical = SceneNavigation.topicalKeys(of: scene).map { key -> GeneratedTile in
+            let tile = lookup[key]
+            let isCaregiverWord = (tile?.isSystem == false)
+            return GeneratedTile(key: key, isAudible: true, link: "",
+                                 displayName: tile?.value,
+                                 wordClass: isCaregiverWord ? tile?.wordClass : nil)
+        }
+        let tiles = allTiles
+        Task {
+            do {
+                let result = try await service.refine(instruction: text, currentTopical: topical, allTiles: tiles, profile: profile)
+                await MainActor.run { preview = result }
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+            }
+            await MainActor.run { isRefining = false }
+        }
+    }
+
+    private func apply(_ generated: GeneratedScene) {
+        do {
+            try SceneBuilder.update(scene, from: generated, tileLookup: tileLookup, context: modelContext)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            preview = nil
         }
     }
 }

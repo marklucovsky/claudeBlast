@@ -62,4 +62,41 @@ enum SceneBuilder {
 
         return scene
     }
+
+    /// Apply a (re-scaffolded) GeneratedScene to an EXISTING scene in place —
+    /// used by iterative refinement. Materializes any new topical words, then
+    /// replaces the scene's pages and home key. The scene's identity, name,
+    /// description, and active/default flags are preserved (refinement changes
+    /// content, not the scene record).
+    static func update(
+        _ scene: BlasterScene,
+        from generated: GeneratedScene,
+        tileLookup: [String: TileModel],
+        context: ModelContext
+    ) throws {
+        try context.transaction {
+            var lookup = tileLookup
+
+            for genPage in generated.pages {
+                for genTile in genPage.tiles where genTile.isProposedNew {
+                    guard lookup[genTile.key] == nil,
+                          let displayName = genTile.displayName,
+                          let wordClass = genTile.wordClass else { continue }
+                    let tile = TileModel(key: genTile.key, value: displayName, wordClass: wordClass)
+                    tile.isSystem = false
+                    context.insert(tile)
+                    lookup[genTile.key] = tile
+                }
+            }
+
+            scene.pages = generated.pages.map { genPage in
+                let tiles = genPage.tiles.compactMap { genTile -> TileEntry? in
+                    guard lookup[genTile.key] != nil else { return nil }
+                    return TileEntry(key: genTile.key, link: genTile.link, isAudible: genTile.isAudible)
+                }
+                return PageSpec(key: genPage.key, tiles: tiles)
+            }
+            scene.homePageKey = generated.homePageKey
+        }
+    }
 }

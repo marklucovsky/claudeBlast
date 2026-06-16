@@ -36,25 +36,32 @@ struct SentencePromptBuilder {
     var repetitionCount: Int = 0
     var conversationContext: [String] = []
 
+    /// Reinforces the word-class annotation rule near the end of the system
+    /// turn. A small model otherwise lets its prior for a word override a
+    /// surprising category (e.g. "pony (food)" comes out as a pet, not food).
+    /// Kept as a system-prompt enhancement rather than appended to the user
+    /// prompt so the user turn stays pure tile content.
+    static let categoryHonorRule =
+        "The category in parentheses after a word is that word's intended meaning — honor it even when unusual."
+
     func buildSystemPrompt() -> [PromptMessage] {
         let grade = gradeDescription(ageGradeLevel)
         var systemPrompt: [PromptMessage] = Self.loadBaseMessages(grade: grade)
             .map { PromptMessage(role: .system, content: $0) }
+        systemPrompt.append(PromptMessage(role: .system, content: Self.categoryHonorRule))
         if repetitionCount > 0 {
             systemPrompt.append(PromptMessage(role: .system, content: escalationPrompt(repetitionCount)))
         }
 
         return systemPrompt
     }
-    
+
+    /// The user turn: just the selected tiles as `word (class)`, comma-joined.
+    /// Enhancements (the category-honor rule, escalation) live in the system
+    /// prompt — see `buildSystemPrompt`.
     func formatUserPrompt(tiles: [TileSelection]) -> String {
-        let tileDescriptions = tiles.map { "\($0.value) (\($0.wordClass))" }
+        tiles.map { "\($0.value) (\($0.wordClass))" }
             .joined(separator: ", ")
-        // Restate the rule in the user turn (highest recency) — a small model
-        // otherwise lets its prior for a word override a surprising category,
-        // e.g. "pony (food)" coming out as a pet instead of something to eat.
-        return tileDescriptions
-            + "\n\n(The category in parentheses is each word's intended meaning — honor it even when unusual.)"
     }
 
     private func gradeDescription(_ grade: Int) -> String {

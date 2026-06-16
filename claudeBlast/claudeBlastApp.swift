@@ -20,6 +20,7 @@ struct claudeBlastApp: App {
     @State private var scriptRecorder = TileScriptRecorder()
     @State private var imageResolver = TileImageResolver()
     @State private var profileResolver = ChildProfileResolver()
+    @State private var sceneArtCoordinator = SceneArtCoordinator()
 
     init() {
         // Register fallback defaults for any keys the engine reads via
@@ -133,6 +134,7 @@ struct claudeBlastApp: App {
                 .environment(scriptRecorder)
                 .environment(imageResolver)
                 .environment(profileResolver)
+                .environment(sceneArtCoordinator)
                 .onAppear {
                     profileResolver.configure(modelContext: modelContainer.mainContext)
                     imageResolver.configure(modelContext: modelContainer.mainContext)

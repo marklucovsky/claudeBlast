@@ -33,6 +33,7 @@ extension View {
             .environment(TileScriptRunner())
             .environment(TileScriptRecorder())
             .environment(ImportCoordinator())
+            .environment(SceneArtCoordinator())
             .modelContainer(previewContainer)
     }
 }

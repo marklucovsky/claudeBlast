@@ -16,13 +16,12 @@ struct SceneGeneratorService {
     // MARK: - Prompt configuration
     // These constants are intentionally separate so prompt engineering is easy.
 
-    /// Target tile count below which we prefer a single page (no nav overhead).
-    private let singlePageTileThreshold = 50
-
     /// Model and sampling settings.
     private let model = "gpt-4o-mini"
-    private let temperature = 0.4
-    private let maxTokens = 2000
+    private let temperature = 0.5
+    /// Rich world-inference scenes run 40–50 tiles across several pages; 2000
+    /// truncated the JSON.
+    private let maxTokens = 3000
 
     // MARK: - Public API
 
@@ -60,7 +59,7 @@ struct SceneGeneratorService {
             throw OpenAIError.httpError(statusCode: http.statusCode, body: body)
         }
 
-        return try parseScene(data: data, validKeys: Set(allTiles.map(\.key)))
+        return try parseScene(data: data, allTiles: allTiles)
     }
 
     // MARK: - Prompt builders
@@ -68,31 +67,57 @@ struct SceneGeneratorService {
 
     private func buildSystemPrompt(tileCount: Int) -> String {
         """
-        You are a specialist in AAC (Augmentative and Alternative Communication) for non-verbal children. \
-        Given a therapist's session description and vocabulary, design a focused scene.
+        You are an expert AAC (Augmentative and Alternative Communication) specialist adding today's \
+        ACTIVITY VOCABULARY to a child's communication board. The app already supplies the child's \
+        familiar core board — pronouns (i, you, he, she, we, they), family, hungry/thirsty, eat→food, \
+        drink→drinks, help, bathroom, feelings, yes/no/more/want, and the full people, food, drinks, \
+        and body & health pages. Your ONLY job is to infer the topical world of the activity that sits \
+        on top of that board.
 
-        Navigation guidance:
-        - If the total number of relevant tiles is roughly \(singlePageTileThreshold) or fewer, use a SINGLE \
-          page. Smart word-class clustering is better than forced navigation for small sessions.
-        - Only add multiple pages when the vocabulary genuinely spans separate contexts \
-          (e.g. "emotions" vs "food needs" vs "school activities").
-        - Navigation tiles must have isAudible=false and a non-empty link matching another page key.
+        1. WORLD INFERENCE — From the setting, brainstorm roughly 20–30 common, concrete things a child \
+        would actually SEE or DO there: animals, structures, vehicles, tools, plants, scene-specific \
+        foods, places, and people-roles. Include the items the therapist named AND the obvious ones \
+        they did NOT name. (A farm implies barn, tractor, hay, fence, duck, goat, farmer, egg, etc. A \
+        zoo implies lion, giraffe, cage, zookeeper, etc.) Do not omit or summarize named items.
+
+        IMPORTANT — also include the vocabulary at the HEART of the activity even when it is a color, \
+        shape, or describing word, and pull the FULL relevant set, not just a couple. A session about \
+        colors must include the actual color words (red, orange, yellow, green, blue, purple, pink, \
+        black, white, brown, …); a session about shapes must include the shapes; a session about \
+        feelings the feeling words. This subject vocabulary is the point of the scene — never leave it \
+        out in favor of only the tools or props around it.
+
+        2. STAY TOPICAL — Do NOT include the generic core board the app already provides: no pronouns, \
+        no family/people words, no feelings, no generic foods or drinks, no needs (help, eat, drink, \
+        bathroom), and no social words (yes, no, more, please). Only include a food/drink if it is \
+        specific to THIS activity (e.g. hay or an egg on a farm). Focus on what makes this scene unique.
+
+        3. KEEP IT FLAT — Put every topical tile on a SINGLE page. Do NOT split into multiple pages, and \
+        do NOT add any navigation, "home", "back", or "next page" tiles. The app lays out the page across \
+        swipeable screens and adds the core cluster and category links itself. Return exactly one page.
+
+        4. PEOPLE & ROLES — Any people you DO include are activity roles (farmer, fisherman, zookeeper). \
+        To the child, adult helpers are simply "teacher" or a named caregiver (e.g. "Miss Cindy") — never \
+        clinical terms like "therapist" or "aide". Never create a tile for the child/patient themselves, \
+        and never invent generic people words ("child", "kid", "student").
 
         Tile rules:
-        - Prefer existing tile keys from the provided vocabulary; reuse an existing word \
-          rather than proposing a new one whenever a suitable match already exists.
-        - When the description NAMES specific concrete things (animals, foods, places, objects), \
-          include EVERY one named — reuse an existing key if present, otherwise declare it as a \
-          new word. Do not omit or summarize named items.
-        - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, \
-          object, food, place, or person). NEVER make abstract concepts, feelings, or actions \
-          into new words.
+        - Prefer existing tile keys from the provided vocabulary. Before proposing a NEW word, search \
+          the vocabulary for an existing word with the same or a near-identical meaning and use that \
+          instead (e.g. use "teacher", not "therapist"). Only introduce a new word when nothing \
+          existing fits.
+        - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, object, \
+          food, place, or person). NEVER make abstract concepts, feelings, or actions into new words \
+          — those must come from existing vocabulary.
+        - Choose the wordClass by what the thing IS: "places" is ONLY a location or destination the \
+          child goes to (station, park, barn, store) — NEVER a portable object. For a physical object, \
+          tool, vehicle, instrument, or piece of equipment (handcuffs, badge, hose, ladder, tractor), \
+          use "object". Animals use "animal"; foods use food/fruit/veggie/snacks; people/roles use "people".
         - Declare every new word ONCE in the top-level "newWords" array with its "displayName" \
           and "wordClass" (one of: \(VocabularyClasses.caregiverSelectable.map(\.name).joined(separator: ", "))), \
           then reference it by the same "key" in page tiles. Every page-tile key MUST be either \
           an existing vocabulary key or a key declared in "newWords".
         - Prefer audible tiles (isAudible=true) for communicative vocabulary.
-        - Limit each page to 12–30 tiles so the grid is not overwhelming.
 
         Return ONLY valid JSON matching this schema exactly — no markdown, no prose:
         {
@@ -129,6 +154,10 @@ struct SceneGeneratorService {
     private func buildVocabBlock(allTiles: [TileModel]) -> String {
         var byClass: [String: [String]] = [:]
         for tile in allTiles {
+            // Hide structural navigation tiles (next_page, previous_page, home, …)
+            // so the model can't repurpose them as ad-hoc page switchers; scene
+            // navigation is generated deterministically (see SceneNavigation).
+            guard tile.wordClass != "navigation" else { continue }
             byClass[tile.wordClass, default: []].append(tile.key)
         }
         return byClass.keys.sorted().map { wc in
@@ -138,52 +167,14 @@ struct SceneGeneratorService {
 
     // MARK: - Response parsing
 
-    private func parseScene(data: Data, validKeys: Set<String>) throws -> GeneratedScene {
+    private func parseScene(data: Data, allTiles: [TileModel]) throws -> GeneratedScene {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let message = choices.first?["message"] as? [String: Any],
               let content = message["content"] as? String else {
             throw OpenAIError.decodingError("Could not parse chat response")
         }
-
-        // Strip any surrounding prose; extract the JSON object
-        let jsonText: String
-        if let start = content.firstIndex(of: "{"),
-           let end = content.lastIndex(of: "}") {
-            jsonText = String(content[start...end])
-        } else {
-            jsonText = content
-        }
-
-        guard let jsonData = jsonText.data(using: .utf8) else {
-            throw OpenAIError.decodingError("Response JSON was not valid UTF-8")
-        }
-
-        let raw = try JSONDecoder().decode(GeneratedScene.self, from: jsonData)
-        let newWords = GeneratedNewWord.lookup(from: raw.newWords)
-
-        // Keep existing-vocab tiles; admit tiles whose key was declared in
-        // newWords (carrying displayName + wordClass); drop hallucinated keys.
-        let sanitizedPages = raw.pages.map { page in
-            let validTiles = page.tiles.compactMap { tile in
-                GeneratedTile.sanitize(tile, validKeys: validKeys, newWords: newWords)
-            }
-            return GeneratedPage(key: page.key, tiles: validTiles)
-        }.filter { !$0.tiles.isEmpty }
-
-        guard !sanitizedPages.isEmpty else {
-            throw OpenAIError.decodingError("No valid tiles found in generated scene")
-        }
-
-        let homeKey = sanitizedPages.contains(where: { $0.key == raw.homePageKey })
-            ? raw.homePageKey
-            : sanitizedPages[0].key
-
-        return GeneratedScene(
-            name: raw.name,
-            description: raw.description,
-            homePageKey: homeKey,
-            pages: sanitizedPages
-        )
+        // Sanitize + scaffold is shared with SceneRefinerService.
+        return try GeneratedScene.parse(content: content, allTiles: allTiles)
     }
 }
