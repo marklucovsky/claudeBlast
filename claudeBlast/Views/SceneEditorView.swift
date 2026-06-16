@@ -14,12 +14,30 @@ struct SceneEditorView: View {
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.modelContext) private var modelContext
     @Environment(TileImageResolver.self) private var imageResolver
+    @Environment(SceneArtCoordinator.self) private var sceneArtCoordinator
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Per-scene art controller from the app-level coordinator, so a background
+    /// run survives this editor being dismissed and re-entered.
+    private var artController: SceneImageBatchController {
+        sceneArtCoordinator.controller(for: scene.id)
+    }
     private var resolvedAPIKey: String {
         OpenAIKeyVault.currentKey() ?? ""
     }
 
     @State private var isAddingPage = false
     @State private var isRefining = false
+    @State private var isGeneratingArt = false
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    /// Caregiver words this scene introduced that still have no art.
+    private var tilesNeedingArt: [TileModel] {
+        SceneImageBatch.tilesNeedingArt(in: scene, tileLookup: tileLookup)
+    }
     /// Identifier of a freshly-created page to navigate into. Stored as the
     /// page key string now that pages are inline structs rather than
     /// SwiftData entities.
@@ -29,6 +47,49 @@ struct SceneEditorView: View {
 
     var body: some View {
         List {
+            if artController.isActive {
+                Section {
+                    Button {
+                        isGeneratingArt = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            if artController.phase == .paused {
+                                Image(systemName: "pause.circle.fill").foregroundStyle(.orange)
+                            } else {
+                                ProgressView()
+                            }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(artController.phase == .paused ? "Art paused" : "Creating new-word art…")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("\(artController.completed) of \(artController.total) done · tap to manage")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("In progress")
+                } footer: {
+                    Text(artController.phase == .paused
+                         ? "Paused. Tap to resume, continue in the background, or cancel."
+                         : "Running in the background. Tap to view progress, pause, or cancel.")
+                }
+            } else if !tilesNeedingArt.isEmpty {
+                Section {
+                    Button {
+                        artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
+                                            context: modelContext, resolver: imageResolver)
+                        isGeneratingArt = true
+                    } label: {
+                        Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
+                              systemImage: "sparkles")
+                    }
+                    .disabled(resolvedAPIKey.isEmpty)
+                } footer: {
+                    Text("These words were added by AI and don't have pictures yet.")
+                }
+            }
+
             Section("Scene Info") {
                 LabeledContent("Name") {
                     TextField("Scene name", text: $scene.name)
@@ -104,6 +165,21 @@ struct SceneEditorView: View {
         }
         .sheet(isPresented: $isRefining) {
             SceneRefinementSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey)
+        }
+        .sheet(isPresented: $isGeneratingArt) {
+            SceneImageBatchSheet(controller: artController)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active: artController.appBecameActive()
+            case .background: artController.appMovedToBackground()
+            default: break
+            }
+        }
+        .onChange(of: isGeneratingArt) { _, shown in
+            // Clear a finished run once its summary is dismissed so the banner
+            // returns to its idle state.
+            if !shown, artController.phase == .finished { artController.reset() }
         }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
