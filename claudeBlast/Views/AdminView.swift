@@ -1590,6 +1590,8 @@ private struct SceneGeneratorSheet: View {
 struct ScenePreviewView: View {
     let allTiles: [TileModel]
     let apiKey: String
+    /// Board profile used when an in-place refinement re-scaffolds the scene.
+    let profile: SceneNavigation.Profile
     /// Emits the (possibly refined) scene the author accepted.
     let onAccept: (GeneratedScene) -> Void
     let onCancel: () -> Void
@@ -1605,10 +1607,12 @@ struct ScenePreviewView: View {
     init(preview: GeneratedScene,
          allTiles: [TileModel],
          apiKey: String,
+         profile: SceneNavigation.Profile = .full,
          onAccept: @escaping (GeneratedScene) -> Void,
          onCancel: @escaping () -> Void) {
         self.allTiles = allTiles
         self.apiKey = apiKey
+        self.profile = profile
         self.onAccept = onAccept
         self.onCancel = onCancel
         _working = State(initialValue: preview)
@@ -1780,7 +1784,7 @@ struct ScenePreviewView: View {
         let tiles = allTiles
         Task {
             do {
-                let result = try await service.refine(instruction: text, currentTopical: currentTopical, allTiles: tiles)
+                let result = try await service.refine(instruction: text, currentTopical: currentTopical, allTiles: tiles, profile: profile)
                 await MainActor.run {
                     working = result
                     selectedPageIndex = 0

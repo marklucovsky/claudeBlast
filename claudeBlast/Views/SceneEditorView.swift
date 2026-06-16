@@ -108,6 +108,17 @@ struct SceneEditorView: View {
                 }
             }
 
+            Section {
+                Toggle(isOn: Binding(get: { scene.isFocused }, set: { setProfile(focused: $0) })) {
+                    Text("Focused board")
+                }
+                .disabled(scene.isDefault)
+            } header: {
+                Text("Board")
+            } footer: {
+                Text("Focused trims the board for 1:1 sessions: the topical tiles plus a short needs strip (hungry/thirsty, help, feelings) and the body & health page. Off uses the full familiar board (people, food, drinks, body & health).")
+            }
+
             Section("Pages (\(scene.pages.count))") {
                 ForEach(scene.pages, id: \.key) { page in
                     NavigationLink(destination: PageEditorView(scene: scene, pageKey: page.key)) {
@@ -216,6 +227,35 @@ struct SceneEditorView: View {
             scene.homePageKey = scene.pages.first?.key ?? ""
         }
         try? modelContext.save()
+    }
+
+    /// Re-scaffold the scene at the chosen board profile. Pure local transform:
+    /// the topical layer is preserved and the core board is rebuilt full or lean.
+    private func setProfile(focused: Bool) {
+        let lookup = tileLookup
+        let topical = SceneNavigation.topicalKeys(of: scene).map { key -> GeneratedTile in
+            let tile = lookup[key]
+            let isCaregiverWord = (tile?.isSystem == false)
+            return GeneratedTile(key: key, isAudible: true, link: "",
+                                 displayName: tile?.value,
+                                 wordClass: isCaregiverWord ? tile?.wordClass : nil)
+        }
+        let base = GeneratedScene(
+            name: scene.name,
+            description: scene.descriptionText,
+            homePageKey: scene.homePageKey,
+            pages: [GeneratedPage(key: scene.homePageKey, tiles: topical)]
+        )
+        let scaffolded = SceneNavigation.scaffold(base, allTiles: allTiles,
+                                                  validKeys: Set(allTiles.map(\.key)),
+                                                  profile: focused ? .focused : .full)
+        do {
+            try SceneBuilder.update(scene, from: scaffolded, tileLookup: lookup, context: modelContext)
+            scene.isFocused = focused
+            try? modelContext.save()
+        } catch {
+            // Leave the scene unchanged on failure.
+        }
     }
 }
 
@@ -595,6 +635,8 @@ private struct SceneRefinementSheet: View {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
     }
 
+    private var profile: SceneNavigation.Profile { scene.isFocused ? .focused : .full }
+
     var body: some View {
         NavigationStack {
             if let preview {
@@ -602,6 +644,7 @@ private struct SceneRefinementSheet: View {
                     preview: preview,
                     allTiles: allTiles,
                     apiKey: apiKey,
+                    profile: profile,
                     onAccept: { scene in apply(scene) },
                     onCancel: { dismiss() }
                 )
@@ -667,7 +710,7 @@ private struct SceneRefinementSheet: View {
         let tiles = allTiles
         Task {
             do {
-                let result = try await service.refine(instruction: text, currentTopical: topical, allTiles: tiles)
+                let result = try await service.refine(instruction: text, currentTopical: topical, allTiles: tiles, profile: profile)
                 await MainActor.run { preview = result }
             } catch {
                 await MainActor.run { errorMessage = error.localizedDescription }

@@ -79,6 +79,19 @@ enum SceneNavigation {
         ("drink", "drinks"),
     ]
 
+    /// Lean cluster for the Focused board: a minimal needs strip with feelings
+    /// and a couple of pronouns. No eat/drink links — hungry/thirsty stand in for
+    /// food & drink — and only the body & health page is bundled (see scaffold).
+    private static let focusedClusterKeys: [String] = [
+        "i", "you", "want",
+        "help", "more", "hungry", "thirsty", "bathroom",
+        "happy", "sad", "tired", "hurt", "sick", "scared",
+        "yes", "no", "all_done", "look",
+    ]
+
+    /// How much of the familiar Core board to scaffold around the topical tiles.
+    enum Profile { case full, focused }
+
     /// Build the canonical scene: a topical home page (topical tiles first, then
     /// the familiar core cluster and category links) plus the bundled rich
     /// category pages. Returns the original scene unchanged only if the model
@@ -86,11 +99,19 @@ enum SceneNavigation {
     ///
     /// `allTiles` is the live vocabulary (used to fill category pages and confirm
     /// keys exist); `validKeys` is its key set.
-    static func scaffold(_ scene: GeneratedScene, allTiles: [TileModel], validKeys: Set<String>) -> GeneratedScene {
-        let categoryKeys = Set(coreCategories.map(\.pageKey))
+    static func scaffold(_ scene: GeneratedScene, allTiles: [TileModel], validKeys: Set<String>,
+                         profile: Profile = .full) -> GeneratedScene {
+        let clusterKeys = profile == .focused ? focusedClusterKeys : homeClusterKeys
+        let clusterLinks = profile == .focused ? [] : homeClusterLinks
+        let categories = profile == .focused
+            ? coreCategories.filter { $0.pageKey == "body_health" }
+            : coreCategories
+
         // Keys we supply ourselves — never carried over from the model's tiles.
+        // Reserve the full superset regardless of profile so topical extraction
+        // is stable when a scene's profile changes.
         var reserved = structuralNavKeys
-            .union(categoryKeys)
+            .union(coreCategories.map(\.pageKey))
             .union(homeClusterKeys)
             .union(homeClusterLinks.map(\.key))
 
@@ -111,16 +132,16 @@ enum SceneNavigation {
 
         // 2. Core cluster + category links for the home page.
         var homeTiles = topical
-        for key in homeClusterKeys where validKeys.contains(key) {
+        for key in clusterKeys where validKeys.contains(key) {
             homeTiles.append(GeneratedTile(key: key, isAudible: true, link: ""))
         }
-        for link in homeClusterLinks where validKeys.contains(link.key) {
+        for link in clusterLinks where validKeys.contains(link.key) {
             homeTiles.append(GeneratedTile(key: link.key, isAudible: true, link: link.to))
         }
 
-        // 3. Bundled rich category pages, and their links from the home page.
+        // 3. Bundled category pages, and their links from the home page.
         var categoryPages: [GeneratedPage] = []
-        for category in coreCategories where category.pageKey != homeKey {
+        for category in categories where category.pageKey != homeKey {
             let contentTiles = allTiles
                 .filter { category.wordClasses.contains($0.wordClass) }
                 .map { GeneratedTile(key: $0.key, isAudible: true, link: "") }

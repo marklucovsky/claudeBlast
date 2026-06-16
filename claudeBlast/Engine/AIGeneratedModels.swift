@@ -141,7 +141,8 @@ extension GeneratedScene {
     /// proposed words). Merging them keeps those tiles from being dropped when
     /// the model references them by key without re-declaring them.
     static func parse(content: String, allTiles: [TileModel],
-                      extraNewWords: [GeneratedNewWord] = []) throws -> GeneratedScene {
+                      extraNewWords: [GeneratedNewWord] = [],
+                      profile: SceneNavigation.Profile = .full) throws -> GeneratedScene {
         let validKeys = Set(allTiles.map(\.key))
 
         let jsonText: String
@@ -183,7 +184,7 @@ extension GeneratedScene {
             homePageKey: homeKey,
             pages: sanitizedPages
         )
-        return SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys)
+        return SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys, profile: profile)
     }
 }
 

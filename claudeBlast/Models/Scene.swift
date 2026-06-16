@@ -17,6 +17,11 @@ final class BlasterScene {
     var isDefault: Bool = false
     var isActive: Bool = false
     var isImported: Bool = false
+    /// When true, the scene is scaffolded with the lean "Focused" board (topical
+    /// tiles + a minimal needs strip + the body & health page) instead of the
+    /// full familiar Core board. Toggled in the editor; preserved across AI
+    /// refinements so they re-scaffold at the same level. See SceneNavigation.
+    var isFocused: Bool = false
     var created: Date = Date.now
     var lastModified: Date = Date.now
     /// Source URL if the scene was imported from a web link.

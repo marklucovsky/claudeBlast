@@ -28,7 +28,8 @@ struct SceneRefinerService {
     /// trip even if the model references them by key without re-declaring.
     func refine(instruction: String,
                 currentTopical: [GeneratedTile],
-                allTiles: [TileModel]) async throws -> GeneratedScene {
+                allTiles: [TileModel],
+                profile: SceneNavigation.Profile = .full) async throws -> GeneratedScene {
         guard !apiKey.isEmpty else { throw OpenAIError.missingAPIKey }
 
         let system = buildSystemPrompt(currentTopical: currentTopical)
@@ -73,7 +74,8 @@ struct SceneRefinerService {
             else { return nil }
             return GeneratedNewWord(key: tile.key, displayName: displayName, wordClass: wordClass)
         }
-        return try GeneratedScene.parse(content: content, allTiles: allTiles, extraNewWords: carryOver)
+        return try GeneratedScene.parse(content: content, allTiles: allTiles,
+                                        extraNewWords: carryOver, profile: profile)
     }
 
     // MARK: - Prompt builders
