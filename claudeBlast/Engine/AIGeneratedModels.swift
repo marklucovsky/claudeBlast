@@ -38,13 +38,18 @@ struct GeneratedNewWord: Codable {
 }
 
 extension GeneratedNewWord {
-    /// Build a normalized-key → new word map, dropping entries whose word class
-    /// isn't a known VocabularyClass. The map key is normalized so page tiles
-    /// resolve regardless of the model's casing/spacing.
+    /// Build a normalized-key → new word map. The map key is normalized so page
+    /// tiles resolve regardless of the model's casing/spacing.
+    ///
+    /// We keep words whose wordClass isn't a known VocabularyClass rather than
+    /// dropping them: the model occasionally reaches for a sensible-but-untaxon­
+    /// omized class (e.g. "plant" for seaweed, "tools" for a bucket), and a tile
+    /// with a neutral tint plus a good image-gen sense hint beats a silently
+    /// missing word. Only entries with an empty key or class are skipped.
     static func lookup(from words: [GeneratedNewWord]?) -> [String: GeneratedNewWord] {
         var map: [String: GeneratedNewWord] = [:]
         for word in words ?? [] {
-            guard VocabularyClasses.known(word.wordClass) != nil else { continue }
+            guard !word.wordClass.isEmpty else { continue }
             let source = word.displayName.isEmpty ? word.key : word.displayName
             let key = TileModel.normalizeKey(source)
             guard !key.isEmpty else { continue }
