@@ -836,7 +836,7 @@
   },
   {
     "key": "bus",
-    "wordClass": "places"
+    "wordClass": "object"
   },
   {
     "key": "library",

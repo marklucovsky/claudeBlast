@@ -385,9 +385,12 @@ private struct PageGeneratorSheet: View {
         generationError = nil
         let service = PageGeneratorService(apiKey: apiKey)
         let tiles = allTiles
+        let pages = scene.pages
+        let homeKey = scene.homePageKey
         Task {
             do {
-                let result = try await service.generate(pageGoal: goal, pageName: name, allTiles: tiles)
+                let result = try await service.generate(pageGoal: goal, pageName: name, allTiles: tiles,
+                                                        scenePages: pages, homePageKey: homeKey)
                 await MainActor.run { preview = result }
             } catch {
                 await MainActor.run { generationError = error.localizedDescription }

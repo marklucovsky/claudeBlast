@@ -35,7 +35,7 @@ HOME_TOKEN = "<home>"
 CLASSES = [
     "people", "animal", "actions", "describe", "feeling", "social", "food",
     "meals", "fruit", "veggie", "snacks", "drinks", "places", "weather",
-    "colors", "shape", "body", "health", "toy", "games", "sports", "play", "art",
+    "colors", "shape", "body", "health", "toy", "games", "sports", "play", "art", "object",
 ]
 
 
@@ -72,6 +72,7 @@ IMPORTANT — also include the vocabulary at the HEART of the activity even when
 Tile rules:
 - Prefer existing tile keys. Before proposing a NEW word, search the vocabulary for an existing word with the same or near-identical meaning and use that instead (e.g. use "teacher", not "therapist"). Only introduce a new word when nothing existing fits.
 - A NEW word must be a COMMON, CONCRETE thing with a single clear visual. NEVER make abstract concepts, feelings, or actions into new words.
+- Choose the wordClass by what the thing IS: "places" is ONLY a location or destination the child goes to (station, park, barn, store) — NEVER a portable object. For a physical object, tool, vehicle, instrument, or piece of equipment (handcuffs, badge, hose, ladder, tractor), use "object". Animals use "animal"; foods use food/fruit/veggie/snacks; people/roles use "people".
 - Declare every new word ONCE in the top-level "newWords" array with its "displayName" and "wordClass" (one of: {classes}), then reference it by the same "key" in page tiles. Every page-tile key MUST be an existing vocabulary key or a key declared in "newWords".
 
 Return ONLY valid JSON matching this schema exactly - no markdown, no prose:

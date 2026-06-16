@@ -61,6 +61,10 @@ enum VocabularyClasses {
         VocabularyClass(name: "sports",   color: .yellow,                                   isCaregiverSelectable: true),
         VocabularyClass(name: "play",     color: .yellow,                                   isCaregiverSelectable: true),
         VocabularyClass(name: "art",      color: Color(red: 0.7, green: 0.4, blue: 0.8),    isCaregiverSelectable: true),
+        // Generic concrete objects / tools / equipment / vehicles that don't fit a
+        // more specific class (handcuffs, badge, hose, ladder, tractor). Neutral
+        // steel so it reads as a real category, distinct from the gray fallback.
+        VocabularyClass(name: "object",   color: Color(red: 0.45, green: 0.5, blue: 0.55),  isCaregiverSelectable: true),
         // Structural / function classes — not caregiver-creatable content.
         VocabularyClass(name: "core",       color: Color(red: 0.95, green: 0.88, blue: 0.55), isCaregiverSelectable: false),
         VocabularyClass(name: "navigation", color: .indigo,                                   isCaregiverSelectable: false),

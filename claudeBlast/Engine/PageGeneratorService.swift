@@ -20,12 +20,14 @@ struct PageGeneratorService {
 
     // MARK: - Public API
 
-    func generate(pageGoal: String, pageName: String, allTiles: [TileModel]) async throws -> GeneratedPageResult {
+    func generate(pageGoal: String, pageName: String, allTiles: [TileModel],
+                  scenePages: [PageSpec] = [], homePageKey: String = "") async throws -> GeneratedPageResult {
         guard !apiKey.isEmpty else { throw OpenAIError.missingAPIKey }
 
         let vocabBlock = buildVocabBlock(allTiles: allTiles)
+        let sceneBlock = buildSceneBlock(scenePages: scenePages, homePageKey: homePageKey, allTiles: allTiles)
         let system = buildSystemPrompt()
-        let user = buildUserPrompt(pageGoal: pageGoal, pageName: pageName, vocabBlock: vocabBlock)
+        let user = buildUserPrompt(pageGoal: pageGoal, pageName: pageName, vocabBlock: vocabBlock, sceneBlock: sceneBlock)
 
         let body: [String: Any] = [
             "model": model,
@@ -71,10 +73,15 @@ struct PageGeneratorService {
         Tile rules:
         - Prefer existing tile keys from the provided vocabulary; reuse an existing word \
           rather than proposing a new one whenever a suitable match already exists.
+        - When the goal REFERENCES tiles already in the scene (e.g. "the vehicles from the home page", \
+          "the animals already on the board"), SELECT those exact existing tiles by key from the \
+          "Current scene" listing below — do NOT invent new words for things that are already there.
         - When the goal NAMES specific concrete things (animals, foods, places, objects), \
           include EVERY one named — reuse an existing key if present, otherwise declare it new.
         - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, \
           object, food, place, or person). NEVER make abstract concepts, feelings, or actions new.
+        - Choose wordClass by what the thing IS: "places" is ONLY a location you go to — for a physical \
+          object, tool, vehicle, or piece of equipment use "object".
         - Declare every new word ONCE in the top-level "newWords" array with its "displayName" \
           and "wordClass" (one of: \(VocabularyClasses.caregiverSelectable.map(\.name).joined(separator: ", "))), \
           then reference it by the same "key" in tiles. Every tile key MUST be either an existing \
@@ -103,11 +110,12 @@ struct PageGeneratorService {
         """
     }
 
-    private func buildUserPrompt(pageGoal: String, pageName: String, vocabBlock: String) -> String {
-        """
+    private func buildUserPrompt(pageGoal: String, pageName: String, vocabBlock: String, sceneBlock: String) -> String {
+        let sceneSection = sceneBlock.isEmpty ? "" : "\nCurrent scene (existing pages and their tiles):\n\(sceneBlock)\n"
+        return """
         Page name: \(pageName)
         Goal: \(pageGoal)
-
+        \(sceneSection)
         Available vocabulary by category:
         \(vocabBlock)
         """
@@ -122,6 +130,20 @@ struct PageGeneratorService {
         }
         return byClass.keys.sorted().map { wc in
             "\(wc): \(byClass[wc]!.joined(separator: ", "))"
+        }.joined(separator: "\n")
+    }
+
+    /// Describe the existing scene's pages and their tiles (key + class) so the
+    /// model can honor relational goals like "the vehicles from the home page".
+    private func buildSceneBlock(scenePages: [PageSpec], homePageKey: String, allTiles: [TileModel]) -> String {
+        guard !scenePages.isEmpty else { return "" }
+        let lookup = Dictionary(allTiles.map { ($0.key, $0.wordClass) }, uniquingKeysWith: { a, _ in a })
+        return scenePages.map { page in
+            let home = page.key == homePageKey ? " [home]" : ""
+            let tiles = page.tiles.map { entry in
+                "\(entry.key) (\(lookup[entry.key] ?? "?"))"
+            }.joined(separator: ", ")
+            return "page '\(page.key)'\(home): \(tiles)"
         }.joined(separator: "\n")
     }
 
