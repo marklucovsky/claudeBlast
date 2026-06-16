@@ -19,6 +19,7 @@ struct SceneEditorView: View {
     }
 
     @State private var isAddingPage = false
+    @State private var isRefining = false
     /// Identifier of a freshly-created page to navigate into. Stored as the
     /// page key string now that pages are inline structs rather than
     /// SwiftData entities.
@@ -84,6 +85,14 @@ struct SceneEditorView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    isRefining = true
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .accessibilityLabel("Refine with AI")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     exportScene()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
@@ -92,6 +101,9 @@ struct SceneEditorView: View {
         }
         .sheet(item: $sceneToExport) { file in
             ActivityView(items: [file.temporaryFileURL()])
+        }
+        .sheet(isPresented: $isRefining) {
+            SceneRefinementSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey)
         }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
@@ -479,6 +491,122 @@ private struct GeneratedTileCell: View {
                 .font(.system(size: 9, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Scene Refinement Sheet
+
+/// Iteratively refine the active scene with a natural-language instruction
+/// ("add a fish pond and a creek"). Refinement rewrites the scene's topical
+/// layer and re-scaffolds the familiar core board around it (see
+/// SceneRefinerService / SceneNavigation). The change is previewed before it is
+/// applied in place.
+private struct SceneRefinementSheet: View {
+    let scene: BlasterScene
+    let allTiles: [TileModel]
+    let apiKey: String
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var instruction = ""
+    @State private var isRefining = false
+    @State private var errorMessage: String? = nil
+    @State private var preview: GeneratedScene? = nil
+
+    private var tileLookup: [String: TileModel] {
+        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+    }
+
+    var body: some View {
+        NavigationStack {
+            if let preview {
+                ScenePreviewView(
+                    preview: preview,
+                    allTiles: allTiles,
+                    apiKey: apiKey,
+                    onAccept: { scene in apply(scene) },
+                    onCancel: { dismiss() }
+                )
+            } else {
+                form
+            }
+        }
+    }
+
+    private var form: some View {
+        Form {
+            Section {
+                TextField("Describe the change…", text: $instruction, axis: .vertical)
+                    .lineLimit(3...6)
+            } header: {
+                Text("Refine \(scene.name.isEmpty ? "Scene" : scene.name)")
+            } footer: {
+                Text("e.g. \u{201C}add a fish pond and a creek\u{201D} — the activity tiles update; the familiar core board stays the same.")
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).font(.caption).foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button {
+                    runRefine()
+                } label: {
+                    HStack {
+                        if isRefining { ProgressView().padding(.trailing, 4) }
+                        Text(isRefining ? "Refining\u{2026}" : "Refine")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty || apiKey.isEmpty || isRefining)
+            }
+        }
+        .navigationTitle("Refine Scene")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
+    }
+
+    private func runRefine() {
+        let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !apiKey.isEmpty else { return }
+        isRefining = true
+        errorMessage = nil
+        let service = SceneRefinerService(apiKey: apiKey)
+        let lookup = tileLookup
+        let topical = SceneNavigation.topicalKeys(of: scene).map { key -> GeneratedTile in
+            let tile = lookup[key]
+            let isCaregiverWord = (tile?.isSystem == false)
+            return GeneratedTile(key: key, isAudible: true, link: "",
+                                 displayName: tile?.value,
+                                 wordClass: isCaregiverWord ? tile?.wordClass : nil)
+        }
+        let tiles = allTiles
+        Task {
+            do {
+                let result = try await service.refine(instruction: text, currentTopical: topical, allTiles: tiles)
+                await MainActor.run { preview = result }
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+            }
+            await MainActor.run { isRefining = false }
+        }
+    }
+
+    private func apply(_ generated: GeneratedScene) {
+        do {
+            try SceneBuilder.update(scene, from: generated, tileLookup: tileLookup, context: modelContext)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            preview = nil
         }
     }
 }

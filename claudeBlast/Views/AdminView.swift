@@ -1454,8 +1454,8 @@ private struct SceneGeneratorSheet: View {
                 ScenePreviewView(
                     preview: preview,
                     allTiles: allTiles,
-                    onAccept: { buildAndAccept(preview) },
-                    onRetry: { self.preview = nil; runGeneration() },
+                    apiKey: apiKey,
+                    onAccept: { scene in buildAndAccept(scene) },
                     onCancel: { dismiss() }
                 )
                 .navigationTitle("Scene Preview")
@@ -1587,14 +1587,32 @@ private struct SceneGeneratorSheet: View {
 
 // MARK: - Scene Preview View
 
-private struct ScenePreviewView: View {
-    let preview: GeneratedScene
+struct ScenePreviewView: View {
     let allTiles: [TileModel]
-    let onAccept: () -> Void
-    let onRetry: () -> Void
+    let apiKey: String
+    /// Emits the (possibly refined) scene the author accepted.
+    let onAccept: (GeneratedScene) -> Void
     let onCancel: () -> Void
 
+    /// The scene currently shown — seeded from the initial preview and replaced
+    /// in place by AI refinement.
+    @State private var working: GeneratedScene
     @State private var selectedPageIndex = 0
+    @State private var isRefining = false
+    @State private var refineError: String? = nil
+    @State private var showRefineSheet = false
+
+    init(preview: GeneratedScene,
+         allTiles: [TileModel],
+         apiKey: String,
+         onAccept: @escaping (GeneratedScene) -> Void,
+         onCancel: @escaping () -> Void) {
+        self.allTiles = allTiles
+        self.apiKey = apiKey
+        self.onAccept = onAccept
+        self.onCancel = onCancel
+        _working = State(initialValue: preview)
+    }
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -1603,14 +1621,14 @@ private struct ScenePreviewView: View {
     private let columns = [GridItem(.adaptive(minimum: 60, maximum: 76))]
 
     private var currentPage: GeneratedPage {
-        preview.pages[min(selectedPageIndex, preview.pages.count - 1)]
+        working.pages[min(selectedPageIndex, working.pages.count - 1)]
     }
 
     /// Distinct proposed-new word display names across the whole scene.
     private var newWords: [String] {
         var seen = Set<String>()
         var names: [String] = []
-        for page in preview.pages {
+        for page in working.pages {
             for tile in page.tiles where tile.isProposedNew {
                 if let name = tile.displayName, seen.insert(tile.key).inserted {
                     names.append(name)
@@ -1624,10 +1642,10 @@ private struct ScenePreviewView: View {
         VStack(spacing: 0) {
             // Header
             VStack(spacing: 4) {
-                Text(preview.name)
+                Text(working.name)
                     .font(.headline)
-                if !preview.description.isEmpty {
-                    Text(preview.description)
+                if !working.description.isEmpty {
+                    Text(working.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1649,12 +1667,12 @@ private struct ScenePreviewView: View {
             }
 
             // Page picker
-            if preview.pages.count > 1 {
+            if working.pages.count > 1 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(preview.pages.indices, id: \.self) { i in
-                            let page = preview.pages[i]
-                            let isHome = page.key == preview.homePageKey
+                        ForEach(working.pages.indices, id: \.self) { i in
+                            let page = working.pages[i]
+                            let isHome = page.key == working.homePageKey
                             Button { selectedPageIndex = i } label: {
                                 HStack(spacing: 4) {
                                     Text(page.key)
@@ -1709,6 +1727,14 @@ private struct ScenePreviewView: View {
                 .padding(.bottom, 12)
             }
 
+            if let refineError {
+                Text(refineError)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+            }
+
             Divider()
 
             // Action bar
@@ -1717,12 +1743,85 @@ private struct ScenePreviewView: View {
                     .buttonStyle(.bordered)
                     .tint(.red)
                 Spacer()
-                Button("Retry") { onRetry() }
-                    .buttonStyle(.bordered)
-                Button("Accept") { onAccept() }
+                Button {
+                    showRefineSheet = true
+                } label: {
+                    if isRefining {
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Refining…") }
+                    } else {
+                        Label("Refine", systemImage: "sparkles")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isRefining || apiKey.isEmpty)
+                Button("Accept") { onAccept(working) }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isRefining)
             }
             .padding()
+        }
+        .sheet(isPresented: $showRefineSheet) {
+            SceneRefineInputSheet { instruction in
+                showRefineSheet = false
+                runRefine(instruction)
+            } onCancel: {
+                showRefineSheet = false
+            }
+        }
+    }
+
+    private func runRefine(_ instruction: String) {
+        let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !apiKey.isEmpty else { return }
+        isRefining = true
+        refineError = nil
+        let service = SceneRefinerService(apiKey: apiKey)
+        let currentTopical = SceneNavigation.topicalTiles(of: working)
+        let tiles = allTiles
+        Task {
+            do {
+                let result = try await service.refine(instruction: text, currentTopical: currentTopical, allTiles: tiles)
+                await MainActor.run {
+                    working = result
+                    selectedPageIndex = 0
+                }
+            } catch {
+                await MainActor.run { refineError = error.localizedDescription }
+            }
+            await MainActor.run { isRefining = false }
+        }
+    }
+}
+
+// Small modal that collects a natural-language refinement instruction for a
+// scene preview ("add a fish pond and a creek"). Shared by every preview.
+struct SceneRefineInputSheet: View {
+    let onRefine: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var instruction = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Describe the change…", text: $instruction, axis: .vertical)
+                        .lineLimit(3...6)
+                } footer: {
+                    Text("e.g. \u{201C}add a fish pond and a creek\u{201D}, or \u{201C}remove the tractor\u{201D}. The familiar core board stays the same.")
+                }
+            }
+            .navigationTitle("Refine Scene")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Refine") { onRefine(instruction) }
+                        .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
         }
     }
 }

@@ -80,20 +80,24 @@ Return ONLY valid JSON matching this schema exactly - no markdown, no prose:
    "pages": [ {{ "key": "string", "tiles": [ {{ "key": "eat", "isAudible": true, "link": "" }} ] }} ] }}"""
 
 
-def refine_system_prompt(current_scene_json):
+def refine_system_prompt(current_topical_json):
     classes = ", ".join(CLASSES)
-    return f"""You are an expert AAC specialist refining an existing communication scene for a non-verbal child. The therapist will give an instruction describing a change. Apply ONLY that change.
+    return f"""You are an expert AAC specialist refining the ACTIVITY VOCABULARY of an existing scene for a non-verbal child. The app supplies the child's familiar core board automatically (pronouns, family, needs, feelings, food/drinks/people/body&health) — you ONLY manage the TOPICAL tiles for the activity. The therapist will give an instruction; apply ONLY that change.
 
-Here is the CURRENT scene as JSON (each tile lists its key, what it shows, whether it speaks, and any page link):
-{current_scene_json}
+Here are the CURRENT topical tiles (key — what it shows):
+{current_topical_json}
 
 Rules:
-- Return the COMPLETE updated scene, preserving ALL existing pages and tiles (and their page keys) unless the instruction requires modifying or removing them.
-- When the instruction introduces concrete things, INFER the obvious related items too (a fish pond implies fish, frog, duck, water; a creek implies bridge, rock). Add a new page if the additions are substantial; otherwise extend an existing page.
-- Prefer existing vocabulary keys. Declare any genuinely new concrete word ONCE in the top-level "newWords" array with "displayName" and "wordClass" (one of: {classes}); reference it by the same key.
-- Navigation tiles: isAudible=false, link = destination page key.
+- Return the COMPLETE updated topical tile list: keep every current topical tile unless the instruction removes it, and add the new ones.
+- When the instruction introduces concrete things, INFER the obvious related items too (a fish pond implies fish, frog, lily pad, water; a creek implies bridge, rock, stream). Pull the full relevant set.
+- Stay topical: do NOT add pronouns, family, feelings, generic foods/drinks, needs, or social words — those are on the core board already.
+- Prefer existing vocabulary keys. Declare any genuinely new concrete word ONCE in the top-level "newWords" array with "displayName" and "wordClass" (one of: {classes}); reference it by the same key. Concrete nouns only.
+- Put every topical tile on a SINGLE page; no navigation tiles.
 
-Return ONLY valid JSON in the same schema as the current scene - no markdown, no prose."""
+Return ONLY valid JSON matching this schema exactly - no markdown, no prose. Each tile MUST be an object, never a bare string:
+{{ "name": "string", "description": "string", "homePageKey": "string",
+   "newWords": [ {{ "key": "frog", "displayName": "frog", "wordClass": "animal" }} ],
+   "pages": [ {{ "key": "string", "tiles": [ {{ "key": "fish", "isAudible": true, "link": "" }} ] }} ] }}"""
 
 
 def call_openai(system, user, max_tokens):
@@ -148,7 +152,7 @@ def simulate_nav(scene, vocab, vocab_keys):
     reserved = set(STRUCTURAL_NAV_KEYS) | category_keys | set(HOME_CLUSTER) | {k for k, _ in HOME_CLUSTER_LINKS}
     topical = []
     for p in scene["pages"]:
-        for t in p["tiles"]:
+        for t in p.get("tiles", []):
             if is_nav(t) or t["key"] in reserved:
                 continue
             reserved.add(t["key"])
@@ -202,24 +206,31 @@ def reachable_pages(scene):
         if k in reachable or k not in pages:
             continue
         reachable.add(k)
-        for t in pages[k]["tiles"]:
+        for t in pages[k].get("tiles", []):
             link = t.get("link") or ""
             if link and link != HOME_TOKEN and link in pages:
                 frontier.append(link)
     return reachable, set(pages)
 
 
-def report(raw_scene, vocab, vocab_keys, label):
-    nw = {w["key"]: w for w in raw_scene.get("newWords", [])}
-    off_taxonomy = [(w["key"], w["wordClass"]) for w in raw_scene.get("newWords", [])
-                    if w["wordClass"] not in CLASSES]
+def report(raw_scene, vocab, vocab_keys, label, extra_valid=frozenset()):
+    # Previously-materialized topical words (from an earlier generation) are real
+    # tiles in-app; treat them as valid so refine reports don't false-flag them.
+    vocab_keys = vocab_keys | set(extra_valid)
+    # Tolerate a model that emits bare-string tiles instead of {key:...} objects.
+    for p in raw_scene.get("pages", []):
+        p["tiles"] = [t if isinstance(t, dict) else {"key": t, "isAudible": True, "link": ""}
+                      for t in p.get("tiles", [])]
+    new_words = [w for w in raw_scene.get("newWords", []) if w.get("key") and w.get("wordClass")]
+    nw = {w["key"]: w for w in new_words}
+    off_taxonomy = [(w["key"], w["wordClass"]) for w in new_words if w["wordClass"] not in CLASSES]
     # Report the scene as it will look in-app: flattened + Core categories attached.
     scene = simulate_nav(raw_scene, vocab, vocab_keys)
     total = sum(len(p["tiles"]) for p in scene["pages"])
     print(f"\n=== {label} (after in-app scaffold) ===")
     print(f"SCENE: {scene.get('name')!r}  home={scene.get('homePageKey')!r}  "
           f"pages={len(scene['pages'])}  total_tiles={total}")
-    print(f"newWords: {[(w['key'], w['wordClass']) for w in raw_scene.get('newWords', [])]}")
+    print(f"newWords: {[(w['key'], w['wordClass']) for w in new_words]}")
     if off_taxonomy:
         print(f"  NOTE off-taxonomy class (kept, neutral tint): {off_taxonomy}")
     for p in scene["pages"]:
@@ -266,18 +277,23 @@ def main():
     report(scene, vocab, vocab_keys, "GENERATED")
 
     if refine_instruction:
-        # Feed the generated scene back as the "current" scene, the way the app
-        # serializes a persisted BlasterScene for SceneRefinerService.
-        current = json.dumps({
-            "name": scene.get("name"),
-            "description": scene.get("description"),
-            "homePageKey": scene.get("homePageKey"),
-            "pages": scene["pages"],
-        }, indent=1)
+        # Feed back only the TOPICAL tiles (key — display name), the way the app
+        # extracts the topical layer from a persisted scene for SceneRefinerService.
+        nw = {w["key"]: w for w in scene.get("newWords", [])}
+        topical, seen = [], set()
+        for p in scene["pages"]:
+            for t in p.get("tiles", []):
+                k = t["key"]
+                if k in seen:
+                    continue
+                seen.add(k)
+                name = nw[k]["displayName"] if k in nw else k.replace("_", " ")
+                topical.append(f"{k} — {name}")
+        current = "\n".join(topical)
         ruser = (f"Instruction: {refine_instruction}\n\n"
                  f"Available vocabulary by category:\n{block}")
-        refined = call_openai(refine_system_prompt(current), ruser, max_tokens=3500)
-        report(refined, vocab, vocab_keys, f"REFINED ({refine_instruction!r})")
+        refined = call_openai(refine_system_prompt(current), ruser, max_tokens=3000)
+        report(refined, vocab, vocab_keys, f"REFINED ({refine_instruction!r})", extra_valid=seen)
 
 
 if __name__ == "__main__":

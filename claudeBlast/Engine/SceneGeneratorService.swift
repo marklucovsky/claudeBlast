@@ -164,57 +164,13 @@ struct SceneGeneratorService {
     // MARK: - Response parsing
 
     private func parseScene(data: Data, allTiles: [TileModel]) throws -> GeneratedScene {
-        let validKeys = Set(allTiles.map(\.key))
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let message = choices.first?["message"] as? [String: Any],
               let content = message["content"] as? String else {
             throw OpenAIError.decodingError("Could not parse chat response")
         }
-
-        // Strip any surrounding prose; extract the JSON object
-        let jsonText: String
-        if let start = content.firstIndex(of: "{"),
-           let end = content.lastIndex(of: "}") {
-            jsonText = String(content[start...end])
-        } else {
-            jsonText = content
-        }
-
-        guard let jsonData = jsonText.data(using: .utf8) else {
-            throw OpenAIError.decodingError("Response JSON was not valid UTF-8")
-        }
-
-        let raw = try JSONDecoder().decode(GeneratedScene.self, from: jsonData)
-        let newWords = GeneratedNewWord.lookup(from: raw.newWords)
-
-        // Keep existing-vocab tiles; admit tiles whose key was declared in
-        // newWords (carrying displayName + wordClass); drop hallucinated keys.
-        let sanitizedPages = raw.pages.map { page in
-            let validTiles = page.tiles.compactMap { tile in
-                GeneratedTile.sanitize(tile, validKeys: validKeys, newWords: newWords)
-            }
-            return GeneratedPage(key: page.key, tiles: validTiles)
-        }.filter { !$0.tiles.isEmpty }
-
-        guard !sanitizedPages.isEmpty else {
-            throw OpenAIError.decodingError("No valid tiles found in generated scene")
-        }
-
-        let homeKey = sanitizedPages.contains(where: { $0.key == raw.homePageKey })
-            ? raw.homePageKey
-            : sanitizedPages[0].key
-
-        let scene = GeneratedScene(
-            name: raw.name,
-            description: raw.description,
-            homePageKey: homeKey,
-            pages: sanitizedPages
-        )
-
-        // Flatten the model's pages into one topical home page and attach the
-        // familiar core category pages — the model's own page structure is not
-        // trusted (see SceneNavigation).
-        return SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys)
+        // Sanitize + scaffold is shared with SceneRefinerService.
+        return try GeneratedScene.parse(content: content, allTiles: allTiles)
     }
 }

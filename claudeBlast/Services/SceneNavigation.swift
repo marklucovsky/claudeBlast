@@ -147,6 +147,38 @@ enum SceneNavigation {
         )
     }
 
+    /// Keys this scaffolder injects itself — the core cluster, the eat/drink
+    /// links, the bundled category pages, and structural navigation. Everything
+    /// else on a scaffolded home page is topical.
+    static var injectedKeys: Set<String> {
+        structuralNavKeys
+            .union(coreCategories.map(\.pageKey))
+            .union(homeClusterKeys)
+            .union(homeClusterLinks.map(\.key))
+    }
+
+    /// The topical tile keys of a scaffolded scene: the audible, unlinked tiles
+    /// on its home page that aren't part of the injected core board. This is the
+    /// layer iterative refinement reads and rewrites.
+    static func topicalKeys(of scene: BlasterScene) -> [String] {
+        let home = scene.pages.first(where: { $0.key == scene.homePageKey }) ?? scene.pages.first
+        guard let home else { return [] }
+        let injected = injectedKeys
+        return home.tiles
+            .filter { $0.link.isEmpty && $0.isAudible && !injected.contains($0.key) }
+            .map(\.key)
+    }
+
+    /// The topical tiles of an in-memory (possibly un-accepted) scaffolded scene,
+    /// preserving each tile's new-word metadata so refinement can carry proposed
+    /// words forward. GeneratedScene analogue of `topicalKeys`.
+    static func topicalTiles(of scene: GeneratedScene) -> [GeneratedTile] {
+        let home = scene.pages.first(where: { $0.key == scene.homePageKey }) ?? scene.pages.first
+        guard let home else { return [] }
+        let injected = injectedKeys
+        return home.tiles.filter { $0.link.isEmpty && $0.isAudible && !injected.contains($0.key) }
+    }
+
     // MARK: - Private
 
     /// A tile that switches pages rather than communicating.
