@@ -281,7 +281,11 @@ final class SentenceEngine {
     // MARK: - Replay
 
     var canReplay: Bool {
-        activeGroup.state == .locked && activeGroup.sentence != nil && !isThinking
+        // 2+ tiles only: a single word has no generated sentence to replay or
+        // escalate, so a locked single-tile group stays in the cancel-✕ path
+        // rather than showing Play + a stale escalation badge.
+        activeGroup.state == .locked && activeGroup.sentence != nil
+            && activeGroup.tiles.count >= 2 && !isThinking
     }
 
     /// Replay the active group's sentence using escalation (repetition increments, cache bypassed).
@@ -300,6 +304,31 @@ final class SentenceEngine {
             guard let self else { return }
             await self.generate(tiles: tilesSnapshot, repetition: repetition)
         }
+    }
+
+    /// Speak the lone selected tile, counting repeats — the "mashing the
+    /// chocolate tile when she really wants chocolate" volume knob applied to a
+    /// single word. Wired to the repurposed Done-slot control when one tile is
+    /// active. It only ever says the *raw word*: a single tile is never run
+    /// through the sentence model. Generating from one word produced odd,
+    /// context-bled results (escalating "sick", clearing, then playing "down"
+    /// yielded "I feel sick down"), and a single word should stay literal.
+    /// Repeated presses bump the count (surfaced as the button's badge — the
+    /// visible "how insistent" signal; prosody escalation is a later step) and
+    /// re-arm the idle timers so the mashed tile stays alive.
+    func playSingleTile() {
+        guard activeGroup.tiles.count == 1, let tile = activeGroup.tiles.first else { return }
+        // Bump the repeat count for the badge; a different tile resets it.
+        _ = updateRepetitionState(for: activeGroup.tiles)
+        // Lock with the word as its own "sentence" so the badge gating
+        // (locked → show count) distinguishes a played tile from a freshly
+        // selected one. Single tiles never flush to history (see
+        // flushActiveToHistory), so this is display-only.
+        activeGroup.sentence = tile.value
+        activeGroup.state = .locked
+        isIdleNudge = false
+        speak(tile.value)
+        startIdleTimers()
     }
 
     // MARK: - History group interactions
@@ -381,7 +410,11 @@ final class SentenceEngine {
         isIdleNudge = false
         isDoneNudge = false
 
-        let shouldFlush = !activeGroup.tiles.isEmpty
+        // 2+ tiles only. A single tile is ephemeral (spoken on tap; the ✕ /
+        // auto-clear discard it) and must never land in history — otherwise a
+        // recalled single word reopens as a locked group and loses its
+        // cancel-✕ behavior. Empty groups are likewise never flushed.
+        let shouldFlush = activeGroup.tiles.count >= 2
             && (activeGroup.sentence != nil || allowWithoutSentence)
 
         if shouldFlush {
@@ -441,10 +474,13 @@ final class SentenceEngine {
         isIdleNudge = false
         isDoneNudge = false
 
-        // Single tile: no preview on the group; the view derives a spelled-out preview from
-        // activeGroup.tiles. No API call, no idle timers.
+        // Single tile: no sentence generation (the view shows the spelled-out
+        // tile and the primary button becomes a cancel-✕). Still run the idle
+        // timeline so the ✕ pulses after the pulse-after interval and a
+        // lingering single tile auto-clears at the auto-Done interval.
         guard activeGroup.tiles.count >= 2 else {
             isWaiting = false
+            if activeGroup.tiles.count == 1 { startIdleTimers() }
             return
         }
 
@@ -484,12 +520,16 @@ final class SentenceEngine {
 
     private func startIdleTimers() {
         debounceTask?.cancel()
-        guard activeGroup.tiles.count >= 2 else { return }
+        // Runs for a single tile (cancel-✕ pulse + auto-clear) as well as 2+
+        // tiles (play pulse + auto-Done). Empty groups have no timeline.
+        guard activeGroup.tiles.count >= 1 else { return }
+        let isSingle = activeGroup.tiles.count == 1
 
         let pulseWait = idleDebounceDuration
         let autoDoneWait = autoDoneDuration
         debounceTask = Task { [weak self] in
-            // Stage 1: play-button pulse (only when not yet locked).
+            // Stage 1: primary-button pulse (play for 2+ tiles, cancel-✕ for a
+            // single tile). Skipped once a group locks (it's already been spoken).
             do { try await Task.sleep(for: pulseWait) } catch { return }
             guard !Task.isCancelled, let self else { return }
             if self.activeGroup.state != .locked {
@@ -514,12 +554,18 @@ final class SentenceEngine {
                 elapsed = attentionAt
             }
 
-            // Stage 3: auto-Done.
+            // Stage 3: auto-finish. A single tile is ephemeral — it auto-clears
+            // (discarded, not logged), matching the cancel-✕. A 2+ tile group
+            // auto-Dones (committed to history).
             let remaining = autoDoneWait - elapsed
             guard remaining > .seconds(0) else { return }
             do { try await Task.sleep(for: remaining) } catch { return }
             guard !Task.isCancelled else { return }
-            self.commitActiveAndStartNew()
+            if isSingle {
+                self.clearSelection()
+            } else {
+                self.commitActiveAndStartNew()
+            }
         }
     }
 

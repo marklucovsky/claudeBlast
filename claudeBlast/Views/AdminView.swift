@@ -43,7 +43,7 @@ struct AdminView: View {
     @State private var apiKey: String = OpenAIKeyVault.currentKey() ?? ""
     @AppStorage(AppSettingsKey.providerChoice) private var providerChoice: String = "openai"
     @AppStorage(AppSettingsKey.audioEnabled) private var audioEnabled: Bool = true
-    @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
+    @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = true
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
     @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.playful3D.rawValue

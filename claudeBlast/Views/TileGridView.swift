@@ -37,7 +37,7 @@ struct TileGridView: View {
     @Environment(TileScriptRunner.self) private var scriptRunner
     @Environment(TileScriptRecorder.self) private var recorder
     @State private var currentDisplayPage: Int? = 0
-    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
+    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = true
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
@@ -98,6 +98,8 @@ struct TileGridView: View {
                         if recorder.state == .recording { recorder.recordReplay() }
                         engine.replay()
                     },
+                    onCancelSingle: { engine.clearSelection() },
+                    onPlaySingle: { engine.playSingleTile() },
                     onCommitActive: { engine.commitActiveAndStartNew() },
                     onShowSentence: { showCompactOverlay(.sentence) },
                     onShowHistory: { showCompactOverlay(.history) },
@@ -153,6 +155,12 @@ struct TileGridView: View {
                     },
                     onCommitActive: {
                         engine.commitActiveAndStartNew()
+                    },
+                    onCancelSingle: {
+                        engine.clearSelection()
+                    },
+                    onPlaySingle: {
+                        engine.playSingleTile()
                     }
                 )
                 .padding(.top, 8)

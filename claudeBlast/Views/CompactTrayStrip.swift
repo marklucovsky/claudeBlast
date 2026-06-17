@@ -33,6 +33,8 @@ struct CompactTrayStrip: View {
     let onTileTap: (Int) -> Void
     let onGo: () -> Void
     let onReplay: () -> Void
+    let onCancelSingle: () -> Void
+    let onPlaySingle: () -> Void
     let onCommitActive: () -> Void
     let onShowSentence: () -> Void
     let onShowHistory: () -> Void
@@ -62,18 +64,27 @@ struct CompactTrayStrip: View {
                         isPulsing: isPulsing,
                         isReplay: canReplay,
                         replayCount: engine.repetitionCount,
+                        isSingleWord: isSingleTile,
                         compact: true,
-                        action: canReplay ? onReplay : onGo
+                        action: primaryAction
                     )
                     .allowsHitTesting(canFire)
                     .opacity(canFire ? 1 : 0.45)
 
-                    DoneButton(
-                        isEnabled: hasActiveContent,
-                        isNudge: engine.isDoneNudge && hasActiveContent,
-                        compact: true,
-                        action: onCommitActive
-                    )
+                    if isSingleTile {
+                        SingleWordPlayButton(
+                            escalationCount: singleWordEscalation,
+                            compact: true,
+                            action: onPlaySingle
+                        )
+                    } else {
+                        DoneButton(
+                            isEnabled: hasActiveContent,
+                            isNudge: engine.isDoneNudge && hasActiveContent,
+                            compact: true,
+                            action: onCommitActive
+                        )
+                    }
                 }
             }
 
@@ -108,9 +119,33 @@ struct CompactTrayStrip: View {
         !canReplay && engine.activeGroup.tiles.count >= 2 && !engine.isThinking
     }
 
-    private var canFire: Bool { canReplay || canGo }
+    /// Exactly one tile selected: the single-word path (cancel-✕ primary + a
+    /// say-it/escalate secondary). canReplay is already false for one tile, and
+    /// the layout shouldn't flip mid-generation, so this ignores both.
+    private var isSingleTile: Bool {
+        engine.activeGroup.tiles.count == 1
+    }
+
+    /// Escalation depth shown on the single-word play button — only meaningful
+    /// once the tile has been played (locked); a freshly selected tile shows 0
+    /// rather than a stale count carried over from a prior tile.
+    private var singleWordEscalation: Int {
+        engine.activeGroup.state == .locked ? engine.repetitionCount : 0
+    }
+
+    private var canFire: Bool { canReplay || canGo || isSingleTile }
+
+    /// The primary button's action, resolved by current state: replay an
+    /// already-spoken group, cancel a single tile, or generate from 2+ tiles.
+    private var primaryAction: () -> Void {
+        if canReplay { return onReplay }
+        if isSingleTile { return onCancelSingle }
+        return onGo
+    }
 
     private var isPulsing: Bool {
+        // Pulses the play button (2+ tiles) or the cancel-✕ (single tile) once
+        // the engine raises the idle nudge at the pulse-after interval.
         engine.isIdleNudge && canFire && !engine.isThinking
     }
 
