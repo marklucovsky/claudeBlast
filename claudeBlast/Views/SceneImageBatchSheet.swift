@@ -152,7 +152,7 @@ final class SceneImageBatchController {
                 do {
                     let image = try await TileImageGenerator.generate(
                         displayName: tile.displayName, wordClass: tile.wordClass,
-                        imageSet: self.resolver?.activeSet ?? .arasaac, apiKey: self.apiKey)
+                        imageSet: self.resolver?.activeSet ?? .playful3D, apiKey: self.apiKey)
                     if let context = self.context, let resolver = self.resolver,
                        TilePhotoCommit.apply(image, to: tile, context: context, resolver: resolver) != nil {
                         self.failures.append(self.currentName)

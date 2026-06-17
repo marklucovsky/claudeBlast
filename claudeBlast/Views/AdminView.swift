@@ -46,7 +46,7 @@ struct AdminView: View {
     @AppStorage(AppSettingsKey.tileSpeechEnabled) private var tileSpeechEnabled: Bool = false
     @AppStorage(AppSettingsKey.speechVoiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
-    @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.arasaac.rawValue
+    @AppStorage(AppSettingsKey.imageSet) private var imageSetRaw: String = ImageSetID.playful3D.rawValue
 
     // Sentence tray timeline settings
     @AppStorage(AppSettingsKey.tileCapPerGroup) private var tileCapPerGroup: Int = 4
@@ -529,9 +529,9 @@ struct AdminView: View {
                 step: 1
             )
             Picker("Image Set", selection: $imageSetRaw) {
-                ForEach(ImageSetID.allCases) { setID in
+                ForEach(ImageSetID.selectable) { setID in
                     VStack(alignment: .leading) {
-                        Text(setID.displayName)
+                        Text(setID.isShippable ? setID.displayName : "\(setID.displayName) (incomplete)")
                     }
                     .tag(setID.rawValue)
                 }
