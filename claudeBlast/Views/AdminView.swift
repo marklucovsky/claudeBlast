@@ -509,9 +509,7 @@ struct AdminView: View {
                     Text("Mock").tag("mock")
                 }
                 if providerChoice == "openai" {
-                    SecureField("OpenAI API Key", text: $apiKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    OpenAIKeyEntrySection(apiKey: $apiKey, showCostEstimate: false)
                     if apiKey.isEmpty {
                         Text("Enter your OpenAI API key to enable AI sentence generation.")
                             .font(.caption)
