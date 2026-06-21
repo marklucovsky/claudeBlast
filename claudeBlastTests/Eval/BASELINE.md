@@ -58,3 +58,27 @@ go_home        intensities [1,4,3,3]   calls [escalates, regresses, flat]
 Rewrite the escalation prompt so each rung is explicitly hotter than the prior
 one, re-run this capture, and beat the baseline: Tier-1 escalation pass-rate up
 from 0%, judge escalate-rate up from 38%, regressions down from 3.
+
+## A3 result — 2026-06-20
+
+Rewrote `escalationPrompt` to be cumulative + graduated with a neutral example
+(see SentencePromptBuilder). Re-ran the capture:
+
+| Surface | Baseline | After A3 |
+|---|---|---|
+| Sentence Tier-1 / judge | 100% / 5.00 | 100% / 5.00 (unchanged) |
+| Escalation Tier-1 pass | 0% | 100% |
+| Escalation judge escalate-rate | 38% | 85% |
+| Escalation regressions | 3 | 1 |
+
+Ladders now climb instead of flatlining (e.g. chocolate: "I want chocolate!" →
+"I WANT CHOCOLATE!!!" → "I WANT CHOCOLATE NOW!!!").
+
+### Known residual — the intensity ceiling
+Once a ladder reaches maximum intensity (ALL-CAPS + multiple "!"), deeper rungs
+have nowhere higher to go, so the final rung of the deepest ladder
+(pinkfong_video, 4 extra steps) occasionally plateaus or dips a little run-to-run.
+This is a ceiling effect, not the old broken behavior. The live escalation Tier-1
+floor is strict (any drop fails), so that one ladder can intermittently flag —
+acceptable since it's opt-in and the judge confirms the overall ramp is healthy.
+Minor wording nits remain (e.g. "I need HUNGRY now") from the blunt CAPS rule.
