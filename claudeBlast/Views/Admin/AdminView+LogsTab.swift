@@ -47,15 +47,19 @@ extension AdminView {
     var escalatedThisWeekCount: Int {
         utterancesThisWeek.count { $0.repetitionCount > 0 }
     }
-    /// Most-tapped tiles this week, by display value, highest first.
-    var topTilesThisWeek: [(value: String, count: Int)] {
+    /// Most-tapped tiles this week, highest first. Carries the key + wordClass
+    /// so the chip can render the real tile image.
+    var topTilesThisWeek: [(key: String, value: String, wordClass: String, count: Int)] {
         var counts: [String: Int] = [:]
         for u in utterancesThisWeek {
             for key in u.tileKeys { counts[key, default: 0] += 1 }
         }
         return counts.sorted { $0.value > $1.value }
-            .prefix(8)
-            .map { (tileLookup[$0.key]?.value ?? $0.key, $0.value) }
+            .prefix(10)
+            .map { (key: $0.key,
+                    value: tileLookup[$0.key]?.value ?? $0.key,
+                    wordClass: tileLookup[$0.key]?.wordClass ?? "",
+                    count: $0.value) }
     }
     var recentUtterances: [LoggedUtterance] { Array(loggedUtterances.prefix(5)) }
 
@@ -67,11 +71,18 @@ extension AdminView {
     var activitySummarySection: some View {
         let week = utterancesThisWeek
         Section {
-            HStack {
-                StatBox(label: "Today", value: "\(utterancesTodayCount)", color: .primary)
-                StatBox(label: "This Week", value: "\(week.count)", color: .blue)
-                StatBox(label: "Escalated", value: "\(escalatedThisWeekCount)", color: .orange)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("UTTERANCES — WHAT THE CHILD SAID")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    StatBox(label: "Today", value: "\(utterancesTodayCount)", color: .primary)
+                    StatBox(label: "This Week", value: "\(week.count)", color: .blue)
+                    StatBox(label: "Escalated", value: "\(escalatedThisWeekCount)", color: .orange)
+                }
             }
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+
             if topTilesThisWeek.isEmpty {
                 Text("No activity logged this week yet.")
                     .font(.caption)
@@ -82,22 +93,20 @@ extension AdminView {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             ForEach(Array(topTilesThisWeek.enumerated()), id: \.offset) { _, item in
-                                Text("\(item.value) ×\(item.count)")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Capsule().fill(Color(.secondarySystemFill)))
+                                MostUsedTileChip(key: item.key, value: item.value,
+                                                 wordClass: item.wordClass, count: item.count)
                             }
                         }
                     }
                 }
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 8, trailing: 16))
             }
         } header: {
             Text("Activity — This Week")
         } footer: {
-            Text("Escalated counts utterances where the child repeated the same words to insist harder.")
+            Text("Counts of finalized utterances. Escalated = the child repeated the same words to insist harder.")
         }
     }
 
@@ -125,46 +134,52 @@ extension AdminView {
         }
     }
 
+    /// Dense two-row record: row 1 the tapped tiles (horizontal chips) + time,
+    /// row 2 the generated sentence (single line).
     func recentUtteranceRow(_ utterance: LoggedUtterance) -> some View {
-        HStack(spacing: 10) {
-            TileGridIcon(tiles: tileSelections(forKeys: utterance.tileKeys))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(utterance.sentence)
-                    .font(.caption)
-                    .lineLimit(2)
-                Text(utterance.createdAt, format: .dateTime.weekday().hour().minute())
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                LogTileStrip(tiles: tileSelections(forKeys: utterance.tileKeys))
+                Spacer(minLength: 8)
+                if utterance.repetitionCount > 0 {
+                    Label("\(utterance.repetitionCount)", systemImage: "flame.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+                Text(utterance.createdAt, format: .dateTime.weekday(.abbreviated).hour().minute())
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            if utterance.repetitionCount > 0 {
-                Label("\(utterance.repetitionCount)", systemImage: "flame.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
+            Text(utterance.sentence)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
     // MARK: - Promoted tiles helpers
 
     func promotedTileRow(_ entry: SentenceCache) -> some View {
-        HStack(spacing: 10) {
-            TileGridIcon(tiles: tileSelections(for: entry))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.sentence)
-                    .font(.caption)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                LogTileStrip(tiles: tileSelections(for: entry))
+                Spacer(minLength: 8)
+                if entry.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
                 Text("\(entry.hitCount) hits")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            if entry.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
+            Text(entry.sentence)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
     // MARK: - Cache Stats
@@ -341,4 +356,58 @@ extension AdminView {
         isResetting = false
     }
     #endif
+}
+
+// MARK: - Log tile chips
+
+/// A horizontal strip of small tile images — the dense, scannable replacement
+/// for the 2×2 `TileGridIcon` cube in the Logs list. Matches the horizontal
+/// tile format used in the trays.
+struct LogTileStrip: View {
+    let tiles: [TileSelection]
+    var maxCount: Int = 6
+    private let size: CGFloat = 26
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(tiles.prefix(maxCount).enumerated()), id: \.offset) { _, tile in
+                TileImageView(key: tile.key, wordClass: tile.wordClass)
+                    .frame(width: size, height: size)
+                    .background(wordClassColor(tile.wordClass).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+            if tiles.count > maxCount {
+                Text("+\(tiles.count - maxCount)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// A "most used" chip: the real tile image + its word + a ×N usage count.
+struct MostUsedTileChip: View {
+    let key: String
+    let value: String
+    let wordClass: String
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            TileImageView(key: key, wordClass: wordClass)
+                .frame(width: 26, height: 26)
+                .background(wordClassColor(wordClass).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+            Text(value)
+                .font(.caption)
+                .lineLimit(1)
+            Text("×\(count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 10)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color(.secondarySystemFill)))
+    }
 }

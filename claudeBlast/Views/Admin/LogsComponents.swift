@@ -19,27 +19,26 @@ struct PromotedTilesDetailView: View {
     var body: some View {
         List {
             ForEach(entries) { entry in
-                HStack(spacing: 10) {
-                    TileGridIcon(tiles: tileSelections(for: entry))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.sentence)
-                            .font(.subheadline)
-                        Text(entry.cacheKey)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                        Text("Hits: \(entry.hitCount)")
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        LogTileStrip(tiles: tileSelections(for: entry))
+                        Spacer(minLength: 8)
+                        Text("\(entry.hitCount) hits")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        Button {
+                            entry.isPinned.toggle()
+                            try? modelContext.save()
+                        } label: {
+                            Image(systemName: entry.isPinned ? "pin.fill" : "pin")
+                                .foregroundStyle(entry.isPinned ? .orange : .secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Spacer()
-                    Button {
-                        entry.isPinned.toggle()
-                        try? modelContext.save()
-                    } label: {
-                        Image(systemName: entry.isPinned ? "pin.fill" : "pin")
-                            .foregroundStyle(entry.isPinned ? .orange : .secondary)
-                    }
-                    .buttonStyle(.plain)
+                    Text(entry.sentence)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
         }
