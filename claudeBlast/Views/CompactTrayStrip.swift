@@ -40,8 +40,8 @@ struct CompactTrayStrip: View {
     let onShowHistory: () -> Void
     let onShowFavorites: () -> Void
     let onHome: () -> Void
-    /// Long-press Home (while at home) to flip interaction mode — demo toggle.
-    let onToggleMode: () -> Void
+    /// Long-press Home to open the caregiver menu (mode toggle + gated Admin).
+    let onOpenMenu: () -> Void
     let isAtHome: Bool
     let favoritesCount: Int
     let isSentenceShown: Bool
@@ -93,7 +93,7 @@ struct CompactTrayStrip: View {
             NavStrip(
                 isAtHome: isAtHome,
                 onHome: onHome,
-                onToggleMode: onToggleMode,
+                onOpenMenu: onOpenMenu,
                 latestGroup: engine.groupHistory.first,
                 historyCount: engine.groupHistory.count,
                 isHistoryShown: isHistoryShown,
@@ -340,7 +340,7 @@ struct LeftTailBubble: Shape {
 private struct NavStrip: View {
     let isAtHome: Bool
     let onHome: () -> Void
-    let onToggleMode: () -> Void
+    let onOpenMenu: () -> Void
 
     let latestGroup: TileGroup?
     let historyCount: Int
@@ -353,7 +353,7 @@ private struct NavStrip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            HomeCard(isEnabled: !isAtHome, action: onHome, onToggleMode: onToggleMode)
+            HomeCard(isEnabled: !isAtHome, action: onHome, onOpenMenu: onOpenMenu)
 
             HistoryCard(
                 group: latestGroup,
@@ -377,7 +377,7 @@ private struct NavStrip: View {
 private struct HomeCard: View {
     let isEnabled: Bool
     let action: () -> Void
-    let onToggleMode: () -> Void
+    let onOpenMenu: () -> Void
 
     var body: some View {
         Button(action: { if isEnabled { action() } }) {
@@ -396,11 +396,11 @@ private struct HomeCard: View {
         // Not `.disabled` — long-press while at home toggles interaction mode.
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.6).onEnded { _ in
-                if !isEnabled { onToggleMode() }
+                onOpenMenu()
             }
         )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold to switch modes.")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold for caregiver options.")
     }
 }
 

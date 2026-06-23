@@ -37,7 +37,9 @@ struct TileGridView: View {
     @Environment(TileScriptRunner.self) private var scriptRunner
     @Environment(TileScriptRecorder.self) private var recorder
     @Environment(ChildProfileResolver.self) private var profileResolver
+    @Environment(CaregiverMenuCoordinator.self) private var caregiverMenu
     @Environment(\.modelContext) private var modelContext
+    @State private var showCaregiverMenu = false
     @State private var currentDisplayPage: Int? = 0
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = true
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
@@ -99,7 +101,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
-                    onToggleMode: { toggleInteractionMode() },
+                    onOpenMenu: { showCaregiverMenu = true },
                     isAtHome: coordinator.navigationPath.count <= 1
                 )
                 .padding(.top, 8)
@@ -124,7 +126,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
-                    onToggleMode: { toggleInteractionMode() },
+                    onOpenMenu: { showCaregiverMenu = true },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
                     isSentenceShown: compactOverlay == .sentence,
@@ -162,7 +164,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
-                    onToggleMode: { toggleInteractionMode() },
+                    onOpenMenu: { showCaregiverMenu = true },
                     onShowFavorites: { showCompactOverlay(.favorites) },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
@@ -203,6 +205,17 @@ struct TileGridView: View {
             } else {
                 TileScriptRecordingOverlay()
             }
+        }
+        // Caregiver menu — opened by long-pressing Home. Replaces the old hidden
+        // triple-tap → hamburger → menu chain. Mode toggle is direct; Admin is
+        // gated by AdminGate (Face ID / PIN) when ContentView presents it.
+        .confirmationDialog("Caregiver Menu", isPresented: $showCaregiverMenu, titleVisibility: .visible) {
+            Button(engine.interactionMode == .singleWord ? "Switch to AI Sentences" : "Switch to Single Words") {
+                toggleInteractionMode()
+            }
+            Button("Admin\u{2026}") { caregiverMenu.requested = .admin }
+            Button("TileScript\u{2026}") { caregiverMenu.requested = .tileScript }
+            Button("Cancel", role: .cancel) {}
         }
         .onChange(of: engine.canReplay) { _, isReady in
             guard isCompact else { return }
@@ -541,9 +554,9 @@ struct TileGridView: View {
     }
 
     /// Toggle the active child between AI-sentence and single-word mode.
-    /// Wired to a long-press on the Home button while it's disabled (at home) —
-    /// a quick caregiver gesture to flip the device for a side-by-side demo
-    /// without opening Admin. Persists to the profile and resets the tray.
+    /// Wired to the "Switch to…" item in the caregiver menu (long-press Home) —
+    /// a quick way to flip the device for a side-by-side demo without opening
+    /// Admin. Persists to the profile and resets the tray.
     private func toggleInteractionMode() {
         guard let profile = profileResolver.active else { return }
         profile.interactionMode = (profile.interactionMode == .sentence) ? .singleWord : .sentence

@@ -47,8 +47,8 @@ struct SentenceTrayView: View {
     let onExpandSentence: () -> Void
     /// Tap the Home card. Wired to navigate to the active scene's root page.
     let onHome: () -> Void
-    /// Long-press Home (while at home) to flip interaction mode — demo toggle.
-    let onToggleMode: () -> Void
+    /// Long-press Home to open the caregiver menu (mode toggle + gated Admin).
+    let onOpenMenu: () -> Void
     /// Tap the Favorites card. Opens the GlassFavoritesOverlay.
     let onShowFavorites: () -> Void
     /// True when the user is at the home page — dims the Home card.
@@ -166,7 +166,7 @@ struct SentenceTrayView: View {
     /// makes sense given the available width.
     private var navStrip: some View {
         HStack(alignment: .center, spacing: 8) {
-            IPadHomeCard(isEnabled: !isAtHome, action: onHome, onToggleMode: onToggleMode)
+            IPadHomeCard(isEnabled: !isAtHome, action: onHome, onOpenMenu: onOpenMenu)
 
             historyScroll
                 .frame(maxWidth: .infinity)
@@ -377,7 +377,7 @@ private struct IPadThinkingBubble: View {
 private struct IPadHomeCard: View {
     let isEnabled: Bool
     let action: () -> Void
-    let onToggleMode: () -> Void
+    let onOpenMenu: () -> Void
 
     var body: some View {
         Button(action: { if isEnabled { action() } }) {
@@ -396,11 +396,11 @@ private struct IPadHomeCard: View {
         // Not `.disabled` — long-press while at home toggles interaction mode.
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.6).onEnded { _ in
-                if !isEnabled { onToggleMode() }
+                onOpenMenu()
             }
         )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold to switch modes.")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold for caregiver options.")
     }
 }
 

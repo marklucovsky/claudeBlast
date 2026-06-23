@@ -24,9 +24,8 @@ struct SingleWordTrayView: View {
     let onClear: () -> Void
     /// Return to the active scene's home page.
     let onHome: () -> Void
-    /// Long-press the Home button (while it's disabled/at-home) to flip
-    /// interaction mode — the quick caregiver demo toggle.
-    let onToggleMode: () -> Void
+    /// Long-press Home to open the caregiver menu (mode toggle + gated Admin).
+    let onOpenMenu: () -> Void
     let isAtHome: Bool
 
     private var strip: [TileSelection] { engine.spokenStrip }
@@ -37,7 +36,7 @@ struct SingleWordTrayView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            HomeButton(isEnabled: !isAtHome, action: onHome, onToggleMode: onToggleMode)
+            HomeButton(isEnabled: !isAtHome, action: onHome, onOpenMenu: onOpenMenu)
 
             stripCard
                 .frame(maxWidth: .infinity)
@@ -137,7 +136,7 @@ private struct WordChip: View {
 private struct HomeButton: View {
     let isEnabled: Bool
     let action: () -> Void
-    let onToggleMode: () -> Void
+    let onOpenMenu: () -> Void
 
     var body: some View {
         Button(action: { if isEnabled { action() } }) {
@@ -156,11 +155,11 @@ private struct HomeButton: View {
         // interaction mode; a tap is a harmless no-op.
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.6).onEnded { _ in
-                if !isEnabled { onToggleMode() }
+                onOpenMenu()
             }
         )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold to switch modes.")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold for caregiver options.")
     }
 }
 
