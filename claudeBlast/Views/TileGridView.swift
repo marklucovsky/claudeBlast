@@ -207,15 +207,16 @@ struct TileGridView: View {
             }
         }
         // Caregiver menu — opened by long-pressing Home. Replaces the old hidden
-        // triple-tap → hamburger → menu chain. Mode toggle is direct; Admin is
-        // gated by AdminGate (Face ID / PIN) when ContentView presents it.
-        .confirmationDialog("Caregiver Menu", isPresented: $showCaregiverMenu, titleVisibility: .visible) {
-            Button(engine.interactionMode == .singleWord ? "Switch to AI Sentences" : "Switch to Single Words") {
-                toggleInteractionMode()
-            }
-            Button("Admin\u{2026}") { caregiverMenu.requested = .admin }
-            Button("TileScript\u{2026}") { caregiverMenu.requested = .tileScript }
-            Button("Cancel", role: .cancel) {}
+        // triple-tap → hamburger → menu chain. Anchored to the top-leading corner
+        // (where the tray's Home button sits) so it pops up next to Home rather
+        // than centered mid-screen — the caregiver's reaching arm doesn't occlude
+        // it. Mode toggle is direct; Admin is gated by AdminGate (Face ID / PIN)
+        // when ContentView presents it.
+        .popover(isPresented: $showCaregiverMenu,
+                 attachmentAnchor: .point(.topLeading),
+                 arrowEdge: .top) {
+            caregiverMenuContent
+                .presentationCompactAdaptation(.popover)
         }
         .onChange(of: engine.canReplay) { _, isReady in
             guard isCompact else { return }
@@ -551,6 +552,52 @@ struct TileGridView: View {
                     }
             )
         }
+    }
+
+    // MARK: - Caregiver menu
+
+    /// Compact menu shown in the Home-anchored popover: flip mode, or open a
+    /// gated destination. Kept small so the popover stays near Home.
+    private var caregiverMenuContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Caregiver Menu")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+            caregiverMenuRow(
+                engine.interactionMode == .singleWord ? "Switch to AI Sentences" : "Switch to Single Words",
+                systemImage: "arrow.left.arrow.right"
+            ) {
+                showCaregiverMenu = false
+                toggleInteractionMode()
+            }
+            Divider()
+            caregiverMenuRow("Admin", systemImage: "lock.fill") {
+                showCaregiverMenu = false
+                caregiverMenu.requested = .admin
+            }
+            caregiverMenuRow("TileScript", systemImage: "play.rectangle.fill") {
+                showCaregiverMenu = false
+                caregiverMenu.requested = .tileScript
+            }
+        }
+        .frame(minWidth: 240)
+        .padding(.bottom, 8)
+    }
+
+    private func caregiverMenuRow(_ title: String, systemImage: String,
+                                  action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Toggle the active child between AI-sentence and single-word mode.

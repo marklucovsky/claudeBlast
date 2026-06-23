@@ -281,7 +281,6 @@ extension AdminView {
     @ViewBuilder
     var developerSection: some View {
         Section("Developer") {
-            Toggle("Show Nav Menu", isOn: $devShowNav)
             if isResetting {
                 HStack {
                     ProgressView().controlSize(.small)

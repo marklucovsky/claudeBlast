@@ -62,7 +62,6 @@ struct AdminView: View {
 
     #if DEBUG
     @AppStorage(AppSettingsKey.icloudEnabled) var icloudEnabled: Bool = false
-    @AppStorage(AppSettingsKey.devShowNav) var devShowNav: Bool = false
     @State var showResetConfirmation = false
     @State var isResetting = false
     #endif
