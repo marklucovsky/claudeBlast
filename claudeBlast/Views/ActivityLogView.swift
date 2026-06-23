@@ -139,72 +139,47 @@ struct ActivityLogView: View {
         }
     }
 
+    /// Dense two-row record (matches the Admin Logs tab): tiles + time on row 1,
+    /// generated sentence on row 2.
     @ViewBuilder
     private func entryRow(_ entry: LoggedUtterance) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    TileGroupBubble(tiles: tileSelections(for: entry.tileKeys))
-                }
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                LogTileStrip(tiles: tileSelections(for: entry.tileKeys))
+                Spacer(minLength: 8)
                 if entry.repetitionCount > 0 {
-                    escalationBadge(entry.repetitionCount)
+                    Label("\(entry.repetitionCount)", systemImage: "flame.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
                 }
-            }
-            Text(entry.sentence.isEmpty ? "(no sentence)" : entry.sentence)
-                .font(.subheadline)
-                .lineLimit(3)
-            HStack(spacing: 6) {
                 Text(entry.createdAt, format: .dateTime.hour().minute())
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                if let scene = entry.sceneName, !scene.isEmpty {
-                    Text("• \(scene)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
             }
+            Text(entry.sentence.isEmpty ? "(no sentence)" : entry.sentence)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .padding(.vertical, 2)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
     @ViewBuilder
     private func comboRow(_ combo: (keys: [String], count: Int, latestSentence: String, latestAt: Date)) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    TileGroupBubble(tiles: tileSelections(for: combo.keys))
-                }
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                LogTileStrip(tiles: tileSelections(for: combo.keys))
+                Spacer(minLength: 8)
                 Text("\(combo.count)×")
-                    .font(.caption.monospacedDigit().bold())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.blue.opacity(0.15)))
+                    .font(.caption2.monospacedDigit().bold())
                     .foregroundStyle(.blue)
             }
-            if !combo.latestSentence.isEmpty {
-                Text(combo.latestSentence)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-            Text("Last: \(combo.latestAt, format: .relative(presentation: .named))")
-                .font(.caption2)
+            Text(combo.latestSentence.isEmpty ? "—" : combo.latestSentence)
+                .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private func escalationBadge(_ count: Int) -> some View {
-        Label("\(count)", systemImage: "arrow.triangle.2.circlepath")
-            .labelStyle(.titleAndIcon)
-            .font(.caption2.bold())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color.orange.opacity(0.18)))
-            .foregroundStyle(.orange)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
     private func tileSelections(for keys: [String]) -> [TileSelection] {

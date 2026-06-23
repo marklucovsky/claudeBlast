@@ -116,4 +116,52 @@ struct InteractionModeTests {
             #expect(engine.spokenStrip.isEmpty)
         }
     }
+
+    // MARK: - Escalation accounting
+
+    /// Regression: escalation depth must reach the flushed group (and the logged
+    /// utterance). Previously the flush logged the TileGroup's own repetitionCount
+    /// (never updated) instead of the engine's live counter, so every utterance
+    /// recorded 0 escalations.
+    @Test func escalationDepthIsLoggedOnCommit() async throws {
+        let container = try makeContainer()
+        let ctx = container.mainContext
+        // Default profile is .sentence mode.
+        let profile = ChildProfile(displayName: "Test", birthday: .now, isActive: true)
+        ctx.insert(profile)
+        try? ctx.save()
+        let resolver = ChildProfileResolver()
+        resolver.configure(modelContext: ctx)
+        let engine = SentenceEngine(provider: MockSentenceProvider(minLatency: 0, maxLatency: 0))
+        engine.configure(modelContext: ctx, profileResolver: resolver)
+
+        engine.addTile(TileModel(key: "eat", wordClass: "actions"))
+        engine.addTile(TileModel(key: "pizza", wordClass: "food"))
+        engine.triggerGo()
+        try await waitUntil { engine.canReplay }
+        engine.replay()
+        try await waitUntil { !engine.isThinking }
+        engine.replay()
+        try await waitUntil { !engine.isThinking }
+
+        #expect(engine.repetitionCount == 2)
+        engine.commitActiveAndStartNew()
+        #expect(engine.groupHistory.first?.repetitionCount == 2)
+
+        let logged = try ctx.fetch(FetchDescriptor<LoggedUtterance>())
+        #expect(logged.contains { $0.repetitionCount == 2 })
+        withExtendedLifetime(container) {}
+    }
+
+    private func waitUntil(timeout: Duration = .seconds(2),
+                           _ condition: @escaping () -> Bool) async throws {
+        let start = ContinuousClock.now
+        while !condition() {
+            if ContinuousClock.now - start > timeout {
+                Issue.record("waitUntil timed out")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
 }

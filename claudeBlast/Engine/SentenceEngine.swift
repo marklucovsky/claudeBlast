@@ -477,6 +477,11 @@ final class SentenceEngine {
             if finalized.sentence == nil {
                 finalized.sentence = activeGroup.tiles.map(\.value).joined(separator: " ")
             }
+            // Stamp the live escalation depth onto the group. The engine tracks
+            // escalation in `self.repetitionCount` (bumped on each replay); the
+            // TileGroup's own field is otherwise never updated, so without this
+            // every logged utterance recorded 0 escalations.
+            finalized.repetitionCount = repetitionCount
             groupHistory.insert(finalized, at: 0)
             // Trim to configured buffer size.
             let limit = trayBufferSize
