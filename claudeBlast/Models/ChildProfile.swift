@@ -9,6 +9,32 @@ import SwiftData
 import Foundation
 import AVFoundation
 
+/// How the child's tile taps turn into communication.
+enum InteractionMode: String, CaseIterable, Identifiable {
+    /// Tiles accumulate into a group; AI builds a sentence (the default).
+    case sentence
+    /// Classic AAC: each tile speaks its own word on tap and appends to a
+    /// running FIFO strip. No AI, no sentence — good for ABC/123/new-word
+    /// boards and for demoing AI vs. classic side by side on one device.
+    case singleWord
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .sentence:   return "AI Sentences"
+        case .singleWord: return "Single Words"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .sentence:   return "Tiles combine into an AI-generated sentence."
+        case .singleWord: return "Each tile speaks its word; words build a strip. No AI."
+        }
+    }
+}
+
 /// Per-child identity. Syncs via CloudKit when iCloud is enabled, so a
 /// therapist's roster appears across their own devices.
 ///
@@ -36,6 +62,10 @@ final class ChildProfile {
     var ttsRate: Float = 0.5
     /// AVSpeechUtterance volume. 0.0–1.0.
     var ttsVolume: Float = 1.0
+    /// Interaction mode raw value (see `interactionMode`). Stored as a String
+    /// for CloudKit; defaults to AI sentences. Unknown values fall back to
+    /// `.sentence` so a future mode on another device degrades gracefully.
+    var interactionModeRaw: String = InteractionMode.sentence.rawValue
     /// BlasterScene.name to land on at app launch / session-revert.
     /// Empty = honor the device's currently-active scene.
     var defaultSceneKey: String = ""
@@ -79,6 +109,16 @@ final class ChildProfile {
     /// Convention: 1st grade ≈ age 6, capped at K-12 range.
     var ageGrade: Int {
         min(12, max(1, age - 5))
+    }
+
+    /// Typed accessor over `interactionModeRaw`. Reads fall back to `.sentence`
+    /// for an unknown raw value; writes store the raw string + bump `modifiedAt`.
+    var interactionMode: InteractionMode {
+        get { InteractionMode(rawValue: interactionModeRaw) ?? .sentence }
+        set {
+            interactionModeRaw = newValue.rawValue
+            modifiedAt = .now
+        }
     }
 
     // MARK: - Age helpers

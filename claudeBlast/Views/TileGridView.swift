@@ -36,6 +36,8 @@ struct TileGridView: View {
     @Environment(NavigationCoordinator.self) private var coordinator
     @Environment(TileScriptRunner.self) private var scriptRunner
     @Environment(TileScriptRecorder.self) private var recorder
+    @Environment(ChildProfileResolver.self) private var profileResolver
+    @Environment(\.modelContext) private var modelContext
     @State private var currentDisplayPage: Int? = 0
     @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = true
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
@@ -87,7 +89,21 @@ struct TileGridView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if isCompact {
+            if engine.interactionMode == .singleWord {
+                // Classic AAC: a running FIFO strip of spoken words, no AI.
+                // One adaptive view for both form factors.
+                SingleWordTrayView(
+                    onRemove: { index in engine.removeStripWord(at: index) },
+                    onClear: { engine.clearStrip() },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    onToggleMode: { toggleInteractionMode() },
+                    isAtHome: coordinator.navigationPath.count <= 1
+                )
+                .padding(.top, 8)
+            } else if isCompact {
                 CompactTrayStrip(
                     onTileTap: { index in engine.removeTile(at: index) },
                     onGo: {
@@ -108,6 +124,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
+                    onToggleMode: { toggleInteractionMode() },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
                     isSentenceShown: compactOverlay == .sentence,
@@ -145,6 +162,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
+                    onToggleMode: { toggleInteractionMode() },
                     onShowFavorites: { showCompactOverlay(.favorites) },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
@@ -522,6 +540,20 @@ struct TileGridView: View {
         }
     }
 
+    /// Toggle the active child between AI-sentence and single-word mode.
+    /// Wired to a long-press on the Home button while it's disabled (at home) —
+    /// a quick caregiver gesture to flip the device for a side-by-side demo
+    /// without opening Admin. Persists to the profile and resets the tray.
+    private func toggleInteractionMode() {
+        guard let profile = profileResolver.active else { return }
+        profile.interactionMode = (profile.interactionMode == .sentence) ? .singleWord : .sentence
+        try? modelContext.save()
+        profileResolver.refresh()
+        engine.clearSelection()
+        engine.clearStrip()
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    }
+
     private func handleTileTap(_ entry: TileEntry) {
         let key = entry.key
         guard let tile = tileLookup[key] else { return }
@@ -538,24 +570,22 @@ struct TileGridView: View {
             && !resolvedLink.isEmpty
             && resolvedLink == key
 
-        var alreadySelected = false
         if entry.isAudible {
-            alreadySelected = engine.selectedTiles.contains { $0.key == key }
-            if alreadySelected {
-                if let index = engine.selectedTiles.firstIndex(where: { $0.key == key }) {
-                    engine.removeTile(at: index)
-                }
-            } else {
-                if tileSpeechEnabled {
-                    engine.speakTile(tile.displayName)
-                }
-                engine.addTile(tile)
-                if recorder.state == .recording {
-                    if isAudibleNavTile {
-                        recorder.recordAudibleNavigate(pageKey: resolvedLink)
-                    } else {
-                        recorder.recordTap(tileKey: key)
-                    }
+            // Speak the word on tap. Always in single-word mode (the word IS the
+            // communication); in sentence mode only when the preview is enabled.
+            if tileSpeechEnabled || engine.interactionMode == .singleWord {
+                engine.speakTile(tile.displayName)
+            }
+            // Universal: a grid tap adds, never deletes. The engine appends to
+            // the FIFO strip (single-word, duplicates allowed) or to the active
+            // group (sentence, no-op if the tile is already present). Removal is
+            // a tray-chip tap.
+            engine.addTile(tile)
+            if recorder.state == .recording {
+                if isAudibleNavTile {
+                    recorder.recordAudibleNavigate(pageKey: resolvedLink)
+                } else {
+                    recorder.recordTap(tileKey: key)
                 }
             }
         }
@@ -564,8 +594,7 @@ struct TileGridView: View {
             if recorder.state == .recording {
                 // Skip a separate navigate record if we already recorded an audible-nav for
                 // this gesture (it covers both the tile and the navigation).
-                let recordedAsAudibleNav = isAudibleNavTile && !alreadySelected
-                if !recordedAsAudibleNav {
+                if !isAudibleNavTile {
                     recorder.recordNavigate(pageKey: resolvedLink)
                 }
             }

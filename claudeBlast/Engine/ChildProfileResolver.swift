@@ -84,6 +84,9 @@ final class ChildProfileResolver {
     var ttsRate: Float { active?.ttsRate ?? Self.fallbackTTSRate }
     var ttsVolume: Float { active?.ttsVolume ?? Self.fallbackTTSVolume }
     var maxSelectedTiles: Int { active?.maxSelectedTiles ?? Self.fallbackMaxTiles }
+    /// Interaction mode of the active child; defaults to AI sentences when no
+    /// real profile is active (Sandbox/pre-onboarding).
+    var interactionMode: InteractionMode { active?.interactionMode ?? .sentence }
     var activeChildID: String? { active?.id }
 
     // MARK: - Mutation

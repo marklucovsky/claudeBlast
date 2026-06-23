@@ -41,6 +41,16 @@ final class SentenceEngine {
     private(set) var comparisonSentence: String?
     var sessionNotes: String = ""
 
+    /// Single-word (classic AAC) mode only: the running FIFO strip of spoken
+    /// words, oldest first. New words append on the right; once it exceeds
+    /// `spokenStripCap` the oldest drops off the left. Duplicates are allowed —
+    /// tapping `dad` twice yields `[dad, dad]`. Empty / unused in sentence mode.
+    private(set) var spokenStrip: [TileSelection] = []
+
+    /// Hard cap on the FIFO strip so it can't grow unbounded; the view shows a
+    /// rolling window and older words scroll off as new ones arrive.
+    private let spokenStripCap = 20
+
     // MARK: - Backwards-compatible accessors
 
     /// The active group's tiles. Used by views built before the timeline refactor.
@@ -93,6 +103,10 @@ final class SentenceEngine {
         let stored = UserDefaults.standard.integer(forKey: AppSettingsKey.tileCapPerGroup)
         return (2...8).contains(stored) ? stored : 4
     }
+
+    /// Active child's interaction mode (AI sentences vs. classic single words).
+    /// Defaults to `.sentence` before the resolver is wired or pre-onboarding.
+    var interactionMode: InteractionMode { profileResolver?.interactionMode ?? .sentence }
 
     /// Idle debounce before auto-generation; backed by AppStorage.
     var idleDebounceDuration: Duration {
@@ -171,19 +185,25 @@ final class SentenceEngine {
     // MARK: - Tile management
 
     /// Add a tile in response to a grid tap.
-    /// - If the tile is already in the active group, this toggles it off (same as removeTile).
-    /// - If there's room under the cap the tile is appended. A locked active group transitions to
-    ///   `.unlockedEditable` (its sentence is now stale); the idle timers restart and the next
-    ///   generation reflects the updated tile set.
-    /// - At cap the tap is ignored. Use Done (commitActiveAndStartNew) to commit and start fresh.
+    ///
+    /// Single-word mode routes to the FIFO spoken strip (duplicates allowed).
+    ///
+    /// Sentence mode: a grid tap **adds, never deletes** (the universal rule —
+    /// re-tapping a tile already in the group is a no-op; remove it by tapping
+    /// its tray chip). If there's room under the cap the tile is appended; a
+    /// locked group transitions to `.unlockedEditable` (its sentence is now
+    /// stale) and the idle timers restart. At cap the tap is ignored.
     func addTile(_ tile: TileModel) {
-        let selection = TileSelection(from: tile)
-
-        // Toggle-off if tile is already in the active group.
-        if let index = activeGroup.tiles.firstIndex(where: { $0.key == selection.key }) {
-            removeTile(at: index)
+        if interactionMode == .singleWord {
+            appendSpokenWord(tile)
             return
         }
+
+        let selection = TileSelection(from: tile)
+
+        // Universal: adds, never deletes. Re-tapping a present tile is a no-op
+        // (no toggle-off, no duplicate). Removal happens from the tray chip.
+        if activeGroup.tiles.contains(where: { $0.key == selection.key }) { return }
 
         guard activeGroup.tiles.count < maxTilesPerGroup else { return }
 
@@ -195,6 +215,39 @@ final class SentenceEngine {
         activeGroup.tiles.append(selection)
         cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
         scheduleGeneration()
+    }
+
+    // MARK: - Single-word (classic AAC) strip
+
+    /// Append a spoken word to the FIFO strip (single-word mode). Duplicates are
+    /// allowed; the oldest word drops off once the cap is exceeded. Each word is
+    /// logged as its own utterance so the therapist activity log stays
+    /// meaningful in this mode. Speech itself is driven by the grid tap (the
+    /// view), so this is data-only and won't double-speak.
+    private func appendSpokenWord(_ tile: TileModel) {
+        let selection = TileSelection(from: tile)
+        spokenStrip.append(selection)
+        if spokenStrip.count > spokenStripCap {
+            spokenStrip.removeFirst(spokenStrip.count - spokenStripCap)
+        }
+        cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
+        cacheManager?.logUtterance(
+            tiles: [selection],
+            sentence: selection.value,
+            repetitionCount: 0,
+            childID: profileResolver?.activeChildID
+        )
+    }
+
+    /// Remove one word from the FIFO strip (tapping its chip in the strip).
+    func removeStripWord(at index: Int) {
+        guard spokenStrip.indices.contains(index) else { return }
+        spokenStrip.remove(at: index)
+    }
+
+    /// Clear the entire spoken strip (the strip's ✕ button).
+    func clearStrip() {
+        spokenStrip.removeAll()
     }
 
     /// Remove a tile from the active group.
@@ -269,6 +322,7 @@ final class SentenceEngine {
     func resetAll() {
         clearSelection()
         groupHistory.removeAll()
+        spokenStrip.removeAll()
         repetitionCount = 0
         lastTileKey = nil
     }

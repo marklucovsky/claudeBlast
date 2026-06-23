@@ -40,6 +40,8 @@ struct CompactTrayStrip: View {
     let onShowHistory: () -> Void
     let onShowFavorites: () -> Void
     let onHome: () -> Void
+    /// Long-press Home (while at home) to flip interaction mode — demo toggle.
+    let onToggleMode: () -> Void
     let isAtHome: Bool
     let favoritesCount: Int
     let isSentenceShown: Bool
@@ -91,6 +93,7 @@ struct CompactTrayStrip: View {
             NavStrip(
                 isAtHome: isAtHome,
                 onHome: onHome,
+                onToggleMode: onToggleMode,
                 latestGroup: engine.groupHistory.first,
                 historyCount: engine.groupHistory.count,
                 isHistoryShown: isHistoryShown,
@@ -337,6 +340,7 @@ struct LeftTailBubble: Shape {
 private struct NavStrip: View {
     let isAtHome: Bool
     let onHome: () -> Void
+    let onToggleMode: () -> Void
 
     let latestGroup: TileGroup?
     let historyCount: Int
@@ -349,7 +353,7 @@ private struct NavStrip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            HomeCard(isEnabled: !isAtHome, action: onHome)
+            HomeCard(isEnabled: !isAtHome, action: onHome, onToggleMode: onToggleMode)
 
             HistoryCard(
                 group: latestGroup,
@@ -373,9 +377,10 @@ private struct NavStrip: View {
 private struct HomeCard: View {
     let isEnabled: Bool
     let action: () -> Void
+    let onToggleMode: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: { if isEnabled { action() } }) {
             HStack(spacing: 4) {
                 Image(systemName: "house.fill")
                     .font(.system(size: 11, weight: .semibold))
@@ -388,9 +393,14 @@ private struct HomeCard: View {
             .opacity(isEnabled ? 1.0 : 0.5)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        // Not `.disabled` — long-press while at home toggles interaction mode.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.6).onEnded { _ in
+                if !isEnabled { onToggleMode() }
+            }
+        )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold to switch modes.")
     }
 }
 

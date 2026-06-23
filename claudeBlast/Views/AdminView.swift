@@ -803,6 +803,25 @@ struct AdminView: View {
                 LabeledContent("Age",
                                value: "\(active.age) (grade \(active.ageGrade))")
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("Mode", selection: Binding(
+                        get: { active.interactionMode },
+                        set: { newMode in
+                            active.interactionMode = newMode // bumps modifiedAt
+                            // Start the new mode with a clean tray/strip.
+                            sentenceEngine.clearSelection()
+                            sentenceEngine.clearStrip()
+                        }
+                    )) {
+                        ForEach(InteractionMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    Text(active.interactionMode.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 NavigationLink {
                     activeProfileVoicePicker(for: active)
                         .navigationTitle("Voice")
@@ -2012,6 +2031,7 @@ private struct ChildProfileFormSheet: View {
     @State private var maxTiles: Int = 4
     @State private var ttsRate: Float = 0.5
     @State private var ttsVolume: Float = 1.0
+    @State private var interactionMode: InteractionMode = .sentence
     @State private var makeActive: Bool = false
 
     private var titleText: String {
@@ -2066,6 +2086,17 @@ private struct ChildProfileFormSheet: View {
                     )
                 }
 
+                Section("Mode") {
+                    Picker("Interaction", selection: $interactionMode) {
+                        ForEach(InteractionMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    Text(interactionMode.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Tiles + Audio") {
                     Stepper(value: $maxTiles, in: 2...8) {
                         HStack {
@@ -2116,6 +2147,7 @@ private struct ChildProfileFormSheet: View {
             maxTiles = profile.maxSelectedTiles
             ttsRate = profile.ttsRate
             ttsVolume = profile.ttsVolume
+            interactionMode = profile.interactionMode
         }
     }
 
@@ -2132,6 +2164,7 @@ private struct ChildProfileFormSheet: View {
             )
             profile.ttsRate = ttsRate
             profile.ttsVolume = ttsVolume
+            profile.interactionMode = interactionMode
             modelContext.insert(profile)
             if makeActive {
                 profileResolver.setActive(id: profile.id)
@@ -2143,6 +2176,7 @@ private struct ChildProfileFormSheet: View {
             profile.maxSelectedTiles = maxTiles
             profile.ttsRate = ttsRate
             profile.ttsVolume = ttsVolume
+            profile.interactionMode = interactionMode
             profile.modifiedAt = .now
             profileResolver.refresh()
         }
