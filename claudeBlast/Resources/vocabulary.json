@@ -895,10 +895,6 @@
     "wordClass": "drinks"
   },
   {
-    "key": "snacks",
-    "wordClass": "snacks"
-  },
-  {
     "key": "crackers",
     "wordClass": "snacks"
   },
@@ -924,10 +920,6 @@
   },
   {
     "key": "popcorn",
-    "wordClass": "snacks"
-  },
-  {
-    "key": "pretzels",
     "wordClass": "snacks"
   },
   {
@@ -1152,10 +1144,6 @@
   },
   {
     "key": "paintbrush",
-    "wordClass": "art"
-  },
-  {
-    "key": "paints",
     "wordClass": "art"
   },
   {
