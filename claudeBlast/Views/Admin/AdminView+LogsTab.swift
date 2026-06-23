@@ -12,9 +12,12 @@ extension AdminView {
     var logsTab: some View {
         NavigationStack {
             List {
+                // Activity-first: what the child actually said leads; cache and
+                // promoted-tile diagnostics are secondary, further down.
+                activitySummarySection
+                recentActivitySection
                 cachePerformanceSection
                 promotedTilesSection
-                activityLogSection
                 sentenceCacheSection
                 #if DEBUG
                 developerSection
@@ -24,6 +27,122 @@ extension AdminView {
             .toolbar { adminDoneToolbar }
         }
         .tabItem { Label("Logs", systemImage: "list.bullet.rectangle.fill") }
+    }
+
+    // MARK: - Activity summary (this week)
+
+    private var startOfToday: Date { Calendar.current.startOfDay(for: .now) }
+    private var oneWeekAgo: Date {
+        Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
+    }
+
+    var utterancesThisWeek: [LoggedUtterance] {
+        loggedUtterances.filter { $0.createdAt >= oneWeekAgo }
+    }
+    var utterancesTodayCount: Int {
+        loggedUtterances.count { $0.createdAt >= startOfToday }
+    }
+    /// Utterances this week where the child repeated the same combo to insist
+    /// harder — the volume-knob signal, now that escalation works.
+    var escalatedThisWeekCount: Int {
+        utterancesThisWeek.count { $0.repetitionCount > 0 }
+    }
+    /// Most-tapped tiles this week, by display value, highest first.
+    var topTilesThisWeek: [(value: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for u in utterancesThisWeek {
+            for key in u.tileKeys { counts[key, default: 0] += 1 }
+        }
+        return counts.sorted { $0.value > $1.value }
+            .prefix(8)
+            .map { (tileLookup[$0.key]?.value ?? $0.key, $0.value) }
+    }
+    var recentUtterances: [LoggedUtterance] { Array(loggedUtterances.prefix(5)) }
+
+    func tileSelections(forKeys keys: [String]) -> [TileSelection] {
+        keys.compactMap { tileLookup[$0].map(TileSelection.init(from:)) }
+    }
+
+    @ViewBuilder
+    var activitySummarySection: some View {
+        let week = utterancesThisWeek
+        Section {
+            HStack {
+                StatBox(label: "Today", value: "\(utterancesTodayCount)", color: .primary)
+                StatBox(label: "This Week", value: "\(week.count)", color: .blue)
+                StatBox(label: "Escalated", value: "\(escalatedThisWeekCount)", color: .orange)
+            }
+            if topTilesThisWeek.isEmpty {
+                Text("No activity logged this week yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MOST USED")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(topTilesThisWeek.enumerated()), id: \.offset) { _, item in
+                                Text("\(item.value) ×\(item.count)")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(Color(.secondarySystemFill)))
+                            }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Activity — This Week")
+        } footer: {
+            Text("Escalated counts utterances where the child repeated the same words to insist harder.")
+        }
+    }
+
+    @ViewBuilder
+    var recentActivitySection: some View {
+        Section {
+            if recentUtterances.isEmpty {
+                Text("No utterances logged yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(recentUtterances) { utterance in
+                    recentUtteranceRow(utterance)
+                }
+            }
+            NavigationLink {
+                ActivityLogView()
+            } label: {
+                Label("View full activity log", systemImage: "list.bullet.rectangle")
+            }
+        } header: {
+            Text("Recent")
+        } footer: {
+            Text("Finalized utterances from the sentence tray. Read-only review for therapists and partners.")
+        }
+    }
+
+    func recentUtteranceRow(_ utterance: LoggedUtterance) -> some View {
+        HStack(spacing: 10) {
+            TileGridIcon(tiles: tileSelections(forKeys: utterance.tileKeys))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(utterance.sentence)
+                    .font(.caption)
+                    .lineLimit(2)
+                Text(utterance.createdAt, format: .dateTime.weekday().hour().minute())
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if utterance.repetitionCount > 0 {
+                Label("\(utterance.repetitionCount)", systemImage: "flame.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
     }
 
     // MARK: - Promoted tiles helpers
@@ -131,25 +250,6 @@ extension AdminView {
             }
         } header: {
             Text("Promoted Tiles (\(promotedCandidates.count))")
-        }
-    }
-
-    @ViewBuilder
-    var activityLogSection: some View {
-        Section {
-            NavigationLink {
-                ActivityLogView()
-            } label: {
-                HStack {
-                    Image(systemName: "list.bullet.rectangle")
-                        .foregroundStyle(.secondary)
-                    Text("View Activity Log")
-                }
-            }
-        } header: {
-            Text("Activity Log")
-        } footer: {
-            Text("Finalized utterances from the sentence tray, grouped by day. Read-only review for therapists and partners.")
         }
     }
 

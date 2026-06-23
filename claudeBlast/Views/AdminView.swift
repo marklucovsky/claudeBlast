@@ -27,6 +27,9 @@ struct AdminView: View {
     // Cache hit/miss metrics from MetricEvent log
     @Query(sort: \MetricEvent.timestamp) var allMetricEvents: [MetricEvent]
 
+    // Finalized utterances — the activity-first Logs summary reads from here.
+    @Query(sort: \LoggedUtterance.createdAt, order: .reverse) var loggedUtterances: [LoggedUtterance]
+
     var cacheHitCount: Int {
         allMetricEvents.count { $0.subjectType == "cache" && $0.eventType == .hit }
     }
