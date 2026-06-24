@@ -41,6 +41,16 @@ final class SentenceEngine {
     private(set) var comparisonSentence: String?
     var sessionNotes: String = ""
 
+    /// Single-word (classic AAC) mode only: the running FIFO strip of spoken
+    /// words, oldest first. New words append on the right; once it exceeds
+    /// `spokenStripCap` the oldest drops off the left. Duplicates are allowed —
+    /// tapping `dad` twice yields `[dad, dad]`. Empty / unused in sentence mode.
+    private(set) var spokenStrip: [TileSelection] = []
+
+    /// Hard cap on the FIFO strip so it can't grow unbounded; the view shows a
+    /// rolling window and older words scroll off as new ones arrive.
+    private let spokenStripCap = 20
+
     // MARK: - Backwards-compatible accessors
 
     /// The active group's tiles. Used by views built before the timeline refactor.
@@ -93,6 +103,10 @@ final class SentenceEngine {
         let stored = UserDefaults.standard.integer(forKey: AppSettingsKey.tileCapPerGroup)
         return (2...8).contains(stored) ? stored : 4
     }
+
+    /// Active child's interaction mode (AI sentences vs. classic single words).
+    /// Defaults to `.sentence` before the resolver is wired or pre-onboarding.
+    var interactionMode: InteractionMode { profileResolver?.interactionMode ?? .sentence }
 
     /// Idle debounce before auto-generation; backed by AppStorage.
     var idleDebounceDuration: Duration {
@@ -171,19 +185,25 @@ final class SentenceEngine {
     // MARK: - Tile management
 
     /// Add a tile in response to a grid tap.
-    /// - If the tile is already in the active group, this toggles it off (same as removeTile).
-    /// - If there's room under the cap the tile is appended. A locked active group transitions to
-    ///   `.unlockedEditable` (its sentence is now stale); the idle timers restart and the next
-    ///   generation reflects the updated tile set.
-    /// - At cap the tap is ignored. Use Done (commitActiveAndStartNew) to commit and start fresh.
+    ///
+    /// Single-word mode routes to the FIFO spoken strip (duplicates allowed).
+    ///
+    /// Sentence mode: a grid tap **adds, never deletes** (the universal rule —
+    /// re-tapping a tile already in the group is a no-op; remove it by tapping
+    /// its tray chip). If there's room under the cap the tile is appended; a
+    /// locked group transitions to `.unlockedEditable` (its sentence is now
+    /// stale) and the idle timers restart. At cap the tap is ignored.
     func addTile(_ tile: TileModel) {
-        let selection = TileSelection(from: tile)
-
-        // Toggle-off if tile is already in the active group.
-        if let index = activeGroup.tiles.firstIndex(where: { $0.key == selection.key }) {
-            removeTile(at: index)
+        if interactionMode == .singleWord {
+            appendSpokenWord(tile)
             return
         }
+
+        let selection = TileSelection(from: tile)
+
+        // Universal: adds, never deletes. Re-tapping a present tile is a no-op
+        // (no toggle-off, no duplicate). Removal happens from the tray chip.
+        if activeGroup.tiles.contains(where: { $0.key == selection.key }) { return }
 
         guard activeGroup.tiles.count < maxTilesPerGroup else { return }
 
@@ -195,6 +215,39 @@ final class SentenceEngine {
         activeGroup.tiles.append(selection)
         cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
         scheduleGeneration()
+    }
+
+    // MARK: - Single-word (classic AAC) strip
+
+    /// Append a spoken word to the FIFO strip (single-word mode). Duplicates are
+    /// allowed; the oldest word drops off once the cap is exceeded. Each word is
+    /// logged as its own utterance so the therapist activity log stays
+    /// meaningful in this mode. Speech itself is driven by the grid tap (the
+    /// view), so this is data-only and won't double-speak.
+    private func appendSpokenWord(_ tile: TileModel) {
+        let selection = TileSelection(from: tile)
+        spokenStrip.append(selection)
+        if spokenStrip.count > spokenStripCap {
+            spokenStrip.removeFirst(spokenStrip.count - spokenStripCap)
+        }
+        cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
+        cacheManager?.logUtterance(
+            tiles: [selection],
+            sentence: selection.value,
+            repetitionCount: 0,
+            childID: profileResolver?.activeChildID
+        )
+    }
+
+    /// Remove one word from the FIFO strip (tapping its chip in the strip).
+    func removeStripWord(at index: Int) {
+        guard spokenStrip.indices.contains(index) else { return }
+        spokenStrip.remove(at: index)
+    }
+
+    /// Clear the entire spoken strip (the strip's ✕ button).
+    func clearStrip() {
+        spokenStrip.removeAll()
     }
 
     /// Remove a tile from the active group.
@@ -269,6 +322,7 @@ final class SentenceEngine {
     func resetAll() {
         clearSelection()
         groupHistory.removeAll()
+        spokenStrip.removeAll()
         repetitionCount = 0
         lastTileKey = nil
     }
@@ -281,7 +335,11 @@ final class SentenceEngine {
     // MARK: - Replay
 
     var canReplay: Bool {
-        activeGroup.state == .locked && activeGroup.sentence != nil && !isThinking
+        // 2+ tiles only: a single word has no generated sentence to replay or
+        // escalate, so a locked single-tile group stays in the cancel-✕ path
+        // rather than showing Play + a stale escalation badge.
+        activeGroup.state == .locked && activeGroup.sentence != nil
+            && activeGroup.tiles.count >= 2 && !isThinking
     }
 
     /// Replay the active group's sentence using escalation (repetition increments, cache bypassed).
@@ -300,6 +358,31 @@ final class SentenceEngine {
             guard let self else { return }
             await self.generate(tiles: tilesSnapshot, repetition: repetition)
         }
+    }
+
+    /// Speak the lone selected tile, counting repeats — the "mashing the
+    /// chocolate tile when she really wants chocolate" volume knob applied to a
+    /// single word. Wired to the repurposed Done-slot control when one tile is
+    /// active. It only ever says the *raw word*: a single tile is never run
+    /// through the sentence model. Generating from one word produced odd,
+    /// context-bled results (escalating "sick", clearing, then playing "down"
+    /// yielded "I feel sick down"), and a single word should stay literal.
+    /// Repeated presses bump the count (surfaced as the button's badge — the
+    /// visible "how insistent" signal; prosody escalation is a later step) and
+    /// re-arm the idle timers so the mashed tile stays alive.
+    func playSingleTile() {
+        guard activeGroup.tiles.count == 1, let tile = activeGroup.tiles.first else { return }
+        // Bump the repeat count for the badge; a different tile resets it.
+        _ = updateRepetitionState(for: activeGroup.tiles)
+        // Lock with the word as its own "sentence" so the badge gating
+        // (locked → show count) distinguishes a played tile from a freshly
+        // selected one. Single tiles never flush to history (see
+        // flushActiveToHistory), so this is display-only.
+        activeGroup.sentence = tile.value
+        activeGroup.state = .locked
+        isIdleNudge = false
+        speak(tile.value)
+        startIdleTimers()
     }
 
     // MARK: - History group interactions
@@ -381,7 +464,11 @@ final class SentenceEngine {
         isIdleNudge = false
         isDoneNudge = false
 
-        let shouldFlush = !activeGroup.tiles.isEmpty
+        // 2+ tiles only. A single tile is ephemeral (spoken on tap; the ✕ /
+        // auto-clear discard it) and must never land in history — otherwise a
+        // recalled single word reopens as a locked group and loses its
+        // cancel-✕ behavior. Empty groups are likewise never flushed.
+        let shouldFlush = activeGroup.tiles.count >= 2
             && (activeGroup.sentence != nil || allowWithoutSentence)
 
         if shouldFlush {
@@ -390,6 +477,11 @@ final class SentenceEngine {
             if finalized.sentence == nil {
                 finalized.sentence = activeGroup.tiles.map(\.value).joined(separator: " ")
             }
+            // Stamp the live escalation depth onto the group. The engine tracks
+            // escalation in `self.repetitionCount` (bumped on each replay); the
+            // TileGroup's own field is otherwise never updated, so without this
+            // every logged utterance recorded 0 escalations.
+            finalized.repetitionCount = repetitionCount
             groupHistory.insert(finalized, at: 0)
             // Trim to configured buffer size.
             let limit = trayBufferSize
@@ -441,10 +533,13 @@ final class SentenceEngine {
         isIdleNudge = false
         isDoneNudge = false
 
-        // Single tile: no preview on the group; the view derives a spelled-out preview from
-        // activeGroup.tiles. No API call, no idle timers.
+        // Single tile: no sentence generation (the view shows the spelled-out
+        // tile and the primary button becomes a cancel-✕). Still run the idle
+        // timeline so the ✕ pulses after the pulse-after interval and a
+        // lingering single tile auto-clears at the auto-Done interval.
         guard activeGroup.tiles.count >= 2 else {
             isWaiting = false
+            if activeGroup.tiles.count == 1 { startIdleTimers() }
             return
         }
 
@@ -484,12 +579,16 @@ final class SentenceEngine {
 
     private func startIdleTimers() {
         debounceTask?.cancel()
-        guard activeGroup.tiles.count >= 2 else { return }
+        // Runs for a single tile (cancel-✕ pulse + auto-clear) as well as 2+
+        // tiles (play pulse + auto-Done). Empty groups have no timeline.
+        guard activeGroup.tiles.count >= 1 else { return }
+        let isSingle = activeGroup.tiles.count == 1
 
         let pulseWait = idleDebounceDuration
         let autoDoneWait = autoDoneDuration
         debounceTask = Task { [weak self] in
-            // Stage 1: play-button pulse (only when not yet locked).
+            // Stage 1: primary-button pulse (play for 2+ tiles, cancel-✕ for a
+            // single tile). Skipped once a group locks (it's already been spoken).
             do { try await Task.sleep(for: pulseWait) } catch { return }
             guard !Task.isCancelled, let self else { return }
             if self.activeGroup.state != .locked {
@@ -514,12 +613,18 @@ final class SentenceEngine {
                 elapsed = attentionAt
             }
 
-            // Stage 3: auto-Done.
+            // Stage 3: auto-finish. A single tile is ephemeral — it auto-clears
+            // (discarded, not logged), matching the cancel-✕. A 2+ tile group
+            // auto-Dones (committed to history).
             let remaining = autoDoneWait - elapsed
             guard remaining > .seconds(0) else { return }
             do { try await Task.sleep(for: remaining) } catch { return }
             guard !Task.isCancelled else { return }
-            self.commitActiveAndStartNew()
+            if isSingle {
+                self.clearSelection()
+            } else {
+                self.commitActiveAndStartNew()
+            }
         }
     }
 

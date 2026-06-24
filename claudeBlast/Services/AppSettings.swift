@@ -46,7 +46,6 @@ enum AppSettingsKey {
     static let tileMinSize           = "tile_min_size"
     static let tileSizeStep          = "tile_size_step"
     static let compareProviders      = "compare_providers"
-    static let devShowNav            = "dev_show_nav"
     static let imageSet              = "image_set"
 
     // Sentence tray timeline settings (PR cb-tray-timeline)

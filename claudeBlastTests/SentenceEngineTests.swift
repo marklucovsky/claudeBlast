@@ -42,8 +42,9 @@ struct SentenceEngineTests {
         var builder = SentencePromptBuilder(ageGradeLevel: 2)
         builder.repetitionCount = 2
         let prompt = builder.buildSystemPrompt()
-        #expect(prompt.contains(where: { $0.content.contains("repeated") }))
-        #expect(prompt.contains(where: { $0.content.contains("urgent") }))
+        #expect(prompt.contains(where: { $0.content.contains("repeat #2") }))
+        #expect(prompt.contains(where: { $0.content.contains("insistent") }))
+        #expect(prompt.contains(where: { $0.content.contains("escalate") }))
     }
 
     @Test func promptBuilderFormatsUserPrompt() {

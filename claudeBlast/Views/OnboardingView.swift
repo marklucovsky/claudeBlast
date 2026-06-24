@@ -39,6 +39,8 @@ struct OnboardingView: View {
     @State private var childVoiceID: String = ""
     @State private var childMaxTiles: Int = 4
     @State private var skipChildProfile: Bool = false
+    /// Presents the OpenAI key setup guide from the welcome screen's prerequisite callout.
+    @State private var showKeyGuide: Bool = false
 
     @State private var apiKey: String = ""
     /// Seeded from the registered default (RELEASE: ON, DEBUG: OFF — see
@@ -185,7 +187,32 @@ struct OnboardingView: View {
                     .foregroundStyle(.pink)
                     .font(.title)
             }
+
+            // Surface the one prerequisite early, in the welcome screen's
+            // whitespace, so a parent can get a funded OpenAI Platform account
+            // going before the key step (it's set up on OpenAI's site, not here).
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Bring your own AI key").font(.headline)
+                    Text("AI sentences use OpenAI. You'll want a funded OpenAI Platform account (separate from ChatGPT) — about $5 of credit lasts a long time. Set it up now or skip and add it later.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        showKeyGuide = true
+                    } label: {
+                        Label("See setup guide", systemImage: "questionmark.circle")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.top, 2)
+                }
+            } icon: {
+                Image(systemName: "key.fill")
+                    .foregroundStyle(.orange)
+                    .font(.title)
+            }
         }
+        .sheet(isPresented: $showKeyGuide) { OpenAIKeySetupSheet() }
     }
 
     private var roleStep: some View {
@@ -360,13 +387,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("OpenAI API Key")
                 .font(.title.bold())
-            Text("Blaster uses OpenAI to turn tile selections into sentences. Get a key at platform.openai.com.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            SecureField("sk-…", text: $apiKey)
-                .textFieldStyle(.roundedBorder)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            OpenAIKeyEntrySection(apiKey: $apiKey)
             Label {
                 Text("Stored in this device's Keychain only. Never synced via iCloud.")
                     .font(.caption)

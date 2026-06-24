@@ -33,11 +33,15 @@ struct CompactTrayStrip: View {
     let onTileTap: (Int) -> Void
     let onGo: () -> Void
     let onReplay: () -> Void
+    let onCancelSingle: () -> Void
+    let onPlaySingle: () -> Void
     let onCommitActive: () -> Void
     let onShowSentence: () -> Void
     let onShowHistory: () -> Void
     let onShowFavorites: () -> Void
     let onHome: () -> Void
+    /// Long-press Home to open the caregiver menu (mode toggle + gated Admin).
+    let onOpenMenu: () -> Void
     let isAtHome: Bool
     let favoritesCount: Int
     let isSentenceShown: Bool
@@ -62,24 +66,34 @@ struct CompactTrayStrip: View {
                         isPulsing: isPulsing,
                         isReplay: canReplay,
                         replayCount: engine.repetitionCount,
+                        isSingleWord: isSingleTile,
                         compact: true,
-                        action: canReplay ? onReplay : onGo
+                        action: primaryAction
                     )
                     .allowsHitTesting(canFire)
                     .opacity(canFire ? 1 : 0.45)
 
-                    DoneButton(
-                        isEnabled: hasActiveContent,
-                        isNudge: engine.isDoneNudge && hasActiveContent,
-                        compact: true,
-                        action: onCommitActive
-                    )
+                    if isSingleTile {
+                        SingleWordPlayButton(
+                            escalationCount: singleWordEscalation,
+                            compact: true,
+                            action: onPlaySingle
+                        )
+                    } else {
+                        DoneButton(
+                            isEnabled: hasActiveContent,
+                            isNudge: engine.isDoneNudge && hasActiveContent,
+                            compact: true,
+                            action: onCommitActive
+                        )
+                    }
                 }
             }
 
             NavStrip(
                 isAtHome: isAtHome,
                 onHome: onHome,
+                onOpenMenu: onOpenMenu,
                 latestGroup: engine.groupHistory.first,
                 historyCount: engine.groupHistory.count,
                 isHistoryShown: isHistoryShown,
@@ -108,9 +122,33 @@ struct CompactTrayStrip: View {
         !canReplay && engine.activeGroup.tiles.count >= 2 && !engine.isThinking
     }
 
-    private var canFire: Bool { canReplay || canGo }
+    /// Exactly one tile selected: the single-word path (cancel-✕ primary + a
+    /// say-it/escalate secondary). canReplay is already false for one tile, and
+    /// the layout shouldn't flip mid-generation, so this ignores both.
+    private var isSingleTile: Bool {
+        engine.activeGroup.tiles.count == 1
+    }
+
+    /// Escalation depth shown on the single-word play button — only meaningful
+    /// once the tile has been played (locked); a freshly selected tile shows 0
+    /// rather than a stale count carried over from a prior tile.
+    private var singleWordEscalation: Int {
+        engine.activeGroup.state == .locked ? engine.repetitionCount : 0
+    }
+
+    private var canFire: Bool { canReplay || canGo || isSingleTile }
+
+    /// The primary button's action, resolved by current state: replay an
+    /// already-spoken group, cancel a single tile, or generate from 2+ tiles.
+    private var primaryAction: () -> Void {
+        if canReplay { return onReplay }
+        if isSingleTile { return onCancelSingle }
+        return onGo
+    }
 
     private var isPulsing: Bool {
+        // Pulses the play button (2+ tiles) or the cancel-✕ (single tile) once
+        // the engine raises the idle nudge at the pulse-after interval.
         engine.isIdleNudge && canFire && !engine.isThinking
     }
 
@@ -302,6 +340,7 @@ struct LeftTailBubble: Shape {
 private struct NavStrip: View {
     let isAtHome: Bool
     let onHome: () -> Void
+    let onOpenMenu: () -> Void
 
     let latestGroup: TileGroup?
     let historyCount: Int
@@ -314,7 +353,7 @@ private struct NavStrip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            HomeCard(isEnabled: !isAtHome, action: onHome)
+            HomeCard(isEnabled: !isAtHome, action: onHome, onOpenMenu: onOpenMenu)
 
             HistoryCard(
                 group: latestGroup,
@@ -338,9 +377,10 @@ private struct NavStrip: View {
 private struct HomeCard: View {
     let isEnabled: Bool
     let action: () -> Void
+    let onOpenMenu: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: { if isEnabled { action() } }) {
             HStack(spacing: 4) {
                 Image(systemName: "house.fill")
                     .font(.system(size: 11, weight: .semibold))
@@ -353,9 +393,14 @@ private struct HomeCard: View {
             .opacity(isEnabled ? 1.0 : 0.5)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        // Not `.disabled` — long-press while at home toggles interaction mode.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.6).onEnded { _ in
+                onOpenMenu()
+            }
+        )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold for caregiver options.")
     }
 }
 

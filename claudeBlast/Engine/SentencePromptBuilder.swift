@@ -93,14 +93,39 @@ struct SentencePromptBuilder {
         ]
     }
 
+    /// Escalation directive for a repeated selection. Repetition is the child's
+    /// volume knob — the same tiles tapped again means "I want this MORE."
+    ///
+    /// Design (rewritten after the eval harness showed the old prompt jumped one
+    /// notch on the first repeat then flatlined or regressed):
+    /// - **Cumulative.** Each rung must be strictly more insistent than the
+    ///   model's own previous sentence (supplied as its most recent reply), never
+    ///   calmer and never a restatement. This is the fix for flat ramps.
+    /// - **Graduated by count.** A concrete intensity ladder the model climbs as
+    ///   the repeat count rises, so there's always a hotter rung to reach.
+    /// - **No fixed anchor.** The illustration uses a neutral want ("juice") that
+    ///   isn't real vocabulary, so the model learns the trajectory shape without
+    ///   anchoring its wording to a specific example (the old "mom, hungry"
+    ///   few-shot caused that case to regress toward the example).
     private func escalationPrompt(_ count: Int) -> String {
-        switch count {
-        case 1:
-            return "The user has repeated this combination. Make the sentence more urgent. If the original sentence based on mom, hungry was: 'Mom I am hungry, can we get something to eat' the escalated version might be something like: 'mom, I am starving. We need to eat NOW!"
-        case 2:
-            return "The user has repeated this combination twice. They are insistent. Make the sentence urgent. If the original sentence based on mom, hungry was: 'Mom I am hungry, can we get something to eat' the escalated version might be something like: 'Mom, can we go eat right now. I am starving."
-        default:
-            return "The user has repeated this combination \(count) times. This is very important to them. Escalate the urgency and importance using a stronger sentence. If the original sentence based on mom, hungry was: 'Mom I am hungry, can we get something to eat' the escalated version might be something like: 'Mom, I am starving. Get me something to eat NOW!"
-        }
+        """
+        The child just selected the SAME tiles again — repeat #\(count). Repetition is how a \
+        non-verbal child turns up the volume: the want hasn't changed, but they mean it MORE. \
+        Your own previous sentence for this want is your most recent reply above. Make THIS \
+        sentence clearly more insistent than that one — never calmer, never the same wording, \
+        escalate on every repeat while keeping the exact same want and staying age-appropriate.
+
+        Climb this intensity ladder as the repeat count rises (you are at #\(count)):
+        • 1 — add urgency and a please ("really", "right now").
+        • 2 — drop the softeners, state a need ("I need …", "now").
+        • 3 — very emphatic: CAPITALIZE the key word and end with an exclamation.
+        • 4+ — maximal: ALL-CAPS key words and multiple exclamation marks, like a child on the \
+        edge of tears who will not be ignored.
+
+        Example trajectory for a generic want, "juice":
+        "Can I please have some juice?" → "I really want juice right now." → \
+        "I need JUICE now!" → "I WANT JUICE NOW!!!"
+        Apply that escalation to the child's actual tiles — do not mention juice.
+        """
     }
 }

@@ -36,8 +36,12 @@ struct TileGridView: View {
     @Environment(NavigationCoordinator.self) private var coordinator
     @Environment(TileScriptRunner.self) private var scriptRunner
     @Environment(TileScriptRecorder.self) private var recorder
+    @Environment(ChildProfileResolver.self) private var profileResolver
+    @Environment(CaregiverMenuCoordinator.self) private var caregiverMenu
+    @Environment(\.modelContext) private var modelContext
+    @State private var showCaregiverMenu = false
     @State private var currentDisplayPage: Int? = 0
-    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = false
+    @AppStorage("tile_speech_enabled") private var tileSpeechEnabled: Bool = true
     @State private var haptic = UIImpactFeedbackGenerator(style: .heavy)
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
@@ -87,7 +91,21 @@ struct TileGridView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if isCompact {
+            if engine.interactionMode == .singleWord {
+                // Classic AAC: a running FIFO strip of spoken words, no AI.
+                // One adaptive view for both form factors.
+                SingleWordTrayView(
+                    onRemove: { index in engine.removeStripWord(at: index) },
+                    onClear: { engine.clearStrip() },
+                    onHome: {
+                        coordinator.navigateToRoot()
+                        currentDisplayPage = 0
+                    },
+                    onOpenMenu: { showCaregiverMenu = true },
+                    isAtHome: coordinator.navigationPath.count <= 1
+                )
+                .padding(.top, 8)
+            } else if isCompact {
                 CompactTrayStrip(
                     onTileTap: { index in engine.removeTile(at: index) },
                     onGo: {
@@ -98,6 +116,8 @@ struct TileGridView: View {
                         if recorder.state == .recording { recorder.recordReplay() }
                         engine.replay()
                     },
+                    onCancelSingle: { engine.clearSelection() },
+                    onPlaySingle: { engine.playSingleTile() },
                     onCommitActive: { engine.commitActiveAndStartNew() },
                     onShowSentence: { showCompactOverlay(.sentence) },
                     onShowHistory: { showCompactOverlay(.history) },
@@ -106,6 +126,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
+                    onOpenMenu: { showCaregiverMenu = true },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
                     isSentenceShown: compactOverlay == .sentence,
@@ -143,6 +164,7 @@ struct TileGridView: View {
                         coordinator.navigateToRoot()
                         currentDisplayPage = 0
                     },
+                    onOpenMenu: { showCaregiverMenu = true },
                     onShowFavorites: { showCompactOverlay(.favorites) },
                     isAtHome: coordinator.navigationPath.count <= 1,
                     favoritesCount: min(promotedEntries.count, 99),
@@ -153,6 +175,12 @@ struct TileGridView: View {
                     },
                     onCommitActive: {
                         engine.commitActiveAndStartNew()
+                    },
+                    onCancelSingle: {
+                        engine.clearSelection()
+                    },
+                    onPlaySingle: {
+                        engine.playSingleTile()
                     }
                 )
                 .padding(.top, 8)
@@ -177,6 +205,18 @@ struct TileGridView: View {
             } else {
                 TileScriptRecordingOverlay()
             }
+        }
+        // Caregiver menu — opened by long-pressing Home. Replaces the old hidden
+        // triple-tap → hamburger → menu chain. Anchored to the top-leading corner
+        // (where the tray's Home button sits) so it pops up next to Home rather
+        // than centered mid-screen — the caregiver's reaching arm doesn't occlude
+        // it. Mode toggle is direct; Admin is gated by AdminGate (Face ID / PIN)
+        // when ContentView presents it.
+        .popover(isPresented: $showCaregiverMenu,
+                 attachmentAnchor: .point(.topLeading),
+                 arrowEdge: .top) {
+            caregiverMenuContent
+                .presentationCompactAdaptation(.popover)
         }
         .onChange(of: engine.canReplay) { _, isReady in
             guard isCompact else { return }
@@ -514,6 +554,66 @@ struct TileGridView: View {
         }
     }
 
+    // MARK: - Caregiver menu
+
+    /// Compact menu shown in the Home-anchored popover: flip mode, or open a
+    /// gated destination. Kept small so the popover stays near Home.
+    private var caregiverMenuContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Caregiver Menu")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+            caregiverMenuRow(
+                engine.interactionMode == .singleWord ? "Switch to AI Sentences" : "Switch to Single Words",
+                systemImage: "arrow.left.arrow.right"
+            ) {
+                showCaregiverMenu = false
+                toggleInteractionMode()
+            }
+            Divider()
+            caregiverMenuRow("Admin", systemImage: "lock.fill") {
+                showCaregiverMenu = false
+                caregiverMenu.requested = .admin
+            }
+            caregiverMenuRow("TileScript", systemImage: "play.rectangle.fill") {
+                showCaregiverMenu = false
+                caregiverMenu.requested = .tileScript
+            }
+        }
+        .frame(minWidth: 240)
+        .padding(.bottom, 8)
+    }
+
+    private func caregiverMenuRow(_ title: String, systemImage: String,
+                                  action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Toggle the active child between AI-sentence and single-word mode.
+    /// Wired to the "Switch to…" item in the caregiver menu (long-press Home) —
+    /// a quick way to flip the device for a side-by-side demo without opening
+    /// Admin. Persists to the profile and resets the tray.
+    private func toggleInteractionMode() {
+        guard let profile = profileResolver.active else { return }
+        profile.interactionMode = (profile.interactionMode == .sentence) ? .singleWord : .sentence
+        try? modelContext.save()
+        profileResolver.refresh()
+        engine.clearSelection()
+        engine.clearStrip()
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    }
+
     private func handleTileTap(_ entry: TileEntry) {
         let key = entry.key
         guard let tile = tileLookup[key] else { return }
@@ -530,24 +630,22 @@ struct TileGridView: View {
             && !resolvedLink.isEmpty
             && resolvedLink == key
 
-        var alreadySelected = false
         if entry.isAudible {
-            alreadySelected = engine.selectedTiles.contains { $0.key == key }
-            if alreadySelected {
-                if let index = engine.selectedTiles.firstIndex(where: { $0.key == key }) {
-                    engine.removeTile(at: index)
-                }
-            } else {
-                if tileSpeechEnabled {
-                    engine.speakTile(tile.displayName)
-                }
-                engine.addTile(tile)
-                if recorder.state == .recording {
-                    if isAudibleNavTile {
-                        recorder.recordAudibleNavigate(pageKey: resolvedLink)
-                    } else {
-                        recorder.recordTap(tileKey: key)
-                    }
+            // Speak the word on tap. Always in single-word mode (the word IS the
+            // communication); in sentence mode only when the preview is enabled.
+            if tileSpeechEnabled || engine.interactionMode == .singleWord {
+                engine.speakTile(tile.displayName)
+            }
+            // Universal: a grid tap adds, never deletes. The engine appends to
+            // the FIFO strip (single-word, duplicates allowed) or to the active
+            // group (sentence, no-op if the tile is already present). Removal is
+            // a tray-chip tap.
+            engine.addTile(tile)
+            if recorder.state == .recording {
+                if isAudibleNavTile {
+                    recorder.recordAudibleNavigate(pageKey: resolvedLink)
+                } else {
+                    recorder.recordTap(tileKey: key)
                 }
             }
         }
@@ -556,8 +654,7 @@ struct TileGridView: View {
             if recorder.state == .recording {
                 // Skip a separate navigate record if we already recorded an audible-nav for
                 // this gesture (it covers both the tile and the navigation).
-                let recordedAsAudibleNav = isAudibleNavTile && !alreadySelected
-                if !recordedAsAudibleNav {
+                if !isAudibleNavTile {
                     recorder.recordNavigate(pageKey: resolvedLink)
                 }
             }

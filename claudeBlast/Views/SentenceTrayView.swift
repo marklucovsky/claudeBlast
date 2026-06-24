@@ -47,6 +47,8 @@ struct SentenceTrayView: View {
     let onExpandSentence: () -> Void
     /// Tap the Home card. Wired to navigate to the active scene's root page.
     let onHome: () -> Void
+    /// Long-press Home to open the caregiver menu (mode toggle + gated Admin).
+    let onOpenMenu: () -> Void
     /// Tap the Favorites card. Opens the GlassFavoritesOverlay.
     let onShowFavorites: () -> Void
     /// True when the user is at the home page — dims the Home card.
@@ -64,6 +66,12 @@ struct SentenceTrayView: View {
     /// Commit the active group to history and start fresh. Wired to the Done button below
     /// the play control, and triggered automatically by the engine's auto-Done idle timer.
     let onCommitActive: () -> Void
+    /// Single-word path: cancel (clear) the lone selected tile. Wired to the primary
+    /// button when exactly one tile is selected.
+    let onCancelSingle: () -> Void
+    /// Single-word path: say (and escalate on repeat) the lone selected tile. Wired to
+    /// the Done-slot button when exactly one tile is selected.
+    let onPlaySingle: () -> Void
 
     // MARK: - Derived state
 
@@ -75,9 +83,33 @@ struct SentenceTrayView: View {
         !canReplay && engine.activeGroup.tiles.count >= 2 && !engine.isThinking
     }
 
-    private var canFire: Bool { canReplay || canGo }
+    /// Exactly one tile selected: the single-word path (cancel-✕ primary + a
+    /// say-it/escalate secondary). canReplay is already false for one tile, and
+    /// the layout shouldn't flip mid-generation, so this ignores both.
+    private var isSingleTile: Bool {
+        engine.activeGroup.tiles.count == 1
+    }
+
+    /// Escalation depth shown on the single-word play button — only meaningful
+    /// once the tile has been played (locked); a freshly selected tile shows 0
+    /// rather than a stale count carried over from a prior tile.
+    private var singleWordEscalation: Int {
+        engine.activeGroup.state == .locked ? engine.repetitionCount : 0
+    }
+
+    private var canFire: Bool { canReplay || canGo || isSingleTile }
+
+    /// The primary button's action, resolved by current state: replay an
+    /// already-spoken group, cancel a single tile, or generate from 2+ tiles.
+    private var primaryAction: () -> Void {
+        if canReplay { return onReplay }
+        if isSingleTile { return onCancelSingle }
+        return onGo
+    }
 
     private var isPulsing: Bool {
+        // Pulses the play button (2+ tiles) or the cancel-✕ (single tile) once
+        // the engine raises the idle nudge at the pulse-after interval.
         engine.isIdleNudge && canFire && !engine.isThinking
     }
 
@@ -134,7 +166,7 @@ struct SentenceTrayView: View {
     /// makes sense given the available width.
     private var navStrip: some View {
         HStack(alignment: .center, spacing: 8) {
-            IPadHomeCard(isEnabled: !isAtHome, action: onHome)
+            IPadHomeCard(isEnabled: !isAtHome, action: onHome, onOpenMenu: onOpenMenu)
 
             historyScroll
                 .frame(maxWidth: .infinity)
@@ -181,16 +213,24 @@ struct SentenceTrayView: View {
                 isPulsing: isPulsing,
                 isReplay: canReplay,
                 replayCount: engine.repetitionCount,
-                action: canReplay ? onReplay : onGo
+                isSingleWord: isSingleTile,
+                action: primaryAction
             )
             .allowsHitTesting(canFire)
             .opacity(canFire ? 1 : 0.45)
 
-            DoneButton(
-                isEnabled: hasActiveContent,
-                isNudge: engine.isDoneNudge && hasActiveContent,
-                action: onCommitActive
-            )
+            if isSingleTile {
+                SingleWordPlayButton(
+                    escalationCount: singleWordEscalation,
+                    action: onPlaySingle
+                )
+            } else {
+                DoneButton(
+                    isEnabled: hasActiveContent,
+                    isNudge: engine.isDoneNudge && hasActiveContent,
+                    action: onCommitActive
+                )
+            }
         }
         .frame(height: kCardHeight)
     }
@@ -337,9 +377,10 @@ private struct IPadThinkingBubble: View {
 private struct IPadHomeCard: View {
     let isEnabled: Bool
     let action: () -> Void
+    let onOpenMenu: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: { if isEnabled { action() } }) {
             HStack(spacing: 6) {
                 Image(systemName: "house.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -352,9 +393,14 @@ private struct IPadHomeCard: View {
             .opacity(isEnabled ? 1.0 : 0.5)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        // Not `.disabled` — long-press while at home toggles interaction mode.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.6).onEnded { _ in
+                onOpenMenu()
+            }
+        )
         .accessibilityLabel("Go home")
-        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home")
+        .accessibilityHint(isEnabled ? "Returns to home page" : "Already at home. Press and hold for caregiver options.")
     }
 }
 
@@ -432,6 +478,11 @@ struct PrimaryPlayButton: View {
     /// turns into a small pill carrying the count, so the caregiver can see escalation depth
     /// without watching the prompt logs.
     var replayCount: Int = 0
+    /// True when exactly one tile is selected. A single word needs no sentence
+    /// generation, so the button becomes a cancel control: the icon switches to
+    /// an ✕ and tapping clears the tile (the word is already spoken on tap).
+    /// Mutually exclusive with `isReplay`.
+    var isSingleWord: Bool = false
     /// Tighter sizing for the compact (iPhone) tray. iPad uses the default.
     var compact: Bool = false
     let action: () -> Void
@@ -481,7 +532,7 @@ struct PrimaryPlayButton: View {
                     )
                     .shadow(color: haloColor, radius: haloRadius, y: 1)
 
-                Image(systemName: "play.fill")
+                Image(systemName: isSingleWord ? "xmark" : "play.fill")
                     .font(.system(size: iconSize, weight: .semibold))
                     .foregroundStyle(Color.blue)
                     .hueRotation(.degrees(hueRotation))
@@ -528,7 +579,7 @@ struct PrimaryPlayButton: View {
         .animation(.easeInOut(duration: 0.2), value: isReplay)
         .animation(.easeInOut(duration: 0.3), value: isPulsing)
         .animation(.linear(duration: 0.04), value: hueRotation)
-        .accessibilityLabel(isReplay ? "Replay sentence" : "Play sentence")
+        .accessibilityLabel(isSingleWord ? "Clear word" : (isReplay ? "Replay sentence" : "Play sentence"))
     }
 
     private func applyScalePulse(_ active: Bool) {
@@ -737,6 +788,55 @@ struct DoneButton: View {
     }
 }
 
+// MARK: - Single-word play / escalation button
+
+/// Replaces the Done button in the bottom button slot while exactly one tile
+/// is selected. Done has no purpose for a single tile (the cancel-✕ clears it),
+/// so this slot becomes a "say it" control that escalates on repeat — the
+/// volume knob for a child mashing one tile. Shows the escalation depth as an
+/// orange count once the word has been re-pressed, mirroring the play button's
+/// replay badge. Same footprint as DoneButton so the column doesn't reflow.
+struct SingleWordPlayButton: View {
+    /// Current escalation depth for this tile (0 = baseline / not yet escalated).
+    let escalationCount: Int
+    /// Tighter sizing for the compact (iPhone) tray. iPad uses the default.
+    var compact: Bool = false
+    let action: () -> Void
+
+    private var buttonWidth: CGFloat { compact ? 60 : kPlayButtonWidth }
+    private var buttonHeight: CGFloat { compact ? 22 : kDoneButtonHeight }
+    private var cornerRadius: CGFloat { compact ? 10 : 8 }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 11, weight: .bold))
+                if escalationCount > 0 {
+                    Text("\(escalationCount)")
+                        .font(.caption.weight(.bold).monospacedDigit())
+                }
+            }
+            .foregroundStyle(escalationCount > 0 ? .orange : .blue)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(Color(.systemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(escalationCount > 0 ? Color.orange.opacity(0.5) : Color.primary.opacity(0.12),
+                                  lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(width: buttonWidth, height: buttonHeight)
+        .animation(.easeInOut(duration: 0.2), value: escalationCount)
+        .accessibilityLabel("Say this word")
+        .accessibilityValue(escalationCount > 0 ? "Repeated \(escalationCount)" : "")
+    }
+}
+
 // MARK: - History group chip
 
 private struct HistoryGroupChip: View {
@@ -806,42 +906,3 @@ func wordClassColor(_ wordClass: String) -> Color {
     TileColorResolver.color(for: wordClass)
 }
 
-// MARK: - TileGridIcon (used by AdminView; kept here for now)
-
-/// Renders up to 4 tiles as a fixed 2×2 square icon.
-struct TileGridIcon: View {
-    let tiles: [TileSelection]
-
-    private let cellSize: CGFloat = 22
-    private let gap: CGFloat = 2
-
-    private var slots: [TileSelection?] {
-        let filled = tiles.prefix(4).map { Optional($0) }
-        return Array(filled + [nil, nil, nil, nil]).prefix(4).map { $0 }
-    }
-
-    var body: some View {
-        VStack(spacing: gap) {
-            HStack(spacing: gap) {
-                cell(slots[0])
-                cell(slots[1])
-            }
-            HStack(spacing: gap) {
-                cell(slots[2])
-                cell(slots[3])
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-
-    @ViewBuilder
-    private func cell(_ tile: TileSelection?) -> some View {
-        if let tile {
-            TileImageView(key: tile.key, wordClass: tile.wordClass)
-                .frame(width: cellSize, height: cellSize)
-        } else {
-            Color(.secondarySystemBackground)
-                .frame(width: cellSize, height: cellSize)
-        }
-    }
-}

@@ -118,6 +118,13 @@ final class TileScriptRunner {
             applyProvider(providerName)
         }
 
+        // TODO(single-word mode): TileScript playback assumes sentence/AI mode —
+        // if the active child is in `.singleWord` mode, scripts won't generate
+        // sentences and playback will misbehave. Before running, capture the
+        // device's current interaction mode, force `.sentence`, and restore the
+        // captured mode in stop()/finish(). Mirrors how audioEnabled/provider
+        // are overridden here for the duration of a script. (Noted 2026-06-23.)
+
         // Point currentRow at the first tiles row if applicable
         updateCurrentRow()
 
