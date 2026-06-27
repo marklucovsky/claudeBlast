@@ -1,0 +1,832 @@
+{
+  "@type": "application/vnd.claudeblast.scene+json",
+  "_comment": "Blaster starter scene (bundled). Edit the prompt to generate a fresh scene.",
+  "version": "1.0.0",
+  "name": "Tide Pools",
+  "description": "Exploring the seashore \u2014 crabs, shells, and what we find in the water.",
+  "homePageKey": "tidepools",
+  "tiles": [
+    {
+      "key": "crab",
+      "wordClass": "object",
+      "displayName": "Crab"
+    },
+    {
+      "key": "starfish",
+      "wordClass": "object",
+      "displayName": "Starfish"
+    },
+    {
+      "key": "shell",
+      "wordClass": "object",
+      "displayName": "Shell"
+    },
+    {
+      "key": "seaweed",
+      "wordClass": "object",
+      "displayName": "Seaweed"
+    },
+    {
+      "key": "fish",
+      "wordClass": "object",
+      "displayName": "Fish"
+    },
+    {
+      "key": "snail",
+      "wordClass": "object",
+      "displayName": "Snail"
+    },
+    {
+      "key": "anemone",
+      "wordClass": "object",
+      "displayName": "Anemone"
+    }
+  ],
+  "pages": [
+    {
+      "key": "tidepools",
+      "tiles": [
+        {
+          "key": "crab",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "starfish",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "shell",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "seaweed",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "fish",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "snail",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "anemone",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "ocean",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "beach",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "water",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "i",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "you",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "me",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "my",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "he",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "she",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "we",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "they",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "teacher",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "mom",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "dad",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "friend",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "help",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "hungry",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "thirsty",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "bathroom",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "happy",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sad",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "tired",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "hurt",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sick",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "scared",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "yes",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "no",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "more",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "want",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "please",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "all_done",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "look",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "eat",
+          "isAudible": true,
+          "link": "food"
+        },
+        {
+          "key": "drink",
+          "isAudible": true,
+          "link": "drinks"
+        },
+        {
+          "key": "people",
+          "isAudible": false,
+          "link": "people"
+        },
+        {
+          "key": "food",
+          "isAudible": false,
+          "link": "food"
+        },
+        {
+          "key": "drinks",
+          "isAudible": false,
+          "link": "drinks"
+        },
+        {
+          "key": "body_health",
+          "isAudible": false,
+          "link": "body_health"
+        }
+      ]
+    },
+    {
+      "key": "people",
+      "tiles": [
+        {
+          "key": "home",
+          "isAudible": false,
+          "link": "<home>"
+        },
+        {
+          "key": "friend",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "dad",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "family",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "mom",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "brother",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "people",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sister",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "grandma",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "student",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "they",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "mine",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "grandpa",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "girl",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "she",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "we",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "baby",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "teacher",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "boy",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "school_people",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "he",
+          "isAudible": true,
+          "link": ""
+        }
+      ]
+    },
+    {
+      "key": "food",
+      "tiles": [
+        {
+          "key": "home",
+          "isAudible": false,
+          "link": "<home>"
+        },
+        {
+          "key": "drinks",
+          "isAudible": false,
+          "link": "drinks"
+        },
+        {
+          "key": "snack",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "popsicle",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "graham_cracker",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "goldfish_cracker",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "snack_bar",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pretzel",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "crackers",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cookie",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "fruit_snack",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pudding",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "applesauce",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "yogurt",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "popcorn",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "chips",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "meals",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sandwich",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "macaroni",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pizza",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "hamburger",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "fries",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "hot_dog",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "nuggets",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "salad",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "soup",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cereal",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "oatmeal",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "toast",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "eggs",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pancakes",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "syrup",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "peanut_butter",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "jelly",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sausage",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cheese",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "fruit",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "apple",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "banana",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "blueberries",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "orange",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cherry",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "grapes",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "lemon",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "strawberry",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pear",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "veggie",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "broccoli",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "carrot",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "corn",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cucumber",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "green_beans",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "pepper",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "lettuce",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "tomato",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "potato",
+          "isAudible": true,
+          "link": ""
+        }
+      ]
+    },
+    {
+      "key": "drinks",
+      "tiles": [
+        {
+          "key": "home",
+          "isAudible": false,
+          "link": "<home>"
+        },
+        {
+          "key": "food",
+          "isAudible": false,
+          "link": "food"
+        },
+        {
+          "key": "drinks",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "juice",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "milk",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "chocolate_milk",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "water",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "soda",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "iced_tea",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "milkshake",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "lemonade",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "ice_cubes",
+          "isAudible": true,
+          "link": ""
+        }
+      ]
+    },
+    {
+      "key": "body_health",
+      "tiles": [
+        {
+          "key": "home",
+          "isAudible": false,
+          "link": "<home>"
+        },
+        {
+          "key": "body",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "head",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "eye",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "ear",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "nose",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "mouth",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "arm",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "leg",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "stomach",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "back",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "health",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "cold",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "fever",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "headache",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "sore_throat",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "stomachache",
+          "isAudible": true,
+          "link": ""
+        },
+        {
+          "key": "toothache",
+          "isAudible": true,
+          "link": ""
+        }
+      ]
+    }
+  ]
+}

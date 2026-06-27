@@ -1,0 +1,32 @@
+[
+  {
+    "id": "farm",
+    "title": "Farm Visit",
+    "blurb": "Animals, a tractor, and asking to see more.",
+    "prompt": "A visit to the farm: animals like the cow, pig, chicken, and horse, plus a tractor \u2014 point to them, name them, and ask to see more.",
+    "bundle": "starter_farm",
+    "imagelessWords": [
+      "rooster"
+    ]
+  },
+  {
+    "id": "tidepools",
+    "title": "Tide Pools",
+    "blurb": "Crabs, shells, and seashore discoveries.",
+    "prompt": "Exploring tide pools at the beach: crabs, starfish, shells, and seaweed \u2014 describing what I find in the water.",
+    "bundle": "starter_tidepools",
+    "imagelessWords": [
+      "anemone"
+    ]
+  },
+  {
+    "id": "mealtime",
+    "title": "Mealtime",
+    "blurb": "Asking for food and drinks at the table.",
+    "prompt": "Mealtime at the table: asking for foods like pizza and spaghetti and drinks, saying please, more, and all done.",
+    "bundle": "starter_mealtime",
+    "imagelessWords": [
+      "napkin"
+    ]
+  }
+]

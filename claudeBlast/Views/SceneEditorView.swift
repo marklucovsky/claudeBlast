@@ -29,6 +29,8 @@ struct SceneEditorView: View {
     @State private var isAddingPage = false
     @State private var isRefining = false
     @State private var isGeneratingArt = false
+    @State private var showPreview = false
+    @State private var showKeySheet = false
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -47,6 +49,19 @@ struct SceneEditorView: View {
 
     var body: some View {
         List {
+            if !scene.creationSummary.isEmpty {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle").foregroundStyle(.tint)
+                        Text(scene.creationSummary).font(.subheadline)
+                        Spacer()
+                        Button { scene.creationSummary = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
             if artController.isActive {
                 Section {
                     Button {
@@ -75,18 +90,30 @@ struct SceneEditorView: View {
                          : "Running in the background. Tap to view progress, pause, or cancel.")
                 }
             } else if !tilesNeedingArt.isEmpty {
-                Section {
-                    Button {
-                        artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
-                                            context: modelContext, resolver: imageResolver)
-                        isGeneratingArt = true
-                    } label: {
-                        Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
-                              systemImage: "sparkles")
+                if resolvedAPIKey.isEmpty {
+                    Section {
+                        Button {
+                            showKeySheet = true
+                        } label: {
+                            Label("Add an AI Key to generate artwork for new words",
+                                  systemImage: "key.fill")
+                        }
+                    } footer: {
+                        Text("\(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s") still need a picture. Add your key to generate them with AI.")
                     }
-                    .disabled(resolvedAPIKey.isEmpty)
-                } footer: {
-                    Text("These words were added by AI and don't have pictures yet.")
+                } else {
+                    Section {
+                        Button {
+                            artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
+                                                context: modelContext, resolver: imageResolver)
+                            isGeneratingArt = true
+                        } label: {
+                            Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
+                                  systemImage: "sparkles")
+                        }
+                    } footer: {
+                        Text("These words were added by AI and don't have pictures yet.")
+                    }
                 }
             }
 
@@ -157,6 +184,14 @@ struct SceneEditorView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    showPreview = true
+                } label: {
+                    Image(systemName: "eye")
+                }
+                .accessibilityLabel("Preview scene")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     isRefining = true
                 } label: {
                     Image(systemName: "sparkles")
@@ -173,6 +208,12 @@ struct SceneEditorView: View {
         }
         .sheet(item: $sceneToExport) { file in
             ActivityView(items: [file.temporaryFileURL()])
+        }
+        .fullScreenCover(isPresented: $showPreview) {
+            ScenePreviewBoardView(scene: scene, allTiles: allTiles)
+        }
+        .sheet(isPresented: $showKeySheet) {
+            APIKeyEntrySheet()
         }
         .sheet(isPresented: $isRefining) {
             SceneRefinementSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey)

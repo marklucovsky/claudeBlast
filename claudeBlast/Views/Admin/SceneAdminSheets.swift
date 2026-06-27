@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct SceneRow: View {
     let scene: BlasterScene
@@ -202,6 +203,10 @@ struct SceneGeneratorSheet: View {
     @State private var preview: GeneratedScene? = nil
     @State private var manualName = ""
     @State private var showManual = false
+    /// Set while previewing an unedited cached starter; drives the cache-import
+    /// accept path and the "served from cache" badge. Cleared on refine.
+    @State private var cachedStarter: StarterScene? = nil
+    @State private var cachedPreviewImages: [String: Data] = [:]
 
     var body: some View {
         NavigationStack {
@@ -210,6 +215,8 @@ struct SceneGeneratorSheet: View {
                     preview: preview,
                     allTiles: allTiles,
                     apiKey: apiKey,
+                    previewImages: cachedPreviewImages,
+                    onRefined: { cachedStarter = nil },
                     onAccept: { scene in buildAndAccept(scene) },
                     onCancel: { dismiss() }
                 )
@@ -233,8 +240,47 @@ struct SceneGeneratorSheet: View {
                 } header: {
                     Text("Describe the session")
                 } footer: {
-                    Text("e.g. \"Emotions and asking for help, food needs, and wanting to be alone\"")
+                    Text("Describe the goal in plain language — the AI builds the pages, tiles, and navigation. Or tap an idea below to start.")
                         .font(.caption)
+                }
+
+                if !StarterSceneCatalog.all.isEmpty {
+                    Section {
+                        ForEach(StarterSceneCatalog.all) { starter in
+                            Button {
+                                sessionDescription = starter.prompt
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "square.grid.2x2.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.tint)
+                                        Text(starter.title)
+                                            .font(.callout.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        Text("Ready-made")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                            .foregroundStyle(.tint)
+                                    }
+                                    Text(starter.blurb)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .disabled(isGenerating)
+                        }
+                    } header: {
+                        Text("Start from an example")
+                    } footer: {
+                        Text("Loads instantly as a ready-made scene. Edit the description to generate a fresh one with AI.")
+                            .font(.caption)
+                    }
                 }
 
                 if let error = generationError {
@@ -247,7 +293,7 @@ struct SceneGeneratorSheet: View {
 
                 if apiKey.isEmpty {
                     Section {
-                        Text("Add an OpenAI API key in Admin to enable AI scene generation.")
+                        Text("Add an OpenAI API key in Admin to generate custom scenes. The ready-made examples above work without a key.")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -266,7 +312,9 @@ struct SceneGeneratorSheet: View {
                             Text("Generating…")
                         }
                     } else {
-                        Label("Generate Scene", systemImage: "sparkles")
+                        let isCached = StarterSceneCatalog.matching(sessionDescription) != nil
+                        Label(isCached ? "Load Example" : "Generate Scene",
+                              systemImage: isCached ? "square.grid.2x2.fill" : "sparkles")
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -274,8 +322,8 @@ struct SceneGeneratorSheet: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(sessionDescription.trimmingCharacters(in: .whitespaces).isEmpty
-                      || apiKey.isEmpty
-                      || isGenerating)
+                      || isGenerating
+                      || (apiKey.isEmpty && StarterSceneCatalog.matching(sessionDescription) == nil))
             .padding()
         }
         .navigationTitle("New Scene")
@@ -315,7 +363,15 @@ struct SceneGeneratorSheet: View {
 
     private func runGeneration() {
         let desc = sessionDescription.trimmingCharacters(in: .whitespaces)
-        guard !desc.isEmpty, !apiKey.isEmpty else { return }
+        guard !desc.isEmpty else { return }
+
+        // Unchanged starter prompt → preview the bundled scene (instant, no key).
+        if let starter = StarterSceneCatalog.matching(desc) {
+            loadCachedStarter(starter)
+            return
+        }
+
+        guard !apiKey.isEmpty else { return }
         isGenerating = true
         generationError = nil
         let service = SceneGeneratorService(apiKey: apiKey)
@@ -331,9 +387,34 @@ struct SceneGeneratorSheet: View {
         }
     }
 
+    /// Show a cached starter in the shared Scene Preview (no API call). Accept
+    /// imports the bundle (preserving its art); Refine turns it into a live scene.
+    private func loadCachedStarter(_ starter: StarterScene) {
+        guard let loaded = starter.loadPreview() else {
+            generationError = "Couldn't load the example."
+            return
+        }
+        cachedStarter = starter
+        cachedPreviewImages = loaded.images
+        preview = loaded.scene
+    }
+
     private func buildAndAccept(_ generated: GeneratedScene) {
+        // Unedited cached starter → import the bundle (art re-attached from
+        // sidecars inside importBundle, preserving the bundled pictures).
+        if let starter = cachedStarter {
+            if let scene = starter.importBundle(context: modelContext) {
+                scene.creationSummary = "⚡ Served from cache — instant, no tokens used"
+                onAccept(scene)
+            }
+            dismiss()
+            return
+        }
         let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
         if let scene = try? SceneBuilder.build(from: generated, tileLookup: tileLookup, context: modelContext) {
+            if let tokens = generated.tokenUsage {
+                scene.creationSummary = "Generated with AI · \(tokens) tokens"
+            }
             onAccept(scene)
         }
         dismiss()
@@ -347,6 +428,11 @@ struct ScenePreviewView: View {
     let apiKey: String
     /// Board profile used when an in-place refinement re-scaffolds the scene.
     let profile: SceneNavigation.Profile
+    /// Bundled art for not-yet-imported tiles (cached starter preview), key→PNG.
+    let previewImages: [String: Data]
+    /// Called when an in-place refinement replaces the scene (so a cached starter
+    /// preview can drop its "served from cache" identity — it's now a live scene).
+    let onRefined: () -> Void
     /// Emits the (possibly refined) scene the author accepted.
     let onAccept: (GeneratedScene) -> Void
     let onCancel: () -> Void
@@ -363,11 +449,15 @@ struct ScenePreviewView: View {
          allTiles: [TileModel],
          apiKey: String,
          profile: SceneNavigation.Profile = .full,
+         previewImages: [String: Data] = [:],
+         onRefined: @escaping () -> Void = {},
          onAccept: @escaping (GeneratedScene) -> Void,
          onCancel: @escaping () -> Void) {
         self.allTiles = allTiles
         self.apiKey = apiKey
         self.profile = profile
+        self.previewImages = previewImages
+        self.onRefined = onRefined
         self.onAccept = onAccept
         self.onCancel = onCancel
         _working = State(initialValue: preview)
@@ -475,10 +565,12 @@ struct ScenePreviewView: View {
                     ForEach(currentPage.tiles, id: \.key) { genTile in
                         if let tile = tileLookup[genTile.key] {
                             GeneratedTileCell(key: tile.bundleImage, displayName: tile.displayName,
-                                              wordClass: tile.wordClass, link: genTile.link)
+                                              wordClass: tile.wordClass, link: genTile.link,
+                                              imageData: previewImages[genTile.key])
                         } else if let name = genTile.displayName, let wc = genTile.wordClass {
                             GeneratedTileCell(key: genTile.key, displayName: name,
-                                              wordClass: wc, link: genTile.link, isNew: true)
+                                              wordClass: wc, link: genTile.link, isNew: true,
+                                              imageData: previewImages[genTile.key])
                         }
                     }
                 }
@@ -543,6 +635,7 @@ struct ScenePreviewView: View {
                 await MainActor.run {
                     working = result
                     selectedPageIndex = 0
+                    onRefined()
                 }
             } catch {
                 await MainActor.run { refineError = error.localizedDescription }
@@ -594,13 +687,20 @@ private struct GeneratedTileCell: View {
     let wordClass: String
     let link: String
     var isNew: Bool = false
+    var imageData: Data? = nil
 
     private var isNav: Bool { !link.isEmpty }
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                TileImageView(key: key, wordClass: wordClass)
+                Group {
+                    if let imageData, let ui = UIImage(data: imageData) {
+                        Image(uiImage: ui).resizable().scaledToFit()
+                    } else {
+                        TileImageView(key: key, wordClass: wordClass)
+                    }
+                }
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
