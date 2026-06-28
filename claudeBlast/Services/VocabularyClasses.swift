@@ -69,6 +69,10 @@ enum VocabularyClasses {
         VocabularyClass(name: "core",       color: Color(red: 0.95, green: 0.88, blue: 0.55), isCaregiverSelectable: false),
         VocabularyClass(name: "navigation", color: .indigo,                                   isCaregiverSelectable: false),
         VocabularyClass(name: "question",   color: .pink,                                     isCaregiverSelectable: false),
+        // Auto-minted per page: a silent link tile (key `page_<pageKey>`) that
+        // navigates to a named page collection. Reusable on any board. Not
+        // caregiver-creatable — pages mint these themselves.
+        VocabularyClass(name: "page_link",  color: Color(red: 0.4, green: 0.45, blue: 0.85),  isCaregiverSelectable: false),
     ]
 
     private static let byName: [String: VocabularyClass] =

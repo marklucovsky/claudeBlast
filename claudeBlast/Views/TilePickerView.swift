@@ -35,7 +35,21 @@ struct TilePickerView: View {
     }
 
     private var wordClasses: [String] {
-        ["all"] + Set(allTiles.map(\.wordClass)).sorted()
+        // Pin Page Links right after "All" so navigation-to-a-collection tiles are
+        // easy to find; the rest follow alphabetically.
+        let present = Set(allTiles.map(\.wordClass))
+        var ordered = ["all"]
+        if present.contains(PageLink.wordClass) { ordered.append(PageLink.wordClass) }
+        ordered += present.subtracting([PageLink.wordClass]).sorted()
+        return ordered
+    }
+
+    private func classLabel(_ wc: String) -> String {
+        switch wc {
+        case "all": return "All"
+        case PageLink.wordClass: return "Page Links"
+        default: return wc
+        }
     }
 
     private var filteredTiles: [TileModel] {
@@ -235,9 +249,19 @@ struct TilePickerView: View {
         var pages = scene.pages
         guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
         guard !pages[idx].tiles.contains(where: { $0.key == key }) else { return }
-        pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+        pages[idx].tiles.append(pageEntry(for: key))
         scene.pages = pages
         try? modelContext.save()
+    }
+
+    /// A tile placement. A page_link tile drops as a SILENT link to its target
+    /// page; everything else drops as an audible terminal tile.
+    private func pageEntry(for key: String) -> TileEntry {
+        if allTiles.first(where: { $0.key == key })?.wordClass == PageLink.wordClass,
+           let target = PageLink.targetPage(forKey: key) {
+            return TileEntry(key: key, link: target, isAudible: false)
+        }
+        return TileEntry(key: key, link: "", isAudible: true)
     }
 
     private var wordClassFilter: some View {
@@ -247,7 +271,7 @@ struct TilePickerView: View {
                     Button {
                         selectedWordClass = wc
                     } label: {
-                        Text(wc == "all" ? "All" : wc)
+                        Text(classLabel(wc))
                             .font(.caption)
                             .fontWeight(selectedWordClass == wc ? .semibold : .regular)
                             .padding(.horizontal, 12)
@@ -375,7 +399,7 @@ struct TilePickerView: View {
         var pages = scene.pages
         guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
         for key in keysToAdd {
-            pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+            pages[idx].tiles.append(pageEntry(for: key))
         }
         scene.pages = pages
         try? modelContext.save()

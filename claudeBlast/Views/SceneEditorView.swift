@@ -31,6 +31,7 @@ struct SceneEditorView: View {
     @State private var isGeneratingArt = false
     @State private var showPreview = false
     @State private var showKeySheet = false
+    @State private var pageToLink: PageLinkTarget? = nil
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -235,12 +236,23 @@ struct SceneEditorView: View {
         }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
-                pickerKeysForNewPage = preSelectedKeys
-                navigateToNewPageKey = pageKey
+                if !preSelectedKeys.isEmpty {
+                    // Edit path: dive into the new page with the picker pre-loaded.
+                    pickerKeysForNewPage = preSelectedKeys
+                    navigateToNewPageKey = pageKey
+                } else if scene.pages.contains(where: { $0.key != pageKey }) {
+                    // Finalized page with somewhere to link → offer the link step,
+                    // then return to the scene editor (page is in the Pages list).
+                    pageToLink = PageLinkTarget(pageKey: pageKey)
+                }
+                // else: finalized page, nothing to link → stay in the scene editor.
             }
         }
         .navigationDestination(item: $navigateToNewPageKey) { pageKey in
             PageEditorView(scene: scene, pageKey: pageKey, autoOpenPickerWithKeys: pickerKeysForNewPage)
+        }
+        .sheet(item: $pageToLink) { target in
+            PageLinkPlacementSheet(scene: scene, target: target, allTiles: allTiles)
         }
     }
 
@@ -260,12 +272,33 @@ struct SceneEditorView: View {
 
     private func deletePages(at offsets: IndexSet) {
         var pages = scene.pages
+        let deletedKeys = Set(offsets.map { pages[$0].key })
         for index in offsets.sorted().reversed() {
             pages.remove(at: index)
+        }
+        // Clean up links to the deleted page(s) so nothing opens an empty page:
+        // silent nav tiles (incl. the page_link tile) are removed; audible tiles
+        // that also linked there keep the word but drop the dead link.
+        if !deletedKeys.isEmpty {
+            for i in pages.indices {
+                pages[i].tiles = pages[i].tiles.compactMap { entry in
+                    guard deletedKeys.contains(entry.link) else { return entry }
+                    return entry.isAudible
+                        ? TileEntry(key: entry.key, link: "", isAudible: true)
+                        : nil
+                }
+            }
         }
         scene.pages = pages
         if !scene.pages.contains(where: { $0.key == scene.homePageKey }) {
             scene.homePageKey = scene.pages.first?.key ?? ""
+        }
+        // Drop the now-orphaned page_link tiles for the deleted pages from vocab.
+        for key in deletedKeys {
+            let linkKey = PageLink.key(forPage: key)
+            if let tile = allTiles.first(where: { $0.key == linkKey }) {
+                modelContext.delete(tile)
+            }
         }
         try? modelContext.save()
     }
@@ -318,6 +351,10 @@ private struct PageGeneratorSheet: View {
     @State private var isGenerating = false
     @State private var generationError: String? = nil
     @State private var preview: GeneratedPageResult? = nil
+    /// Set while previewing an unedited cached page sample; drives the cached
+    /// accept (import) path and shows bundled art. Cleared on Retry (→ live AI).
+    @State private var cachedPageSample: PageSample? = nil
+    @State private var cachedPageImages: [String: Data] = [:]
 
     var body: some View {
         NavigationStack {
@@ -326,9 +363,11 @@ private struct PageGeneratorSheet: View {
                     preview: preview,
                     pageName: pageName,
                     allTiles: allTiles,
+                    previewImages: cachedPageImages,
+                    allowEdit: cachedPageSample == nil,
                     onAccept: { buildAndAccept(preview, editMode: false) },
                     onEdit:   { buildAndAccept(preview, editMode: true) },
-                    onRetry:  { self.preview = nil; runGeneration() },
+                    onRetry:  { cachedPageSample = nil; self.preview = nil; runGeneration() },
                     onCancel: { dismiss() }
                 )
                 .navigationTitle("Page Preview")
@@ -358,6 +397,42 @@ private struct PageGeneratorSheet: View {
                     Text("Describe what this page should help communicate.")
                 }
 
+                if !PageSampleCatalog.all.isEmpty {
+                    Section {
+                        ForEach(PageSampleCatalog.all) { sample in
+                            Button {
+                                pageName = sample.title
+                                pageGoal = sample.goal
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "square.grid.2x2.fill")
+                                            .font(.caption).foregroundStyle(.tint)
+                                        Text(sample.title)
+                                            .font(.callout.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        Text("Ready-made")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6).padding(.vertical, 2)
+                                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                            .foregroundStyle(.tint)
+                                    }
+                                    Text(sample.blurb)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .disabled(isGenerating)
+                        }
+                    } header: {
+                        Text("Start from an example")
+                    } footer: {
+                        Text("Loads a ready-made page instantly. Edit the goal to generate a fresh one with AI.")
+                            .font(.caption)
+                    }
+                }
+
                 if let error = generationError {
                     Section {
                         Text(error)
@@ -368,7 +443,7 @@ private struct PageGeneratorSheet: View {
 
                 if apiKey.isEmpty {
                     Section {
-                        Text("Add an OpenAI API key in Admin to enable AI generation.")
+                        Text("Add an OpenAI API key in Admin to generate a custom page. The ready-made examples above work without a key.")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -379,7 +454,11 @@ private struct PageGeneratorSheet: View {
 
             VStack(spacing: 10) {
                 Button {
-                    runGeneration()
+                    if let sample = PageSampleCatalog.matching(pageGoal) {
+                        loadCachedPage(sample)
+                    } else {
+                        runGeneration()
+                    }
                 } label: {
                     Group {
                         if isGenerating {
@@ -388,7 +467,9 @@ private struct PageGeneratorSheet: View {
                                 Text("Generating…")
                             }
                         } else {
-                            Label("Generate", systemImage: "sparkles")
+                            let isCached = PageSampleCatalog.matching(pageGoal) != nil
+                            Label(isCached ? "Load Example Page" : "Generate",
+                                  systemImage: isCached ? "square.grid.2x2.fill" : "sparkles")
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -397,8 +478,8 @@ private struct PageGeneratorSheet: View {
                 .controlSize(.large)
                 .disabled(pageGoal.trimmingCharacters(in: .whitespaces).isEmpty
                           || pageName.trimmingCharacters(in: .whitespaces).isEmpty
-                          || apiKey.isEmpty
-                          || isGenerating)
+                          || isGenerating
+                          || (apiKey.isEmpty && PageSampleCatalog.matching(pageGoal) == nil))
 
                 Button("Skip AI — Create Empty Page") {
                     createEmptyPage(preSelectedKeys: [])
@@ -441,6 +522,15 @@ private struct PageGeneratorSheet: View {
     }
 
     private func buildAndAccept(_ result: GeneratedPageResult, editMode: Bool) {
+        // Cached sample accepted as-is → import the bundle (preserves bundled art).
+        if let sample = cachedPageSample, !editMode {
+            if let key = sample.importPage(into: scene, context: modelContext, allTiles: allTiles) {
+                try? modelContext.save()
+                onCreate(key, [])
+            }
+            dismiss()
+            return
+        }
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
         var lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -480,10 +570,24 @@ private struct PageGeneratorSheet: View {
             }
             scene.pages = pages
             if scene.homePageKey.isEmpty { scene.homePageKey = key }
+            PageLink.mint(pageKey: key,
+                          displayName: pageName.trimmingCharacters(in: .whitespacesAndNewlines),
+                          context: modelContext, existing: lookup)
             onCreate(key, [])
         }
         try? modelContext.save()
         dismiss()
+    }
+
+    private func loadCachedPage(_ sample: PageSample) {
+        guard let loaded = sample.loadPreview() else {
+            generationError = "Couldn't load the example."
+            return
+        }
+        cachedPageSample = sample
+        cachedPageImages = loaded.images
+        if pageName.trimmingCharacters(in: .whitespaces).isEmpty { pageName = sample.title }
+        preview = loaded.result
     }
 
     private func createEmptyPage(preSelectedKeys: Set<String>) {
@@ -493,6 +597,10 @@ private struct PageGeneratorSheet: View {
         pages.append(PageSpec(key: key, tiles: []))
         scene.pages = pages
         if scene.homePageKey.isEmpty { scene.homePageKey = key }
+        PageLink.mint(pageKey: key,
+                      displayName: pageName.trimmingCharacters(in: .whitespacesAndNewlines),
+                      context: modelContext,
+                      existing: Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) }))
         onCreate(key, preSelectedKeys)
         dismiss()
     }
@@ -511,6 +619,8 @@ private struct PagePreviewView: View {
     let preview: GeneratedPageResult
     let pageName: String
     let allTiles: [TileModel]
+    var previewImages: [String: Data] = [:]
+    var allowEdit: Bool = true
     let onAccept: () -> Void
     let onEdit: () -> Void
     let onRetry: () -> Void
@@ -576,10 +686,12 @@ private struct PagePreviewView: View {
                     ForEach(currentTiles, id: \.key) { genTile in
                         if let tile = tileLookup[genTile.key] {
                             GeneratedTileCell(key: tile.bundleImage, displayName: tile.displayName,
-                                              wordClass: tile.wordClass, link: genTile.link)
+                                              wordClass: tile.wordClass, link: genTile.link,
+                                              imageData: previewImages[genTile.key])
                         } else if let name = genTile.displayName, let wc = genTile.wordClass {
                             GeneratedTileCell(key: genTile.key, displayName: name,
-                                              wordClass: wc, link: genTile.link, isNew: true)
+                                              wordClass: wc, link: genTile.link, isNew: true,
+                                              imageData: previewImages[genTile.key])
                         }
                     }
                 }
@@ -596,8 +708,10 @@ private struct PagePreviewView: View {
                 Button("Retry") { onRetry() }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button("Edit") { onEdit() }
-                    .buttonStyle(.bordered)
+                if allowEdit {
+                    Button("Edit") { onEdit() }
+                        .buttonStyle(.bordered)
+                }
                 Button("Accept") { onAccept() }
                     .buttonStyle(.borderedProminent)
             }
@@ -613,13 +727,20 @@ private struct GeneratedTileCell: View {
     let wordClass: String
     let link: String
     var isNew: Bool = false
+    var imageData: Data? = nil
 
     private var isNav: Bool { !link.isEmpty }
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                TileImageView(key: key, wordClass: wordClass)
+                Group {
+                    if let imageData, let ui = UIImage(data: imageData) {
+                        Image(uiImage: ui).resizable().scaledToFit()
+                    } else {
+                        TileImageView(key: key, wordClass: wordClass)
+                    }
+                }
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
