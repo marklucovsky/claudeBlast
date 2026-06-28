@@ -138,9 +138,12 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
     flex: 1; text-align: center; position: relative;
 }}
 .card-images .img-col img {{
-    width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
+    width: 100%; aspect-ratio: 1; object-fit: contain; display: block; background: #fff;
 }}
-.card-images .img-label {{ display: none; }}
+.card-images .img-label {{
+    display: block; font-size: 10px; color: #555; padding: 3px 0 5px;
+    background: #fafafa; font-weight: 600; letter-spacing: 0.02em;
+}}
 
 .progress-bar {{
     height: 4px; background: #e5e5e5; border-radius: 2px; overflow: hidden; flex: 1; min-width: 100px;
@@ -172,7 +175,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
     gap: 20px; padding: 40px;
 }}
 .lightbox.active {{ display: flex; }}
-.lightbox img {{ max-height: 80vh; max-width: 45vw; border-radius: 8px; }}
+.lightbox img {{ max-height: 80vh; max-width: 30vw; border-radius: 8px; }}
 .lightbox .label {{
     position: absolute; bottom: 40px; color: white; font-size: 16px; font-weight: 500;
 }}
@@ -199,10 +202,9 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
         <option value="rejected">Rejected</option>
     </select>
     <input type="text" id="searchBox" placeholder="Search tiles..." />
-    <select id="baselineSource" title="What appears on the left side of each card">
-        <option value="p3d">LHS: latest p3d</option>
-        <option value="arasaac">LHS: ARASAAC</option>
-    </select>
+    <label style="font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <input type="checkbox" id="onlyNew" checked style="width:auto"> Only generated
+    </label>
     <button class="success" onclick="approveAll()">Approve All Visible</button>
     <button class="danger" onclick="exportRejects()">Export Rejects</button>
     <button onclick="exportAll()">Export Full Review</button>
@@ -214,7 +216,8 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
     <span class="close">&times;</span>
-    <img id="lb-current" />
+    <img id="lb-p3d" />
+    <img id="lb-arasaac" />
     <img id="lb-new" />
 </div>
 
@@ -256,9 +259,13 @@ function renderCard(key) {{
 }}
 
 function updateStats() {{
-    const total = TILES.length;
+    // During a pilot only some tiles are generated — measure progress against
+    // the generated set, not the full 492-tile vocabulary.
+    const present = TILES.filter(t => t.hasNew);
+    const scope = present.length ? present : TILES;
+    const total = scope.length;
     let approved = 0, rejected = 0;
-    TILES.forEach(t => {{
+    scope.forEach(t => {{
         const s = getState(t.key);
         if (s.status === "approved") approved++;
         if (s.status === "rejected") rejected++;
@@ -273,15 +280,6 @@ function updateStats() {{
 const tileMap = {{}};
 TILES.forEach(t => tileMap[t.key] = t);
 
-let showArasaac = false;
-
-function setBaselineSource(value) {{
-    showArasaac = value === "arasaac";
-    document.querySelectorAll(".baseline-img").forEach(img => {{
-        img.src = showArasaac ? (img.dataset.arasaac || "") : (img.dataset.p3d || "");
-    }});
-}}
-
 function buildGrid() {{
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
@@ -292,22 +290,22 @@ function buildGrid() {{
         card.className = "card " + s.status;
         card.dataset.key = t.key;
         card.dataset.wordclass = t.wordClass;
+        card.dataset.hasnew = t.hasNew ? "1" : "0";
         const k = t.key.replace(/'/g, "\\\\'");
 
         card.innerHTML = `
             <div class="card-images" onclick="openLightbox('${{k}}')" style="position:relative">
                 <div class="img-col">
-                    <img class="baseline-img" src="${{t.currentImg || ''}}"
-                         data-p3d="${{t.currentImg || ''}}"
-                         data-arasaac="${{t.arasaacImg || ''}}"
-                         loading="lazy"
-                         onerror="this.style.opacity=0"
-                         onload="this.style.opacity=1" />
-                    <span class="img-label">Current p3d</span>
+                    ${{t.currentImg ? `<img src="${{t.currentImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">no p3d</div>'}}
+                    <span class="img-label">Playful-3D</span>
                 </div>
                 <div class="img-col">
-                    ${{t.newImg ? `<img src="${{t.newImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999">Missing</div>'}}
-                    <span class="img-label">${{SET_NAME}}</span>
+                    ${{t.arasaacImg ? `<img src="${{t.arasaacImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">no ARASAAC</div>'}}
+                    <span class="img-label">ARASAAC ref</span>
+                </div>
+                <div class="img-col">
+                    ${{t.hasNew ? `<img src="${{t.newImg}}" loading="lazy" />` : '<div style="aspect-ratio:1;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:11px">Missing</div>'}}
+                    <span class="img-label">NEW: ${{SET_NAME}}</span>
                 </div>
             </div>
             <div class="card-body">
@@ -337,12 +335,14 @@ function applyFilters() {{
     const cat = document.getElementById("filterCategory").value;
     const status = document.getElementById("filterStatus").value;
     const search = document.getElementById("searchBox").value.toLowerCase();
+    const onlyNew = document.getElementById("onlyNew").checked;
 
     document.querySelectorAll(".card").forEach(card => {{
         const key = card.dataset.key;
         const wc = card.dataset.wordclass;
         const s = getState(key);
         let show = true;
+        if (onlyNew && card.dataset.hasnew !== "1") show = false;
         if (cat !== "all" && wc !== cat) show = false;
         if (status !== "all" && s.status !== status) show = false;
         if (search && !key.includes(search)) show = false;
@@ -396,8 +396,9 @@ function exportAll() {{
 
 function openLightbox(key) {{
     const t = tileMap[key];
-    document.getElementById("lb-current").src = showArasaac ? (t.arasaacImg || "") : (t.currentImg || "");
-    document.getElementById("lb-new").src = t.newImg || "";
+    document.getElementById("lb-p3d").src = t.currentImg || "";
+    document.getElementById("lb-arasaac").src = t.arasaacImg || "";
+    document.getElementById("lb-new").src = t.hasNew ? t.newImg : "";
     document.getElementById("lightbox").classList.add("active");
 }}
 function closeLightbox() {{
@@ -411,8 +412,9 @@ document.addEventListener("keydown", e => {{
 document.getElementById("filterCategory").addEventListener("change", applyFilters);
 document.getElementById("filterStatus").addEventListener("change", applyFilters);
 document.getElementById("searchBox").addEventListener("input", applyFilters);
-document.getElementById("baselineSource").addEventListener("change", e => setBaselineSource(e.target.value));
+document.getElementById("onlyNew").addEventListener("change", applyFilters);
 buildGrid();
+applyFilters();
 </script>
 </body>
 </html>"""

@@ -91,8 +91,8 @@ enum TileImageGenerator {
     /// in-app generation matches the offline tile-set art. Falls back to a short
     /// built-in style only if the bundled file is missing/corrupt.
     private static func style(for imageSet: ImageSetID) -> String {
-        // ImageSetID raw values (arasaac / playful_3d / high_contrast) are the
-        // JSON keys.
+        // ImageSetID raw values are the JSON keys in image_styles.json (classic
+        // carries its own entry — a flat ARASAAC-style pictogram recipe).
         loadedStyles[imageSet.rawValue] ?? fallbackStyle(for: imageSet)
     }
 
@@ -114,7 +114,7 @@ enum TileImageGenerator {
             return "3D clay/plasticine sculpture, soft rounded shapes, pastel-bright colors, clean solid-color background, no text. Square format, single clear subject centered."
         case .highContrast:
             return "High-contrast pictogram: one bold white subject on a pure solid black background, thick clean lines, no frame, no border, no text. Square format, subject centered."
-        case .arasaac:
+        case .arasaac, .classic:
             return "Flat 2D AAC pictogram, bold clean outlines, bright saturated solid colors, white background, no text. Square format, single clear subject centered."
         }
     }
