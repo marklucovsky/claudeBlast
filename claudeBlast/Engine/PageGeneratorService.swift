@@ -209,6 +209,9 @@ struct PageGeneratorService {
     private func buildVocabBlock(allTiles: [TileModel]) -> String {
         var byClass: [String: [String]] = [:]
         for tile in allTiles {
+            // Hide structural navigation + page_link tiles so the model treats
+            // them as neither selectable words nor page switchers.
+            guard tile.wordClass != "navigation", tile.wordClass != PageLink.wordClass else { continue }
             byClass[tile.wordClass, default: []].append(tile.key)
         }
         return byClass.keys.sorted().map { wc in

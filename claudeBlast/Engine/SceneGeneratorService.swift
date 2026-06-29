@@ -164,10 +164,11 @@ struct SceneGeneratorService {
     private func buildVocabBlock(allTiles: [TileModel]) -> String {
         var byClass: [String: [String]] = [:]
         for tile in allTiles {
-            // Hide structural navigation tiles (next_page, previous_page, home, …)
-            // so the model can't repurpose them as ad-hoc page switchers; scene
-            // navigation is generated deterministically (see SceneNavigation).
-            guard tile.wordClass != "navigation" else { continue }
+            // Hide structural navigation + page_link tiles (next_page, page_home,
+            // page_farm, …) so the model can't repurpose them as ad-hoc words or
+            // page switchers; scene navigation is generated deterministically
+            // (see SceneNavigation).
+            guard tile.wordClass != "navigation", tile.wordClass != PageLink.wordClass else { continue }
             byClass[tile.wordClass, default: []].append(tile.key)
         }
         return byClass.keys.sorted().map { wc in
