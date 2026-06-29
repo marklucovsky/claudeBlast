@@ -45,31 +45,41 @@ def build_page(set_name: str) -> Path:
     vocab = json.loads(VOCAB_FILE.read_text())
     set_dir = OUTPUT_BASE / set_name
     html_dir = OUTPUT_BASE  # HTML lives in tools/tile_sets/
+    res = VOCAB_FILE.parent  # claudeBlast/Resources
 
     import shutil
 
-    # Current p3d tiles — copy to a local dir so browsers can load them
-    current_dir = OUTPUT_BASE / "current_p3d"
-    current_dir.mkdir(parents=True, exist_ok=True)
-    for tile in vocab:
-        src = TILE_IMAGE_SETS / f"p3d_{tile['key']}.png"
-        if src.exists():
-            shutil.copy2(src, current_dir / f"{tile['key']}.png")
+    # Combined tile list: base vocabulary + vocab-pack words, each tagged with its
+    # pack ("base" for core vocab). Pack words extend the vocabulary and need
+    # review too, even though they aren't in vocabulary.json.
+    entries = [(t["key"], t.get("wordClass", "unknown"), "base") for t in vocab]
+    base_keys = {t["key"] for t in vocab}
+    try:
+        catalog = json.loads((res / "packs.json").read_text())
+    except Exception:
+        catalog = []
+    for entry in catalog:
+        try:
+            pj = json.loads((res / f"{entry['file']}.json").read_text())
+        except Exception:
+            continue
+        for w in pj.get("words", []):
+            if w["key"] not in base_keys:
+                entries.append((w["key"], w.get("wordClass", "unknown"), entry["slug"]))
 
-    # ARASAAC tiles — copy for comparison toggle
-    arasaac_dir = OUTPUT_BASE / "current_arasaac"
-    arasaac_dir.mkdir(parents=True, exist_ok=True)
-    for tile in vocab:
-        src = ASSETS_DIR / f"{tile['key']}.imageset" / f"{tile['key']}.png"
-        if src.exists():
-            shutil.copy2(src, arasaac_dir / f"{tile['key']}.png")
+    # Local copies of p3d + ARASAAC art so the browser can load them.
+    current_dir = OUTPUT_BASE / "current_p3d"; current_dir.mkdir(parents=True, exist_ok=True)
+    arasaac_dir = OUTPUT_BASE / "current_arasaac"; arasaac_dir.mkdir(parents=True, exist_ok=True)
+    for key, _wc, _pk in entries:
+        p3d = TILE_IMAGE_SETS / f"p3d_{key}.png"
+        if p3d.exists():
+            shutil.copy2(p3d, current_dir / f"{key}.png")
+        ar = ASSETS_DIR / f"{key}.imageset" / f"{key}.png"
+        if ar.exists():
+            shutil.copy2(ar, arasaac_dir / f"{key}.png")
 
-    # Build tile data with relative file paths (all within tile_sets/)
     tiles_json = []
-    for i, tile in enumerate(vocab):
-        key = tile["key"]
-        wc = tile.get("wordClass", "unknown")
-
+    for i, (key, wc, pack) in enumerate(entries):
         current_path = current_dir / f"{key}.png"
         arasaac_path = arasaac_dir / f"{key}.png"
         new_path = set_dir / f"{key}.png"
@@ -81,6 +91,7 @@ def build_page(set_name: str) -> Path:
         tiles_json.append({
             "key": key,
             "wordClass": wc,
+            "pack": pack,
             "index": i,
             "currentImg": current_img,
             "arasaacImg": img_to_relative_path(arasaac_path, html_dir),
@@ -89,6 +100,7 @@ def build_page(set_name: str) -> Path:
         })
 
     categories = sorted(set(t["wordClass"] for t in tiles_json))
+    packs = ["base"] + sorted({e[2] for e in entries if e[2] != "base"})
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -195,6 +207,10 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
         <option value="all">All Categories</option>
         {"".join(f'<option value="{c}">{c}</option>' for c in categories)}
     </select>
+    <select id="filterPack">
+        <option value="all">All Packs</option>
+        {"".join(f'<option value="{p}">{"base vocab" if p == "base" else p}</option>' for p in packs)}
+    </select>
     <select id="filterStatus">
         <option value="all">All Status</option>
         <option value="unreviewed">Unreviewed</option>
@@ -290,6 +306,7 @@ function buildGrid() {{
         card.className = "card " + s.status;
         card.dataset.key = t.key;
         card.dataset.wordclass = t.wordClass;
+        card.dataset.pack = t.pack;
         card.dataset.hasnew = t.hasNew ? "1" : "0";
         const k = t.key.replace(/'/g, "\\\\'");
 
@@ -311,6 +328,7 @@ function buildGrid() {{
             <div class="card-body">
                 <span class="tile-key">${{t.key}}</span>
                 <span class="tile-class">${{t.wordClass}}</span>
+                ${{t.pack !== 'base' ? `<span class="tile-class" style="color:#7a5cff;font-weight:600">· ${{t.pack}}</span>` : ''}}
                 <div class="card-actions">
                     <button class="btn-approve ${{s.status === 'approved' ? 'active-approve' : ''}}"
                             onclick="setState('${{k}}', {{status: getState('${{k}}').status === 'approved' ? 'unreviewed' : 'approved'}})">&#10003;</button>
@@ -333,6 +351,7 @@ function buildGrid() {{
 
 function applyFilters() {{
     const cat = document.getElementById("filterCategory").value;
+    const pk = document.getElementById("filterPack").value;
     const status = document.getElementById("filterStatus").value;
     const search = document.getElementById("searchBox").value.toLowerCase();
     const onlyNew = document.getElementById("onlyNew").checked;
@@ -344,6 +363,7 @@ function applyFilters() {{
         let show = true;
         if (onlyNew && card.dataset.hasnew !== "1") show = false;
         if (cat !== "all" && wc !== cat) show = false;
+        if (pk !== "all" && card.dataset.pack !== pk) show = false;
         if (status !== "all" && s.status !== status) show = false;
         if (search && !key.includes(search)) show = false;
         card.classList.toggle("hidden", !show);
@@ -410,6 +430,7 @@ document.addEventListener("keydown", e => {{
 
 // Init
 document.getElementById("filterCategory").addEventListener("change", applyFilters);
+document.getElementById("filterPack").addEventListener("change", applyFilters);
 document.getElementById("filterStatus").addEventListener("change", applyFilters);
 document.getElementById("searchBox").addEventListener("input", applyFilters);
 document.getElementById("onlyNew").addEventListener("change", applyFilters);

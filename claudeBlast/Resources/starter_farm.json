@@ -3,7 +3,7 @@
   "_comment": "Blaster starter scene (bundled). Edit the prompt to generate a fresh scene.",
   "version": "1.0.0",
   "name": "Farm Visit",
-  "description": "Animals and adventures at the farm \u2014 point to them, name them, and ask to see more.",
+  "description": "Animals and adventures at the farm — point to them, name them, and ask to see more.",
   "homePageKey": "farm",
   "tiles": [
     {
@@ -60,6 +60,11 @@
       "key": "hay",
       "wordClass": "object",
       "displayName": "Hay"
+    },
+    {
+      "key": "scarecrow",
+      "wordClass": "object",
+      "displayName": "Scarecrow"
     }
   ],
   "pages": [
@@ -295,6 +300,11 @@
           "key": "body_health",
           "isAudible": false,
           "link": "body_health"
+        },
+        {
+          "key": "scarecrow",
+          "isAudible": true,
+          "link": ""
         }
       ]
     },

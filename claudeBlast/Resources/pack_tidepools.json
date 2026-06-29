@@ -1,0 +1,44 @@
+{
+  "id": "vocab.blaster.app/tidepools",
+  "slug": "tidepools",
+  "displayName": "Tide Pools",
+  "version": "1.0.0",
+  "icon": "tidepools",
+  "words": [
+    {
+      "key": "crab",
+      "wordClass": "object",
+      "displayName": "Crab"
+    },
+    {
+      "key": "starfish",
+      "wordClass": "object",
+      "displayName": "Starfish"
+    },
+    {
+      "key": "shell",
+      "wordClass": "object",
+      "displayName": "Shell"
+    },
+    {
+      "key": "seaweed",
+      "wordClass": "object",
+      "displayName": "Seaweed"
+    },
+    {
+      "key": "fish",
+      "wordClass": "object",
+      "displayName": "Fish"
+    },
+    {
+      "key": "snail",
+      "wordClass": "object",
+      "displayName": "Snail"
+    },
+    {
+      "key": "anemone",
+      "wordClass": "object",
+      "displayName": "Anemone"
+    }
+  ]
+}

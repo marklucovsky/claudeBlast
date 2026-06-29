@@ -29,6 +29,7 @@ enum PageLink {
     static func mint(pageKey: String,
                      displayName: String,
                      image: Data? = nil,
+                     imageKey: String? = nil,
                      context: ModelContext,
                      existing: [String: TileModel]) -> TileModel {
         let k = key(forPage: pageKey)
@@ -38,8 +39,39 @@ enum PageLink {
         }
         let tile = TileModel(key: k, value: displayName, wordClass: wordClass)
         tile.isSystem = false
-        if let image { tile.userImageData = image }
+        if let image {
+            tile.userImageData = image                 // explicit cover (e.g. a pack icon)
+        } else if let imageKey {
+            tile.bundleImage = imageKey                // alias an existing tile's set art
+        }
         context.insert(tile)
         return tile
+    }
+
+    /// Ensure every page in `scene` has a page-link tile (its image + silent link).
+    /// Reuses the image already used by an existing tile that links to the page
+    /// (e.g. the core scene's category links) so no new art is generated; falls
+    /// back to a representative member tile. Idempotent — safe to re-run.
+    static func ensurePageImages(in scene: BlasterScene, context: ModelContext,
+                                 existing: [String: TileModel]) {
+        let pages = scene.pages
+        // page key -> image key, taken from any tile that already links to it.
+        var inboundImage: [String: String] = [:]
+        for page in pages {
+            for tile in page.tiles where !tile.link.isEmpty {
+                let dest = tile.link == "<home>" ? scene.homePageKey : tile.link
+                if inboundImage[dest] == nil, existing[tile.key] != nil {
+                    inboundImage[dest] = tile.key
+                }
+            }
+        }
+        for page in pages where existing[key(forPage: page.key)] == nil {
+            let imageKey = inboundImage[page.key]
+                ?? page.tiles.first(where: { existing[$0.key] != nil })?.key
+            mint(pageKey: page.key,
+                 displayName: page.key.replacingOccurrences(of: "_", with: " ").capitalized,
+                 imageKey: imageKey,
+                 context: context, existing: existing)
+        }
     }
 }

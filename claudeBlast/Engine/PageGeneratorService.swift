@@ -59,7 +59,90 @@ struct PageGeneratorService {
         return try parsePage(data: data, pageName: pageName, validKeys: Set(allTiles.map(\.key)))
     }
 
+    /// Apply `instruction` to the current page (`currentTiles`), returning a
+    /// refined page. Mirrors SceneRefinerService: keep current tiles unless the
+    /// instruction removes them; proposed-new words carry forward so an
+    /// un-accepted preview's new words survive the round trip.
+    func refine(instruction: String, pageName: String,
+                currentTiles: [GeneratedTile], allTiles: [TileModel],
+                scenePages: [PageSpec] = [], homePageKey: String = "") async throws -> GeneratedPageResult {
+        guard !apiKey.isEmpty else { throw OpenAIError.missingAPIKey }
+
+        let vocabBlock = buildVocabBlock(allTiles: allTiles)
+        let sceneBlock = buildSceneBlock(scenePages: scenePages, homePageKey: homePageKey, allTiles: allTiles)
+        let system = buildRefineSystemPrompt(currentTiles: currentTiles)
+        let user = buildUserPrompt(pageGoal: instruction, pageName: pageName, vocabBlock: vocabBlock, sceneBlock: sceneBlock)
+
+        let body: [String: Any] = [
+            "model": model,
+            "temperature": temperature,
+            "max_tokens": maxTokens,
+            "messages": [
+                ["role": "system", "content": system],
+                ["role": "user",   "content": user]
+            ]
+        ]
+
+        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw OpenAIError.httpError(statusCode: 0, body: "Invalid response")
+        }
+        guard http.statusCode == 200 else {
+            throw OpenAIError.httpError(statusCode: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+
+        let carryOver: [GeneratedNewWord] = currentTiles.compactMap { tile in
+            guard tile.isProposedNew, let displayName = tile.displayName, let wordClass = tile.wordClass
+            else { return nil }
+            return GeneratedNewWord(key: tile.key, displayName: displayName, wordClass: wordClass)
+        }
+        return try parsePage(data: data, pageName: pageName,
+                             validKeys: Set(allTiles.map(\.key)), extraNewWords: carryOver)
+    }
+
     // MARK: - Prompt builders
+
+    private func buildRefineSystemPrompt(currentTiles: [GeneratedTile]) -> String {
+        let listing = currentTiles.map { tile in
+            let name = tile.displayName ?? tile.key.replacingOccurrences(of: "_", with: " ")
+            return "\(tile.key) — \(name)"
+        }.joined(separator: "\n")
+        return """
+        You are a specialist in AAC (Augmentative and Alternative Communication) for non-verbal children, \
+        REFINING an existing single page. The caregiver will give an instruction; apply ONLY that change.
+
+        Here are the page's CURRENT tiles (key — what it shows):
+        \(listing)
+
+        Rules:
+        - Return the COMPLETE updated tile list: keep every current tile unless the instruction removes \
+          it, and add the new ones.
+        - When the instruction names concrete things, include EVERY one — reuse an existing vocabulary \
+          key if present, otherwise declare it new.
+        - A NEW word must be a COMMON, CONCRETE thing with a single clear visual (an animal, object, \
+          food, place, or person). Declare each new word ONCE in "newWords" with "displayName" and \
+          "wordClass" (one of: \(VocabularyClasses.caregiverSelectable.map(\.name).joined(separator: ", "))), \
+          then reference it by the same "key". Choose wordClass by what the thing IS: "places" is ONLY a \
+          location you go to — for a physical object, tool, or vehicle use "object".
+        - Put every tile on the SINGLE page (isAudible=true, empty link); no navigation tiles.
+        - Aim for 8–24 tiles.
+
+        Return ONLY valid JSON — no markdown, no prose:
+        {
+          "key": "string",
+          "newWords": [ { "key": "horse", "displayName": "horse", "wordClass": "animal" } ],
+          "tiles": [ { "key": "horse", "isAudible": true, "link": "" } ],
+          "newPages": []
+        }
+        """
+    }
 
     private func buildSystemPrompt() -> String {
         """
@@ -149,7 +232,8 @@ struct PageGeneratorService {
 
     // MARK: - Response parsing
 
-    private func parsePage(data: Data, pageName: String, validKeys: Set<String>) throws -> GeneratedPageResult {
+    private func parsePage(data: Data, pageName: String, validKeys: Set<String>,
+                           extraNewWords: [GeneratedNewWord] = []) throws -> GeneratedPageResult {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let message = choices.first?["message"] as? [String: Any],
@@ -170,7 +254,8 @@ struct PageGeneratorService {
         }
 
         let raw = try JSONDecoder().decode(GeneratedPageResponse.self, from: jsonData)
-        let newWords = GeneratedNewWord.lookup(from: raw.newWords)
+        var newWords = GeneratedNewWord.lookup(from: raw.newWords)
+        newWords.merge(GeneratedNewWord.lookup(from: extraNewWords)) { current, _ in current }
 
         let validPrimary = raw.tiles.compactMap {
             GeneratedTile.sanitize($0, validKeys: validKeys, newWords: newWords)

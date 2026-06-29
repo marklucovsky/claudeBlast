@@ -3,7 +3,7 @@
   "_comment": "Blaster starter scene (bundled). Edit the prompt to generate a fresh scene.",
   "version": "1.0.0",
   "name": "Tide Pools",
-  "description": "Exploring the seashore \u2014 crabs, shells, and what we find in the water.",
+  "description": "Exploring the seashore — crabs, shells, and what we find in the water.",
   "homePageKey": "tidepools",
   "tiles": [
     {
@@ -40,6 +40,11 @@
       "key": "anemone",
       "wordClass": "object",
       "displayName": "Anemone"
+    },
+    {
+      "key": "seahorse",
+      "wordClass": "animal",
+      "displayName": "Seahorse"
     }
   ],
   "pages": [
@@ -270,6 +275,11 @@
           "key": "body_health",
           "isAudible": false,
           "link": "body_health"
+        },
+        {
+          "key": "seahorse",
+          "isAudible": true,
+          "link": ""
         }
       ]
     },

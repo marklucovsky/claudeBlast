@@ -30,6 +30,11 @@
       "key": "napkin",
       "wordClass": "object",
       "displayName": "Napkin"
+    },
+    {
+      "key": "placemat",
+      "wordClass": "object",
+      "displayName": "Placemat"
     }
   ],
   "pages": [
@@ -260,6 +265,11 @@
           "key": "body_health",
           "isAudible": false,
           "link": "body_health"
+        },
+        {
+          "key": "placemat",
+          "isAudible": true,
+          "link": ""
         }
       ]
     },
