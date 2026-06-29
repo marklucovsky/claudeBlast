@@ -7,31 +7,42 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
+/// Grid-based page editor — shows the page as the child sees it and supports
+/// direct manipulation: tap-to-edit, native drag-and-drop reorder (press-hold a
+/// tile to lift it, drag onto another to drop; a quick swipe still scrolls), an
+/// inline add cell, and remove (in the tile's settings). A snapshot undo/redo
+/// stack guards against the classic accidental-drop / accidental-remove
+/// frustration (depth `maxUndoDepth`, per editing session).
 struct PageEditorView: View {
     @Bindable var scene: BlasterScene
     let pageKey: String
     var autoOpenPickerWithKeys: Set<String> = []
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.editMode) private var editMode
 
     @State private var isPickingTiles = false
-    @State private var showArrangeGrid = false
     @State private var editingTileKey: String? = nil
     @State private var pickerInitialKeys: Set<String> = []
+
+    /// Key currently hovered as a drop target (drives the highlight ring).
+    @State private var dropTarget: String? = nil
+
+    // Undo/redo: snapshots of the page's tile array (reorder / add / remove).
+    // Deep enough to not think about; snapshots are tiny so the memory is moot.
+    @State private var undoStack: [[TileEntry]] = []
+    @State private var redoStack: [[TileEntry]] = []
+    @State private var prePickerSnapshot: [TileEntry]? = nil
+    private let maxUndoDepth = 25
+
+    private let columns = [GridItem(.adaptive(minimum: 84, maximum: 112), spacing: 10)]
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
     }
-
-    private var pageIndex: Int? {
-        scene.pages.firstIndex { $0.key == pageKey }
-    }
-
-    private var page: PageSpec? {
-        scene.pages.first { $0.key == pageKey }
-    }
+    private var pageIndex: Int? { scene.pages.firstIndex { $0.key == pageKey } }
+    private var page: PageSpec? { scene.pages.first { $0.key == pageKey } }
 
     var body: some View {
         Group {
@@ -41,21 +52,20 @@ struct PageEditorView: View {
                 } description: {
                     Text("Tap + to add tiles to this page.")
                 } actions: {
-                    Button("Add Tiles") { isPickingTiles = true }
+                    Button("Add Tiles") { openPicker() }
                         .buttonStyle(.borderedProminent)
                 }
             } else if let page {
-                List {
-                    ForEach(page.tiles, id: \.key) { entry in
-                        tileRow(entry)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                guard editMode?.wrappedValue != .active else { return }
-                                editingTileKey = entry.key
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(page.tiles, id: \.key) { entry in
+                            if let tile = tileLookup[entry.key] {
+                                cell(entry: entry, tile: tile)
                             }
+                        }
+                        addCell
                     }
-                    .onDelete(perform: deleteTiles)
-                    .onMove(perform: moveTiles)
+                    .padding(16)
                 }
             } else {
                 ContentUnavailableView("Page not found", systemImage: "questionmark.folder")
@@ -64,88 +74,202 @@ struct PageEditorView: View {
         .navigationTitle(pageKey)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                EditButton()
+            ToolbarItemGroup(placement: .navigationBarLeading) {
+                Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                    .disabled(undoStack.isEmpty)
+                Button { redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                    .disabled(redoStack.isEmpty)
             }
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    showArrangeGrid = true
-                } label: {
-                    Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                }
-                .disabled((page?.tiles.count ?? 0) < 2)
-
-                Button { isPickingTiles = true } label: {
-                    Image(systemName: "plus")
-                }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { openPicker() } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(isPresented: $isPickingTiles, onDismiss: { pickerInitialKeys = [] }) {
+        .sheet(isPresented: $isPickingTiles, onDismiss: pickerDismissed) {
             TilePickerView(scene: scene, pageKey: pageKey, initialSelectedKeys: pickerInitialKeys)
+        }
+        .sheet(item: $editingTileKey) { key in
+            TilePropertiesSheet(scene: scene, pageKey: pageKey, tileKey: key,
+                                onRemove: { remove(key: key) })
         }
         .task {
             guard !autoOpenPickerWithKeys.isEmpty else { return }
             pickerInitialKeys = autoOpenPickerWithKeys
+            prePickerSnapshot = page?.tiles ?? []
             isPickingTiles = true
         }
-        .sheet(item: $editingTileKey) { key in
-            TilePropertiesSheet(scene: scene, pageKey: pageKey, tileKey: key)
-        }
-        .sheet(isPresented: $showArrangeGrid) {
-            GridArrangeView(scene: scene, pageKey: pageKey)
-        }
     }
+
+    // MARK: - Cells
 
     @ViewBuilder
-    private func tileRow(_ entry: TileEntry) -> some View {
-        HStack(spacing: 12) {
-            let tile = tileLookup[entry.key]
-            TileImageView(key: tile?.bundleImage ?? entry.key,
-                          wordClass: tile?.wordClass ?? "")
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+    private func cell(entry: TileEntry, tile: TileModel) -> some View {
+        let key = entry.key
+        PageTileCell(tile: tile, link: entry.link)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.accentColor, lineWidth: dropTarget == key ? 3 : 0)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+            .onTapGesture { editingTileKey = key }
+            // .draggable (SwiftUI-native) reliably arbitrates drag vs. scroll and,
+            // unlike .onDrag, fires no late system drop haptic — so the synchronous
+            // drop haptic below stands alone and on time. No custom lift haptic:
+            // .draggable exposes no drag-start hook and a simultaneous long-press
+            // breaks its drag; the system lift is imperceptible. Default preview
+            // snapshots the in-context cell, so no TileImageResolver crash.
+            .draggable(key)
+            .dropDestination(for: String.self) { items, _ in
+                guard let moved = items.first else { return false }
+                impact(.light)                                   // drop — on time; .draggable adds no system double
+                // Defer the model mutation out of the drop callback — mutating the
+                // SwiftData array synchronously here re-enters the view update.
+                Task { @MainActor in moveTile(moved, before: key) }
+                return true
+            } isTargeted: { targeted in
+                dropTarget = targeted ? key : (dropTarget == key ? nil : dropTarget)
+            }
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(tile?.displayName ?? entry.key)
-                HStack(spacing: 8) {
-                    if entry.isAudible {
-                        Label("Audible", systemImage: "speaker.wave.2")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                    }
-                    if !entry.link.isEmpty {
-                        Label(entry.link, systemImage: "arrow.right.circle")
-                            .font(.caption2)
-                            .foregroundStyle(.blue)
-                    }
+    private var addCell: some View {
+        Button { openPicker() } label: {
+            VStack(spacing: 3) {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
+                    .foregroundStyle(.tertiary)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(Image(systemName: "plus").font(.title2).foregroundStyle(.secondary))
+                Text("Add").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .dropDestination(for: String.self) { items, _ in   // drop on "+" → move to end
+            guard let moved = items.first else { return false }
+            impact(.light)
+            Task { @MainActor in moveTileToEnd(moved) }
+            return true
+        }
+    }
+
+    // MARK: - Reorder (native drag-and-drop)
+
+    /// Move `movedKey` so it sits just before `targetKey`. One undo step.
+    private func moveTile(_ movedKey: String, before targetKey: String) {
+        guard movedKey != targetKey, let idx = pageIndex, let page else { dropTarget = nil; return }
+        var tiles = page.tiles
+        guard let from = tiles.firstIndex(where: { $0.key == movedKey }) else { dropTarget = nil; return }
+        recordUndo(tiles)
+        let item = tiles.remove(at: from)
+        let insertAt = tiles.firstIndex(where: { $0.key == targetKey }) ?? tiles.count
+        tiles.insert(item, at: insertAt)
+        var pages = scene.pages
+        pages[idx].tiles = tiles
+        scene.pages = pages
+        try? modelContext.save()
+        dropTarget = nil
+    }
+
+    private func moveTileToEnd(_ movedKey: String) {
+        guard let idx = pageIndex, let page else { return }
+        var tiles = page.tiles
+        guard let from = tiles.firstIndex(where: { $0.key == movedKey }) else { return }
+        recordUndo(tiles)
+        tiles.append(tiles.remove(at: from))
+        var pages = scene.pages
+        pages[idx].tiles = tiles
+        scene.pages = pages
+        try? modelContext.save()
+    }
+
+    private func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
+    }
+
+    // MARK: - Add / Remove
+
+    private func openPicker() {
+        pickerInitialKeys = []
+        prePickerSnapshot = page?.tiles ?? []
+        isPickingTiles = true
+    }
+
+    private func pickerDismissed() {
+        pickerInitialKeys = []
+        if let before = prePickerSnapshot, before != (page?.tiles ?? []) {
+            recordUndo(before)
+        }
+        prePickerSnapshot = nil
+    }
+
+    private func remove(key: String) {
+        guard let idx = pageIndex, let page else { return }
+        recordUndo(page.tiles)
+        var pages = scene.pages
+        pages[idx].tiles.removeAll { $0.key == key }
+        scene.pages = pages
+        try? modelContext.save()
+    }
+
+    // MARK: - Undo / redo (snapshot stack)
+
+    private func recordUndo(_ before: [TileEntry]) {
+        guard undoStack.last != before else { return }
+        undoStack.append(before)
+        if undoStack.count > maxUndoDepth { undoStack.removeFirst() }
+        redoStack.removeAll()
+    }
+
+    private func setTiles(_ tiles: [TileEntry]) {
+        guard let idx = pageIndex else { return }
+        var pages = scene.pages
+        pages[idx].tiles = tiles
+        scene.pages = pages
+        try? modelContext.save()
+    }
+
+    private func undo() {
+        guard let before = undoStack.popLast() else { return }
+        redoStack.append(page?.tiles ?? [])
+        if redoStack.count > maxUndoDepth { redoStack.removeFirst() }
+        setTiles(before)
+    }
+
+    private func redo() {
+        guard let after = redoStack.popLast() else { return }
+        undoStack.append(page?.tiles ?? [])
+        if undoStack.count > maxUndoDepth { undoStack.removeFirst() }
+        setTiles(after)
+    }
+}
+
+// MARK: - Page tile cell
+
+/// A single tile in the editor grid, mirroring the child's board cell, with a
+/// small link badge for navigation tiles.
+struct PageTileCell: View {
+    let tile: TileModel
+    var link: String = ""
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack(alignment: .topTrailing) {
+                TileImageView(key: tile.bundleImage, wordClass: tile.wordClass)
+                    .padding(5)
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+                if !link.isEmpty {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                        .padding(4)
                 }
             }
-
-            Spacer()
-            if editMode?.wrappedValue != .active {
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
+            Text(tile.displayName)
+                .font(.system(size: 10, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
         }
-    }
-
-    private func deleteTiles(at offsets: IndexSet) {
-        guard let pageIdx = pageIndex else { return }
-        var pages = scene.pages
-        for index in offsets.sorted().reversed() {
-            pages[pageIdx].tiles.remove(at: index)
-        }
-        scene.pages = pages
-        try? modelContext.save()
-    }
-
-    private func moveTiles(from source: IndexSet, to destination: Int) {
-        guard let pageIdx = pageIndex else { return }
-        var pages = scene.pages
-        pages[pageIdx].tiles.move(fromOffsets: source, toOffset: destination)
-        scene.pages = pages
-        try? modelContext.save()
     }
 }
 
@@ -160,6 +284,7 @@ struct TilePropertiesSheet: View {
     @Bindable var scene: BlasterScene
     let pageKey: String
     let tileKey: String
+    var onRemove: (() -> Void)? = nil
     @Query(sort: \TileModel.key) private var allTiles: [TileModel]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -241,8 +366,15 @@ struct TilePropertiesSheet: View {
                     }
                 }
 
-                Section("Behavior") {
+                Section {
                     Toggle("Add to sentence tray", isOn: entryBinding.audible)
+                        .disabled(!(entry?.link ?? "").isEmpty)
+                } header: {
+                    Text("Behavior")
+                } footer: {
+                    if !(entry?.link ?? "").isEmpty {
+                        Text("This tile opens a page, so it doesn't add to the sentence tray. (Kept for a future tile that both navigates and speaks.)")
+                    }
                 }
 
                 Section("Navigation") {
@@ -257,6 +389,18 @@ struct TilePropertiesSheet: View {
                         Text("Tapping this tile navigates to \"\(currentLink)\".")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let onRemove {
+                    Section {
+                        Button(role: .destructive) {
+                            onRemove()
+                            dismiss()
+                        } label: {
+                            Label("Remove from Page", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
