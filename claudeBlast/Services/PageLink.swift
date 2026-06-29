@@ -8,6 +8,15 @@ import Foundation
 /// collection. Its key encodes the target page, so the tile can be dropped on
 /// any board and resolve to a link. Every page mints one when it's created,
 /// encouraging reuse of named tile collections (pages).
+///
+/// `page_link` vs the `navigation` wordClass — both are non-words and are
+/// filtered from the AI vocabulary, but they differ in intent:
+/// - `navigation` is generic structural *chrome* (home / next_page /
+///   previous_page) — movement with no specific destination.
+/// - `page_link` jumps to a specific *named* collection, with the target
+///   encoded in the key.
+/// Navigation itself is a scene/placement concept: a tile navigates iff its
+/// `TileEntry.link` is non-empty — never a property of the TileModel/`type`.
 enum PageLink {
     static let wordClass = "page_link"
     private static let prefix = "page_"
