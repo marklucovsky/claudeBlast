@@ -127,6 +127,9 @@ struct GeneratedScene: Codable {
     /// sanitized scene returned to callers — by then the metadata lives on the
     /// individual tiles.
     var newWords: [GeneratedNewWord]? = nil
+    /// Total tokens billed for this generation, attached by SceneGeneratorService
+    /// after parsing the response. Optional → absent in model JSON decodes to nil.
+    var tokenUsage: Int? = nil
 }
 
 extension GeneratedScene {

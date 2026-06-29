@@ -31,6 +31,7 @@ APP_BUNDLE_DIR = Path("claudeBlast/TileImageSets")
 SET_PREFIX = {
     "playful_3d": "p3d",
     "high_contrast": "hc",
+    "classic": "cls",
 }
 
 

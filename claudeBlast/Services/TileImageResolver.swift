@@ -15,24 +15,27 @@ import Observation
 // MARK: - Image Set Identifier
 
 enum ImageSetID: String, CaseIterable, Identifiable {
-    case arasaac = "arasaac"
     case playful3D = "playful_3d"
+    case classic = "classic"
+    case arasaac = "arasaac"
     case highContrast = "high_contrast"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .arasaac: return "Classic (ARASAAC)"
         case .playful3D: return "Playful 3D"
+        case .classic: return "Classic"
+        case .arasaac: return "ARASAAC (legacy)"
         case .highContrast: return "High Contrast"
         }
     }
 
     var description: String {
         switch self {
-        case .arasaac: return "Original pictogram style"
         case .playful3D: return "Modern clay/plasticine 3D style"
+        case .classic: return "Flat ARASAAC-style pictograms"
+        case .arasaac: return "Legacy open-source reference (CC BY-NC-SA)"
         case .highContrast: return "Bold white-on-black accessibility style"
         }
     }
@@ -54,7 +57,8 @@ enum ImageSetID: String, CaseIterable, Identifiable {
     var isShippable: Bool {
         switch self {
         case .playful3D:    return true   // master set — full coverage, reviewed
-        case .arasaac:      return true   // complete fallback set
+        case .classic:      return true   // complete clean-room ARASAAC-style set
+        case .arasaac:      return true   // complete legacy reference set
         case .highContrast: return false  // pending full review + regen
         }
     }
@@ -169,6 +173,9 @@ final class TileImageResolver {
         case .playful3D:
             return prefixedBundleImage(for: key, prefix: "p3d")
 
+        case .classic:
+            return prefixedBundleImage(for: key, prefix: "cls")
+
         case .highContrast:
             return prefixedBundleImage(for: key, prefix: "hc")
         }
@@ -184,7 +191,7 @@ final class TileImageResolver {
         let prefix: String
         switch imageSet {
         case .highContrast: prefix = "hc"
-        case .arasaac, .playful3D: return nil
+        case .arasaac, .playful3D, .classic: return nil
         }
         guard let placeholderName = Self.missingPlaceholderName(for: prefix) else { return nil }
         let cacheKey = NSString(string: placeholderName)

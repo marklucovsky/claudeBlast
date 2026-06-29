@@ -29,6 +29,9 @@ struct SceneEditorView: View {
     @State private var isAddingPage = false
     @State private var isRefining = false
     @State private var isGeneratingArt = false
+    @State private var showPreview = false
+    @State private var showKeySheet = false
+    @State private var pageToLink: PageLinkTarget? = nil
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -36,7 +39,7 @@ struct SceneEditorView: View {
 
     /// Caregiver words this scene introduced that still have no art.
     private var tilesNeedingArt: [TileModel] {
-        SceneImageBatch.tilesNeedingArt(in: scene, tileLookup: tileLookup)
+        SceneImageBatch.tilesNeedingArt(in: scene, tileLookup: tileLookup, resolver: imageResolver)
     }
     /// Identifier of a freshly-created page to navigate into. Stored as the
     /// page key string now that pages are inline structs rather than
@@ -47,6 +50,19 @@ struct SceneEditorView: View {
 
     var body: some View {
         List {
+            if !scene.creationSummary.isEmpty {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle").foregroundStyle(.tint)
+                        Text(scene.creationSummary).font(.subheadline)
+                        Spacer()
+                        Button { scene.creationSummary = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
             if artController.isActive {
                 Section {
                     Button {
@@ -75,18 +91,30 @@ struct SceneEditorView: View {
                          : "Running in the background. Tap to view progress, pause, or cancel.")
                 }
             } else if !tilesNeedingArt.isEmpty {
-                Section {
-                    Button {
-                        artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
-                                            context: modelContext, resolver: imageResolver)
-                        isGeneratingArt = true
-                    } label: {
-                        Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
-                              systemImage: "sparkles")
+                if resolvedAPIKey.isEmpty {
+                    Section {
+                        Button {
+                            showKeySheet = true
+                        } label: {
+                            Label("Add an AI Key to generate artwork for new words",
+                                  systemImage: "key.fill")
+                        }
+                    } footer: {
+                        Text("\(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s") still need a picture. Add your key to generate them with AI.")
                     }
-                    .disabled(resolvedAPIKey.isEmpty)
-                } footer: {
-                    Text("These words were added by AI and don't have pictures yet.")
+                } else {
+                    Section {
+                        Button {
+                            artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
+                                                context: modelContext, resolver: imageResolver)
+                            isGeneratingArt = true
+                        } label: {
+                            Label("Generate art for \(tilesNeedingArt.count) new word\(tilesNeedingArt.count == 1 ? "" : "s")",
+                                  systemImage: "sparkles")
+                        }
+                    } footer: {
+                        Text("These words were added by AI and don't have pictures yet.")
+                    }
                 }
             }
 
@@ -157,6 +185,14 @@ struct SceneEditorView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    showPreview = true
+                } label: {
+                    Image(systemName: "eye")
+                }
+                .accessibilityLabel("Preview scene")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     isRefining = true
                 } label: {
                     Image(systemName: "sparkles")
@@ -173,6 +209,12 @@ struct SceneEditorView: View {
         }
         .sheet(item: $sceneToExport) { file in
             ActivityView(items: [file.temporaryFileURL()])
+        }
+        .fullScreenCover(isPresented: $showPreview) {
+            ScenePreviewBoardView(scene: scene, allTiles: allTiles)
+        }
+        .sheet(isPresented: $showKeySheet) {
+            APIKeyEntrySheet()
         }
         .sheet(isPresented: $isRefining) {
             SceneRefinementSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey)
@@ -194,12 +236,23 @@ struct SceneEditorView: View {
         }
         .sheet(isPresented: $isAddingPage) {
             PageGeneratorSheet(scene: scene, allTiles: allTiles, apiKey: resolvedAPIKey) { pageKey, preSelectedKeys in
-                pickerKeysForNewPage = preSelectedKeys
-                navigateToNewPageKey = pageKey
+                if !preSelectedKeys.isEmpty {
+                    // Edit path: dive into the new page with the picker pre-loaded.
+                    pickerKeysForNewPage = preSelectedKeys
+                    navigateToNewPageKey = pageKey
+                } else if scene.pages.contains(where: { $0.key != pageKey }) {
+                    // Finalized page with somewhere to link → offer the link step,
+                    // then return to the scene editor (page is in the Pages list).
+                    pageToLink = PageLinkTarget(pageKey: pageKey)
+                }
+                // else: finalized page, nothing to link → stay in the scene editor.
             }
         }
         .navigationDestination(item: $navigateToNewPageKey) { pageKey in
             PageEditorView(scene: scene, pageKey: pageKey, autoOpenPickerWithKeys: pickerKeysForNewPage)
+        }
+        .sheet(item: $pageToLink) { target in
+            PageLinkPlacementSheet(scene: scene, target: target, allTiles: allTiles)
         }
     }
 
@@ -219,12 +272,33 @@ struct SceneEditorView: View {
 
     private func deletePages(at offsets: IndexSet) {
         var pages = scene.pages
+        let deletedKeys = Set(offsets.map { pages[$0].key })
         for index in offsets.sorted().reversed() {
             pages.remove(at: index)
+        }
+        // Clean up links to the deleted page(s) so nothing opens an empty page:
+        // silent nav tiles (incl. the page_link tile) are removed; audible tiles
+        // that also linked there keep the word but drop the dead link.
+        if !deletedKeys.isEmpty {
+            for i in pages.indices {
+                pages[i].tiles = pages[i].tiles.compactMap { entry in
+                    guard deletedKeys.contains(entry.link) else { return entry }
+                    return entry.isAudible
+                        ? TileEntry(key: entry.key, link: "", isAudible: true)
+                        : nil
+                }
+            }
         }
         scene.pages = pages
         if !scene.pages.contains(where: { $0.key == scene.homePageKey }) {
             scene.homePageKey = scene.pages.first?.key ?? ""
+        }
+        // Drop the now-orphaned page_link tiles for the deleted pages from vocab.
+        for key in deletedKeys {
+            let linkKey = PageLink.key(forPage: key)
+            if let tile = allTiles.first(where: { $0.key == linkKey }) {
+                modelContext.delete(tile)
+            }
         }
         try? modelContext.save()
     }
@@ -261,6 +335,21 @@ struct SceneEditorView: View {
 
 // MARK: - Page Generator Sheet
 
+/// A featured "Build with AI" example. The goal is pre-vetted: leaving it
+/// unchanged serves a cached answer (0 tokens); editing it runs real AI. Each
+/// projects one non-system `demo` word (no art) so the caregiver experiences
+/// image generation on accept.
+private struct AIPageExample: Identifiable {
+    let name: String        // page key
+    let title: String
+    let goal: String        // the cacheable, vetted prompt
+    let packId: String      // supplies the on-screen words (+ set-switching art)
+    let demoKey: String     // new, non-system word — no art (image-gen demo)
+    let demoClass: String
+    let demoName: String
+    var id: String { name }
+}
+
 private struct PageGeneratorSheet: View {
     let scene: BlasterScene
     let allTiles: [TileModel]
@@ -277,6 +366,62 @@ private struct PageGeneratorSheet: View {
     @State private var isGenerating = false
     @State private var generationError: String? = nil
     @State private var preview: GeneratedPageResult? = nil
+    /// Set while previewing a vocabulary pack as a page; drives the install +
+    /// page-create accept path. Cleared on Retry (→ back to the form).
+    @State private var cachedPack: VocabPack? = nil
+
+    /// Set while previewing a cached AI example (unedited vetted goal). Drives the
+    /// "served from cache · 0 tokens" badge + the demo-word projection.
+    @State private var cachedAIExample: AIPageExample? = nil
+    @State private var showRefine = false
+
+    /// Set while previewing a page copied from another scene; drives the copy
+    /// accept path + the provenance badge.
+    @State private var cachedCopy: PageSpec? = nil
+    @State private var cachedCopyFrom: String = ""
+
+    /// All scenes — source list for the "Copy from another scene" picker.
+    @Query private var allScenes: [BlasterScene]
+
+    /// Featured "Build with AI" examples. Tapping fills the vetted goal; Generate
+    /// with it unchanged serves the cached answer (0 tokens), editing runs real AI.
+    private let aiExamples: [AIPageExample] = [
+        AIPageExample(name: "space", title: "Space adventure",
+            goal: "Outer space and space travel — rockets, planets, the moon, stars, astronauts, and aliens.",
+            packId: "vocab.blaster.app/space",
+            demoKey: "spacesuit", demoClass: "object", demoName: "Spacesuit"),
+        AIPageExample(name: "vehicles", title: "Things that go",
+            goal: "Vehicles that go — cars, trucks, buses, trains, planes and boats, plus emergency vehicles like fire trucks, ambulances, and police cars.",
+            packId: "vocab.blaster.app/vehicles",
+            demoKey: "scooter", demoClass: "object", demoName: "Scooter"),
+    ]
+
+    /// Pack ids featured as AI examples — hidden from the pack list to avoid
+    /// duplicating space/vehicles across both sections.
+    private var aiExamplePackIDs: Set<String> { Set(aiExamples.map(\.packId)) }
+
+    /// The featured AI example whose vetted goal exactly matches the current goal
+    /// (unchanged) — Generate serves it from cache; any edit falls through to AI.
+    private var matchedAIExample: AIPageExample? {
+        let g = pageGoal.trimmingCharacters(in: .whitespacesAndNewlines)
+        return aiExamples.first { $0.goal == g }
+    }
+
+    /// A live AI preview (not a deterministic pack / copy / cached-AI one) — only
+    /// these allow Edit and Refine.
+    private var isLivePreview: Bool {
+        cachedPack == nil && cachedAIExample == nil && cachedCopy == nil
+    }
+    private var previewProvenance: String? {
+        if cachedAIExample != nil { return "⚡ Served from cache · 0 tokens" }
+        if cachedCopy != nil { return "📄 Copied from \(cachedCopyFrom)" }
+        return nil
+    }
+
+    /// Other scenes that have at least one page — sources to copy a page from.
+    private var copyableScenes: [BlasterScene] {
+        allScenes.filter { $0.persistentModelID != scene.persistentModelID && !$0.pages.isEmpty }
+    }
 
     var body: some View {
         NavigationStack {
@@ -285,13 +430,24 @@ private struct PageGeneratorSheet: View {
                     preview: preview,
                     pageName: pageName,
                     allTiles: allTiles,
+                    provenance: previewProvenance,
+                    allowEdit: isLivePreview,
                     onAccept: { buildAndAccept(preview, editMode: false) },
                     onEdit:   { buildAndAccept(preview, editMode: true) },
-                    onRetry:  { self.preview = nil; runGeneration() },
+                    onRetry:  { cachedPack = nil; cachedAIExample = nil; cachedCopy = nil; self.preview = nil; runGeneration() },
+                    onRefine: (isLivePreview && !apiKey.isEmpty) ? { showRefine = true } : nil,
                     onCancel: { dismiss() }
                 )
                 .navigationTitle("Page Preview")
                 .navigationBarTitleDisplayMode(.inline)
+                .sheet(isPresented: $showRefine) {
+                    PageRefineInputSheet(pageName: pageName,
+                                         currentTiles: preview.primaryPage.tiles,
+                                         allTiles: allTiles, apiKey: apiKey,
+                                         scenePages: scene.pages, homePageKey: scene.homePageKey) { refined in
+                        self.preview = refined
+                    }
+                }
             } else {
                 generatorForm
             }
@@ -317,6 +473,101 @@ private struct PageGeneratorSheet: View {
                     Text("Describe what this page should help communicate.")
                 }
 
+                Section {
+                    ForEach(aiExamples, id: \.name) { ex in
+                        Button {
+                            pageName = ex.name
+                            pageGoal = ex.goal
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "sparkles")
+                                        .font(.caption).foregroundStyle(.tint)
+                                    Text(ex.title)
+                                        .font(.callout.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Text("AI")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                        .foregroundStyle(.tint)
+                                }
+                                Text(ex.goal)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .disabled(isGenerating)
+                    }
+                } header: {
+                    Text("Build with AI")
+                } footer: {
+                    Text("Tap a vetted prompt, then Generate — the AI invents the page with new words and artwork.")
+                        .font(.caption)
+                }
+
+                let packList = PackCatalog.all.filter { !aiExamplePackIDs.contains($0.id) }
+                if !packList.isEmpty {
+                    Section {
+                        ForEach(packList) { pack in
+                            Button {
+                                loadPackPage(pack)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "shippingbox.fill")
+                                        .font(.caption).foregroundStyle(.tint)
+                                    Text(pack.displayName)
+                                        .font(.callout.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Text("\(pack.words.count) words")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .disabled(isGenerating)
+                        }
+                    } header: {
+                        Text("Start from a vocabulary pack")
+                    } footer: {
+                        Text("Builds a page instantly from a ready-made vocabulary pack — set-switching art, no key needed.")
+                            .font(.caption)
+                    }
+                }
+
+                if !copyableScenes.isEmpty {
+                    Section {
+                        ForEach(copyableScenes, id: \.persistentModelID) { src in
+                            DisclosureGroup(src.name.isEmpty ? "Untitled scene" : src.name) {
+                                ForEach(src.pages, id: \.key) { page in
+                                    Button {
+                                        loadCopiedPage(from: src, page: page)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "doc.on.doc")
+                                                .font(.caption).foregroundStyle(.tint)
+                                            Text(page.key).foregroundStyle(.primary)
+                                            Spacer()
+                                            Text("\(page.tiles.count) tiles")
+                                                .font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .disabled(isGenerating)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Copy from another scene")
+                    } footer: {
+                        Text("Copies a page's word tiles into this scene. Navigation links are dropped — re-add them here if needed.")
+                            .font(.caption)
+                    }
+                }
+
                 if let error = generationError {
                     Section {
                         Text(error)
@@ -327,7 +578,7 @@ private struct PageGeneratorSheet: View {
 
                 if apiKey.isEmpty {
                     Section {
-                        Text("Add an OpenAI API key in Admin to enable AI generation.")
+                        Text("Add an OpenAI API key in Admin to generate a custom page. The ready-made examples above work without a key.")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -338,7 +589,13 @@ private struct PageGeneratorSheet: View {
 
             VStack(spacing: 10) {
                 Button {
-                    runGeneration()
+                    // Unedited vetted prompt → serve from cache (0 tokens); any
+                    // edit runs the real generator.
+                    if let ex = matchedAIExample {
+                        loadCachedAIPage(ex)
+                    } else {
+                        runGeneration()
+                    }
                 } label: {
                     Group {
                         if isGenerating {
@@ -356,8 +613,8 @@ private struct PageGeneratorSheet: View {
                 .controlSize(.large)
                 .disabled(pageGoal.trimmingCharacters(in: .whitespaces).isEmpty
                           || pageName.trimmingCharacters(in: .whitespaces).isEmpty
-                          || apiKey.isEmpty
-                          || isGenerating)
+                          || isGenerating
+                          || (apiKey.isEmpty && matchedAIExample == nil))
 
                 Button("Skip AI — Create Empty Page") {
                     createEmptyPage(preSelectedKeys: [])
@@ -400,6 +657,91 @@ private struct PageGeneratorSheet: View {
     }
 
     private func buildAndAccept(_ result: GeneratedPageResult, editMode: Bool) {
+        // A page copied from another scene → recreate it here with its word tiles
+        // (navigation links dropped; structural tiles skipped).
+        if let copy = cachedCopy, !editMode {
+            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let tiles = copyableTiles(from: copy).map { TileEntry(key: $0.key, link: "", isAudible: true) }
+            guard !tiles.isEmpty else { dismiss(); return }
+            var pageKey = copy.key
+            var n = 2
+            while scene.pages.contains(where: { $0.key == pageKey }) { pageKey = "\(copy.key)_\(n)"; n += 1 }
+            var pages = scene.pages
+            pages.append(PageSpec(key: pageKey, tiles: tiles))
+            scene.pages = pages
+            if scene.homePageKey.isEmpty { scene.homePageKey = pageKey }
+            // Reuse the source page's page_link image so the copy looks the same;
+            // fall back to a representative tile if the source had none.
+            let displayName = pageKey.replacingOccurrences(of: "_", with: " ").capitalized
+            let srcLink = lookup[PageLink.key(forPage: copy.key)]
+            if let data = srcLink?.userImageData {
+                PageLink.mint(pageKey: pageKey, displayName: displayName, image: data,
+                              context: modelContext, existing: lookup)
+            } else {
+                let aliased = (srcLink?.bundleImage).flatMap { $0.isEmpty ? nil : $0 }
+                PageLink.mint(pageKey: pageKey, displayName: displayName,
+                              imageKey: aliased ?? tiles.first?.key,
+                              context: modelContext, existing: lookup)
+            }
+            try? modelContext.save()
+            onCreate(pageKey, [])
+            dismiss()
+            return
+        }
+        // Cached AI example (unedited vetted goal) → install its pack, build the
+        // page, and project the non-system demo word (no art) so the caregiver
+        // experiences image generation. Served instantly (0 tokens).
+        if let ex = cachedAIExample, !editMode {
+            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            var tiles: [TileEntry] = []
+            if let pack = PackCatalog.pack(id: ex.packId) {
+                PackInstaller.install(pack, context: modelContext, existing: lookup)
+                tiles = pack.words.map { TileEntry(key: $0.key, link: "", isAudible: true) }
+            }
+            if lookup[ex.demoKey] == nil {
+                let demo = TileModel(key: ex.demoKey, value: ex.demoName, wordClass: ex.demoClass)
+                demo.isSystem = false
+                modelContext.insert(demo)
+            }
+            tiles.append(TileEntry(key: ex.demoKey, link: "", isAudible: true))
+            var pageKey = ex.name
+            var n = 2
+            while scene.pages.contains(where: { $0.key == pageKey }) { pageKey = "\(ex.name)_\(n)"; n += 1 }
+            var pages = scene.pages
+            pages.append(PageSpec(key: pageKey, tiles: tiles))
+            scene.pages = pages
+            if scene.homePageKey.isEmpty { scene.homePageKey = pageKey }
+            if let pack = PackCatalog.pack(id: ex.packId) {
+                PageLink.mint(pageKey: pageKey, displayName: pack.displayName,
+                              imageKey: PackCatalog.coverKey(for: pack),
+                              context: modelContext, existing: lookup)
+            }
+            try? modelContext.save()
+            onCreate(pageKey, [])
+            dismiss()
+            return
+        }
+        // A vocabulary pack accepted as a page → install the pack, then build the
+        // page from its words (set-switching art, no embedded images).
+        if let pack = cachedPack, !editMode {
+            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            PackInstaller.install(pack, context: modelContext, existing: lookup)
+            var pageKey = pack.slug
+            var n = 2
+            while scene.pages.contains(where: { $0.key == pageKey }) { pageKey = "\(pack.slug)_\(n)"; n += 1 }
+            var pages = scene.pages
+            pages.append(PageSpec(key: pageKey,
+                                  tiles: pack.words.map { TileEntry(key: $0.key, link: "", isAudible: true) }))
+            scene.pages = pages
+            if scene.homePageKey.isEmpty { scene.homePageKey = pageKey }
+            PageLink.mint(pageKey: pageKey, displayName: pack.displayName,
+                          imageKey: PackCatalog.coverKey(for: pack),
+                          context: modelContext, existing: lookup)
+            try? modelContext.save()
+            onCreate(pageKey, [])
+            dismiss()
+            return
+        }
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
         var lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -439,10 +781,69 @@ private struct PageGeneratorSheet: View {
             }
             scene.pages = pages
             if scene.homePageKey.isEmpty { scene.homePageKey = key }
+            PageLink.mint(pageKey: key,
+                          displayName: pageName.trimmingCharacters(in: .whitespacesAndNewlines),
+                          context: modelContext, existing: lookup)
             onCreate(key, [])
         }
         try? modelContext.save()
         dismiss()
+    }
+
+    /// Word tiles of `page` present in device vocab and not structural
+    /// (page_link / navigation) — what a copy carries over.
+    private func copyableTiles(from page: PageSpec) -> [TileModel] {
+        let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        return page.tiles.compactMap { entry in
+            guard let t = lookup[entry.key],
+                  t.wordClass != PageLink.wordClass, t.wordClass != "navigation" else { return nil }
+            return t
+        }
+    }
+
+    private func loadCopiedPage(from src: BlasterScene, page: PageSpec) {
+        let tiles = copyableTiles(from: page)
+        guard !tiles.isEmpty else {
+            generationError = "That page has no copyable word tiles."
+            return
+        }
+        cachedCopy = page
+        cachedCopyFrom = src.name.isEmpty ? "another scene" : src.name
+        pageName = page.key
+        let gen = tiles.map {
+            GeneratedTile(key: $0.key, isAudible: true, link: "",
+                          displayName: $0.displayName, wordClass: $0.wordClass)
+        }
+        preview = GeneratedPageResult(primaryPage: GeneratedPage(key: page.key, tiles: gen), subPages: [])
+    }
+
+    private func loadPackPage(_ pack: VocabPack) {
+        cachedPack = pack
+        pageName = pack.displayName
+        let tiles = pack.words.map {
+            GeneratedTile(key: $0.key, isAudible: true, link: "",
+                          displayName: $0.displayName, wordClass: $0.wordClass)
+        }
+        preview = GeneratedPageResult(primaryPage: GeneratedPage(key: pack.slug, tiles: tiles),
+                                      subPages: [])
+    }
+
+    /// Cached AI example → preview the pack's words plus the projected demo word
+    /// (rendered via bundled art / placeholder). Accept imports + adds the demo.
+    private func loadCachedAIPage(_ ex: AIPageExample) {
+        cachedAIExample = ex
+        pageName = ex.name
+        var tiles: [GeneratedTile] = []
+        if let pack = PackCatalog.pack(id: ex.packId) {
+            tiles = pack.words.map {
+                GeneratedTile(key: $0.key, isAudible: true, link: "",
+                              displayName: $0.displayName, wordClass: $0.wordClass)
+            }
+        }
+        tiles.append(GeneratedTile(key: ex.demoKey, isAudible: true, link: "",
+                                   displayName: ex.demoName, wordClass: ex.demoClass))
+        preview = GeneratedPageResult(primaryPage: GeneratedPage(key: ex.name, tiles: tiles),
+                                      subPages: [])
     }
 
     private func createEmptyPage(preSelectedKeys: Set<String>) {
@@ -452,6 +853,10 @@ private struct PageGeneratorSheet: View {
         pages.append(PageSpec(key: key, tiles: []))
         scene.pages = pages
         if scene.homePageKey.isEmpty { scene.homePageKey = key }
+        PageLink.mint(pageKey: key,
+                      displayName: pageName.trimmingCharacters(in: .whitespacesAndNewlines),
+                      context: modelContext,
+                      existing: Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) }))
         onCreate(key, preSelectedKeys)
         dismiss()
     }
@@ -470,9 +875,13 @@ private struct PagePreviewView: View {
     let preview: GeneratedPageResult
     let pageName: String
     let allTiles: [TileModel]
+    var previewImages: [String: Data] = [:]
+    var provenance: String? = nil
+    var allowEdit: Bool = true
     let onAccept: () -> Void
     let onEdit: () -> Void
     let onRetry: () -> Void
+    var onRefine: (() -> Void)? = nil
     let onCancel: () -> Void
 
     @State private var selectedSection = 0  // 0 = primary, 1+ = sub-pages
@@ -523,6 +932,15 @@ private struct PagePreviewView: View {
                     .padding(.bottom, 8)
             }
 
+            if let provenance {
+                Text(provenance)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
+            }
+
             Text("\(currentTiles.count) tile\(currentTiles.count == 1 ? "" : "s")")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -535,10 +953,12 @@ private struct PagePreviewView: View {
                     ForEach(currentTiles, id: \.key) { genTile in
                         if let tile = tileLookup[genTile.key] {
                             GeneratedTileCell(key: tile.bundleImage, displayName: tile.displayName,
-                                              wordClass: tile.wordClass, link: genTile.link)
+                                              wordClass: tile.wordClass, link: genTile.link,
+                                              imageData: previewImages[genTile.key])
                         } else if let name = genTile.displayName, let wc = genTile.wordClass {
                             GeneratedTileCell(key: genTile.key, displayName: name,
-                                              wordClass: wc, link: genTile.link, isNew: true)
+                                              wordClass: wc, link: genTile.link, isNew: true,
+                                              imageData: previewImages[genTile.key])
                         }
                     }
                 }
@@ -554,13 +974,94 @@ private struct PagePreviewView: View {
                     .tint(.red)
                 Button("Retry") { onRetry() }
                     .buttonStyle(.bordered)
+                if let onRefine {
+                    Button("Refine") { onRefine() }
+                        .buttonStyle(.bordered)
+                        .tint(.accentColor)
+                }
                 Spacer()
-                Button("Edit") { onEdit() }
-                    .buttonStyle(.bordered)
+                if allowEdit {
+                    Button("Edit") { onEdit() }
+                        .buttonStyle(.bordered)
+                }
                 Button("Accept") { onAccept() }
                     .buttonStyle(.borderedProminent)
             }
             .padding()
+        }
+    }
+}
+
+// MARK: - Page Refine Sheet
+
+/// Iteratively refine a previewed page with a natural-language instruction
+/// ("add more sea creatures"). Mirrors the scene refine flow: keeps the current
+/// tiles and applies only the change, then hands the refined result back so the
+/// preview updates in place. Refine vs. Retry — Retry regenerates from scratch.
+private struct PageRefineInputSheet: View {
+    let pageName: String
+    let currentTiles: [GeneratedTile]
+    let allTiles: [TileModel]
+    let apiKey: String
+    let scenePages: [PageSpec]
+    let homePageKey: String
+    let onComplete: (GeneratedPageResult) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var instruction = ""
+    @State private var isRefining = false
+    @State private var error: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("e.g. add more sea creatures, remove the boat",
+                              text: $instruction, axis: .vertical)
+                        .lineLimit(2...5)
+                        .disabled(isRefining)
+                } header: {
+                    Label("Refine with AI", systemImage: "wand.and.stars")
+                } footer: {
+                    Text("Describe one change. The AI keeps the current tiles and applies just this.")
+                }
+                if let error {
+                    Section { Text(error).font(.caption).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle("Refine Page")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(isRefining)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isRefining {
+                        ProgressView()
+                    } else {
+                        Button("Refine") { run() }
+                            .disabled(instruction.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            }
+        }
+    }
+
+    private func run() {
+        let inst = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !inst.isEmpty, !apiKey.isEmpty else { return }
+        isRefining = true
+        error = nil
+        let service = PageGeneratorService(apiKey: apiKey)
+        Task {
+            do {
+                let refined = try await service.refine(instruction: inst, pageName: pageName,
+                                                       currentTiles: currentTiles, allTiles: allTiles,
+                                                       scenePages: scenePages, homePageKey: homePageKey)
+                await MainActor.run { onComplete(refined); dismiss() }
+            } catch {
+                await MainActor.run { self.error = error.localizedDescription; isRefining = false }
+            }
         }
     }
 }
@@ -572,13 +1073,20 @@ private struct GeneratedTileCell: View {
     let wordClass: String
     let link: String
     var isNew: Bool = false
+    var imageData: Data? = nil
 
     private var isNav: Bool { !link.isEmpty }
 
     var body: some View {
         VStack(spacing: 2) {
             ZStack(alignment: .bottomTrailing) {
-                TileImageView(key: key, wordClass: wordClass)
+                Group {
+                    if let imageData, let ui = UIImage(data: imageData) {
+                        Image(uiImage: ui).resizable().scaledToFit()
+                    } else {
+                        TileImageView(key: key, wordClass: wordClass)
+                    }
+                }
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(

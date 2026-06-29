@@ -59,7 +59,17 @@ struct SceneGeneratorService {
             throw OpenAIError.httpError(statusCode: http.statusCode, body: body)
         }
 
-        return try parseScene(data: data, allTiles: allTiles)
+        var scene = try parseScene(data: data, allTiles: allTiles)
+        scene.tokenUsage = Self.totalTokens(from: data)
+        return scene
+    }
+
+    /// Pull `usage.total_tokens` from a chat-completions response, if present.
+    private static func totalTokens(from data: Data) -> Int? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let usage = json["usage"] as? [String: Any],
+              let total = usage["total_tokens"] as? Int else { return nil }
+        return total
     }
 
     // MARK: - Prompt builders
@@ -154,10 +164,11 @@ struct SceneGeneratorService {
     private func buildVocabBlock(allTiles: [TileModel]) -> String {
         var byClass: [String: [String]] = [:]
         for tile in allTiles {
-            // Hide structural navigation tiles (next_page, previous_page, home, …)
-            // so the model can't repurpose them as ad-hoc page switchers; scene
-            // navigation is generated deterministically (see SceneNavigation).
-            guard tile.wordClass != "navigation" else { continue }
+            // Hide structural navigation + page_link tiles (next_page, page_home,
+            // page_farm, …) so the model can't repurpose them as ad-hoc words or
+            // page switchers; scene navigation is generated deterministically
+            // (see SceneNavigation).
+            guard tile.wordClass != "navigation", tile.wordClass != PageLink.wordClass else { continue }
             byClass[tile.wordClass, default: []].append(tile.key)
         }
         return byClass.keys.sorted().map { wc in

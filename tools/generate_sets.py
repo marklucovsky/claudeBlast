@@ -53,6 +53,17 @@ SLEEP_SECONDS = 15
 STYLES_FILE = Path("claudeBlast/Resources/image_styles.json")
 STYLES: dict[str, str] = json.loads(STYLES_FILE.read_text())
 
+# A generated SET (output folder under tools/tile_sets/) maps to a STYLE key in
+# image_styles.json. Usually 1:1, but our clean-room flat-pictogram set ships in
+# a "classic" folder while reusing the shared "arasaac" style descriptor — the
+# style is the visual recipe, the set name is the license-clean Blaster-owned set
+# (the bundled ARASAAC originals stay separate and are CC BY-NC-SA).
+SET_STYLES: dict[str, str] = {
+    "playful_3d": "playful_3d",
+    "high_contrast": "high_contrast",
+    "classic": "classic",
+}
+
 # Per-tile subject overrides for tiles where the shared cross-style subject
 # (extracted from prompts.json) doesn't translate well to high_contrast — e.g.
 # abstract concepts where DALL-E improvises with secondary icons, or cases
@@ -108,6 +119,26 @@ def extract_subject(prompt_text: str) -> str:
     return text
 
 
+# prompts.json subjects were authored for playful_3d and bake in clay/3D wording
+# ("A 3D clay figurine child...", "made of shiny clay"). For a flat 2D set that
+# language fights the style prefix, so strip it. Longest phrases first.
+CLAY_PHRASES = [
+    "3d clay figurine", "clay figurine", "3d clay", "clay character",
+    "made of shiny clay", "made of clay", "shiny clay", "plasticine",
+    "clay", "3d", "figurine",
+]
+
+
+def strip_clay_words(subject: str) -> str:
+    """Remove playful_3d style contamination so a subject reads style-neutral."""
+    out = subject
+    for phrase in CLAY_PHRASES:
+        out = re.sub(rf"\b{re.escape(phrase)}\b", "", out, flags=re.IGNORECASE)
+    out = re.sub(r"\s{2,}", " ", out)          # collapse double spaces
+    out = re.sub(r"\s+([,.])", r"\1", out)      # tidy " ," / " ."
+    return out.strip(" ,")
+
+
 def build_prompt(subject: str, style: str) -> str:
     """Combine a subject description with a style prefix."""
     return f"{STYLES[style]} Subject: {subject}."
@@ -160,6 +191,7 @@ def run_set(style_name: str, keys: list[str], prompts: dict[str, str],
     """Generate one full set. Returns (ok_count, skipped, failed_keys)."""
     out_dir = OUTPUT_BASE / style_name
     out_dir.mkdir(parents=True, exist_ok=True)
+    style_key = SET_STYLES.get(style_name, style_name)
 
     session = requests.Session()
     ok_count = 0
@@ -187,7 +219,9 @@ def run_set(style_name: str, keys: list[str], prompts: dict[str, str],
             continue
 
         subject = override if override else extract_subject(prompts[key])
-        prompt = build_prompt(subject, style_name)
+        if style_key in ("arasaac", "classic"):
+            subject = strip_clay_words(subject)
+        prompt = build_prompt(subject, style_key)
 
         if dry_run:
             print(f"  [DRY] {key:40s} | {subject[:80]}")
@@ -213,7 +247,7 @@ def run_set(style_name: str, keys: list[str], prompts: dict[str, str],
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Blaster tile image sets")
-    parser.add_argument("--set", required=True, choices=["playful_3d", "high_contrast", "both"])
+    parser.add_argument("--set", required=True, choices=["playful_3d", "high_contrast", "classic", "both"])
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--key", metavar="KEY", action="append", default=None,
                         help="Process only this tile key (repeatable)")

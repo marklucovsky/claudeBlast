@@ -1,0 +1,59 @@
+{
+  "id": "vocab.blaster.app/space",
+  "slug": "space",
+  "displayName": "Space",
+  "version": "1.0.0",
+  "icon": "space",
+  "words": [
+    {
+      "key": "rocket",
+      "wordClass": "object",
+      "displayName": "Rocket"
+    },
+    {
+      "key": "astronaut",
+      "wordClass": "people",
+      "displayName": "Astronaut"
+    },
+    {
+      "key": "planet",
+      "wordClass": "object",
+      "displayName": "Planet"
+    },
+    {
+      "key": "moon",
+      "wordClass": "object",
+      "displayName": "Moon"
+    },
+    {
+      "key": "comet",
+      "wordClass": "object",
+      "displayName": "Comet"
+    },
+    {
+      "key": "alien",
+      "wordClass": "object",
+      "displayName": "Alien"
+    },
+    {
+      "key": "spaceship",
+      "wordClass": "object",
+      "displayName": "Spaceship"
+    },
+    {
+      "key": "telescope",
+      "wordClass": "object",
+      "displayName": "Telescope"
+    },
+    {
+      "key": "satellite",
+      "wordClass": "object",
+      "displayName": "Satellite"
+    },
+    {
+      "key": "galaxy",
+      "wordClass": "object",
+      "displayName": "Galaxy"
+    }
+  ]
+}

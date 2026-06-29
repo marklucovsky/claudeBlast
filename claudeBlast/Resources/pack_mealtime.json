@@ -1,0 +1,34 @@
+{
+  "id": "vocab.blaster.app/mealtime",
+  "slug": "mealtime",
+  "displayName": "Mealtime",
+  "version": "1.0.0",
+  "icon": "mealtime",
+  "words": [
+    {
+      "key": "spaghetti",
+      "wordClass": "meals",
+      "displayName": "Spaghetti"
+    },
+    {
+      "key": "plate",
+      "wordClass": "object",
+      "displayName": "Plate"
+    },
+    {
+      "key": "fork",
+      "wordClass": "object",
+      "displayName": "Fork"
+    },
+    {
+      "key": "cup",
+      "wordClass": "object",
+      "displayName": "Cup"
+    },
+    {
+      "key": "napkin",
+      "wordClass": "object",
+      "displayName": "Napkin"
+    }
+  ]
+}

@@ -34,6 +34,12 @@ final class BlasterScene {
     /// from the bundle.
     var systemSceneKey: String = ""
 
+    /// Human-readable provenance shown once in the editor right after creation:
+    /// "⚡ Served from cache" for an unedited bundled starter, or
+    /// "Generated · N tokens" for a live AI pass. Purely informational; the
+    /// editor lets the caregiver dismiss it (clears the string).
+    var creationSummary: String = ""
+
     /// JSON-encoded [PageSpec], stored inline. Exposed via `pages` accessor.
     /// Kept as Data (not [PageSpec] direct) for CloudKit compatibility — SwiftData's
     /// CloudKit mirror is conservative about Codable arrays-as-attributes.

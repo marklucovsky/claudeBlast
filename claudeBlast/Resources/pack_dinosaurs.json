@@ -1,0 +1,59 @@
+{
+  "id": "vocab.blaster.app/dinosaurs",
+  "slug": "dinosaurs",
+  "displayName": "Dinosaurs",
+  "version": "1.0.0",
+  "icon": "dinosaurs",
+  "words": [
+    {
+      "key": "dinosaur",
+      "wordClass": "object",
+      "displayName": "Dinosaur"
+    },
+    {
+      "key": "trex",
+      "wordClass": "object",
+      "displayName": "T-Rex"
+    },
+    {
+      "key": "triceratops",
+      "wordClass": "object",
+      "displayName": "Triceratops"
+    },
+    {
+      "key": "stegosaurus",
+      "wordClass": "object",
+      "displayName": "Stegosaurus"
+    },
+    {
+      "key": "pterodactyl",
+      "wordClass": "object",
+      "displayName": "Pterodactyl"
+    },
+    {
+      "key": "brontosaurus",
+      "wordClass": "object",
+      "displayName": "Brontosaurus"
+    },
+    {
+      "key": "raptor",
+      "wordClass": "object",
+      "displayName": "Raptor"
+    },
+    {
+      "key": "fossil",
+      "wordClass": "object",
+      "displayName": "Fossil"
+    },
+    {
+      "key": "volcano",
+      "wordClass": "object",
+      "displayName": "Volcano"
+    },
+    {
+      "key": "dino_egg",
+      "wordClass": "object",
+      "displayName": "Dino Egg"
+    }
+  ]
+}

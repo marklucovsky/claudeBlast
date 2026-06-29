@@ -35,16 +35,51 @@ struct TilePickerView: View {
     }
 
     private var wordClasses: [String] {
-        ["all"] + Set(allTiles.map(\.wordClass)).sorted()
+        // Pin Page Links after "All"; word classes alphabetically. Packs get their
+        // own prominent row (see packFilter), not buried at the end of this list.
+        let present = Set(allTiles.map(\.wordClass))
+        var ordered = ["all"]
+        if present.contains(PageLink.wordClass) { ordered.append(PageLink.wordClass) }
+        ordered += present.subtracting([PageLink.wordClass]).sorted()
+        return ordered
+    }
+
+    /// Packs with at least one installed word — worth a filter chip.
+    private var installedPacks: [VocabPack] {
+        let keys = Set(allTiles.map(\.key))
+        return PackCatalog.all.filter { pack in pack.words.contains { keys.contains($0.key) } }
+    }
+
+    private func packKeys(_ slug: String) -> Set<String> {
+        Set(PackCatalog.all.first { $0.slug == slug }?.words.map(\.key) ?? [])
+    }
+
+    private func classLabel(_ wc: String) -> String {
+        if wc == "all" { return "All" }
+        if wc == PageLink.wordClass { return "Page Links" }
+        if wc.hasPrefix("pack:") {
+            let slug = String(wc.dropFirst("pack:".count))
+            return "📦 " + (PackCatalog.all.first { $0.slug == slug }?.displayName ?? slug)
+        }
+        return wc
     }
 
     private var filteredTiles: [TileModel] {
-        allTiles.filter { tile in
-            !existingKeys.contains(tile.key)
-            && (selectedWordClass == "all" || tile.wordClass == selectedWordClass)
-            && (searchText.isEmpty
-                || tile.displayName.localizedCaseInsensitiveContains(searchText)
-                || tile.key.localizedCaseInsensitiveContains(searchText))
+        let packKeySet: Set<String>? = selectedWordClass.hasPrefix("pack:")
+            ? packKeys(String(selectedWordClass.dropFirst("pack:".count))) : nil
+        return allTiles.filter { tile in
+            if existingKeys.contains(tile.key) { return false }
+            if let packKeySet {
+                if !packKeySet.contains(tile.key) { return false }
+            } else if selectedWordClass != "all" && tile.wordClass != selectedWordClass {
+                return false
+            }
+            if !searchText.isEmpty
+                && !tile.displayName.localizedCaseInsensitiveContains(searchText)
+                && !tile.key.localizedCaseInsensitiveContains(searchText) {
+                return false
+            }
+            return true
         }
     }
 
@@ -56,6 +91,8 @@ struct TilePickerView: View {
                 suggestionBar
                     .padding(.horizontal)
                     .padding(.top, 12)
+
+                packFilter
 
                 wordClassFilter
                     .padding(.vertical, 8)
@@ -235,9 +272,51 @@ struct TilePickerView: View {
         var pages = scene.pages
         guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
         guard !pages[idx].tiles.contains(where: { $0.key == key }) else { return }
-        pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+        pages[idx].tiles.append(pageEntry(for: key))
         scene.pages = pages
         try? modelContext.save()
+    }
+
+    /// A tile placement. A page_link tile drops as a SILENT link to its target
+    /// page; everything else drops as an audible terminal tile.
+    private func pageEntry(for key: String) -> TileEntry {
+        if allTiles.first(where: { $0.key == key })?.wordClass == PageLink.wordClass,
+           let target = PageLink.targetPage(forKey: key) {
+            return TileEntry(key: key, link: target, isAudible: false)
+        }
+        return TileEntry(key: key, link: "", isAudible: true)
+    }
+
+    /// Pack chips get a dedicated, visually-prominent row above the word classes
+    /// (📦 + accent tint) so vocabulary packs are easy to spot and filter to.
+    @ViewBuilder
+    private var packFilter: some View {
+        if !installedPacks.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(installedPacks) { pack in
+                        let value = "pack:\(pack.slug)"
+                        let isOn = selectedWordClass == value
+                        Button {
+                            selectedWordClass = isOn ? "all" : value
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "shippingbox.fill").font(.caption2)
+                                Text(pack.displayName).font(.caption.weight(.semibold))
+                            }
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule().fill(isOn ? Color.accentColor : Color.accentColor.opacity(0.15))
+                            )
+                            .foregroundStyle(isOn ? .white : Color.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
     }
 
     private var wordClassFilter: some View {
@@ -247,7 +326,7 @@ struct TilePickerView: View {
                     Button {
                         selectedWordClass = wc
                     } label: {
-                        Text(wc == "all" ? "All" : wc)
+                        Text(classLabel(wc))
                             .font(.caption)
                             .fontWeight(selectedWordClass == wc ? .semibold : .regular)
                             .padding(.horizontal, 12)
@@ -375,7 +454,7 @@ struct TilePickerView: View {
         var pages = scene.pages
         guard let idx = pages.firstIndex(where: { $0.key == pageKey }) else { return }
         for key in keysToAdd {
-            pages[idx].tiles.append(TileEntry(key: key, link: "", isAudible: true))
+            pages[idx].tiles.append(pageEntry(for: key))
         }
         scene.pages = pages
         try? modelContext.save()

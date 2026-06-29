@@ -1,0 +1,64 @@
+{
+  "id": "vocab.blaster.app/farm",
+  "slug": "farm",
+  "displayName": "Farm",
+  "version": "1.0.0",
+  "icon": "farm",
+  "words": [
+    {
+      "key": "cow",
+      "wordClass": "object",
+      "displayName": "Cow"
+    },
+    {
+      "key": "pig",
+      "wordClass": "object",
+      "displayName": "Pig"
+    },
+    {
+      "key": "horse",
+      "wordClass": "object",
+      "displayName": "Horse"
+    },
+    {
+      "key": "chicken",
+      "wordClass": "object",
+      "displayName": "Chicken"
+    },
+    {
+      "key": "sheep",
+      "wordClass": "object",
+      "displayName": "Sheep"
+    },
+    {
+      "key": "rooster",
+      "wordClass": "object",
+      "displayName": "Rooster"
+    },
+    {
+      "key": "tractor",
+      "wordClass": "object",
+      "displayName": "Tractor"
+    },
+    {
+      "key": "barn",
+      "wordClass": "object",
+      "displayName": "Barn"
+    },
+    {
+      "key": "farmer",
+      "wordClass": "people",
+      "displayName": "Farmer"
+    },
+    {
+      "key": "egg",
+      "wordClass": "object",
+      "displayName": "Egg"
+    },
+    {
+      "key": "hay",
+      "wordClass": "object",
+      "displayName": "Hay"
+    }
+  ]
+}

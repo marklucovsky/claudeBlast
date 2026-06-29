@@ -218,6 +218,10 @@ enum BootstrapLoader {
                 for tile in allTiles { context.insert(tile) }
                 context.insert(coreFirstScene)
                 context.insert(allTilesScene)
+                // Every page gets a page-link image tile, reusing the image its
+                // existing category link already uses (no new art).
+                let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+                PageLink.ensurePageImages(in: coreFirstScene, context: context, existing: lookup)
             }
 
             let elapsed = CFAbsoluteTimeGetCurrent() - startTime
