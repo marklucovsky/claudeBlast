@@ -315,7 +315,16 @@ struct TilePropertiesSheet: View {
                 var pages = scene.pages
                 guard let p = pages.firstIndex(where: { $0.key == pageKey }),
                       let t = pages[p].tiles.firstIndex(where: { $0.key == tileKey }) else { return }
+                let wasEmpty = pages[p].tiles[t].link.isEmpty
                 pages[p].tiles[t].link = newValue
+                // Adding a link → default to navigate-only (caregiver can re-enable
+                // "also speak" via the now-enabled toggle); removing it → a plain
+                // word tile, which always speaks.
+                if wasEmpty && !newValue.isEmpty {
+                    pages[p].tiles[t].isAudible = false
+                } else if !wasEmpty && newValue.isEmpty {
+                    pages[p].tiles[t].isAudible = true
+                }
                 scene.pages = pages
             }
         )
@@ -368,12 +377,14 @@ struct TilePropertiesSheet: View {
 
                 Section {
                     Toggle("Add to sentence tray", isOn: entryBinding.audible)
-                        .disabled(!(entry?.link ?? "").isEmpty)
+                        .disabled((entry?.link ?? "").isEmpty)
                 } header: {
                     Text("Behavior")
                 } footer: {
-                    if !(entry?.link ?? "").isEmpty {
-                        Text("This tile opens a page, so it doesn't add to the sentence tray. (Kept for a future tile that both navigates and speaks.)")
+                    if (entry?.link ?? "").isEmpty {
+                        Text("A word tile always adds to the sentence tray.")
+                    } else {
+                        Text("This tile opens a page. Turn this on if it should also speak the word.")
                     }
                 }
 
