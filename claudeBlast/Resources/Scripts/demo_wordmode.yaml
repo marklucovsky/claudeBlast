@@ -1,0 +1,20 @@
+name: Single Word Mode Demo
+description: Tidepools...
+scene: "Tide Pools"   # ensure Tide Pools (sample scene is loaded)
+mode: word
+audio: on
+tileWait: .human
+sentenceWait: .human
+
+script:
+  - comment: Single word flow
+  
+  - tiles:
+    - <home>, hungry, want, <food>, goldfish_cracker, goldfish_cracker +
+    - pretzel, goldfish_cracker
+  
+  - tiles:
+    - <home>, crab, fish, seahorse, +
+    - seaweed, snail, ocean, beach, starfish
+
+  - comment: Demo complete

@@ -57,6 +57,13 @@ struct TileScriptView: View {
                 }
             }
         }
+        .alert("This demo can't run yet",
+               isPresented: Binding(get: { runner.validationError != nil },
+                                    set: { if !$0 { runner.clearValidationError() } })) {
+            Button("OK", role: .cancel) { runner.clearValidationError() }
+        } message: {
+            Text(validationMessage(runner.validationError))
+        }
         .onAppear {
             // When stopRecording fires from the TileGrid tab and switches to TileScript, this
             // view is freshly constructed with `recorder.lastRecordedScript` already non-nil.
@@ -159,6 +166,21 @@ struct TileScriptView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func validationMessage(_ result: TileScriptValidator.Result?) -> String {
+        guard let result else { return "" }
+        if let scene = result.missingScene {
+            return "The scene \u{201C}\(scene)\u{201D} isn't on this device. Create it (or change the script's scene), then try again."
+        }
+        var parts: [String] = []
+        if !result.missingTiles.isEmpty {
+            parts.append("tiles \u{2014} \(result.missingTiles.joined(separator: ", "))")
+        }
+        if !result.missingPages.isEmpty {
+            parts.append("pages \u{2014} \(result.missingPages.joined(separator: ", "))")
+        }
+        return "This demo references items not in its target scene (\(parts.joined(separator: "; "))). Edit the script or pick a matching scene."
     }
 
     // MARK: - Save Modal
@@ -381,6 +403,7 @@ struct TileScriptView: View {
             sentenceWait: .instant,
             provider: "mock",
             scene: nil,
+            mode: nil,
             commands: [.bulkTiles(spec: spec)]
         )
         runner.play(script: script)
@@ -402,8 +425,9 @@ struct TileScriptView: View {
 
     private var curatedScripts: [ScriptInfo] {
         [
-            ScriptInfo(name: "Basic AAC Demo", description: "Child requesting food from mom", resourceName: "demo_basic"),
-            ScriptInfo(name: "Food Ordering", description: "Food ordering scenario with escalation", resourceName: "demo_food"),
+            ScriptInfo(name: "First Look", description: "Child, Grandpa, Mom, and a Playground", resourceName: "demo_basic"),
+            ScriptInfo(name: "Single Word Mode", description: "Single Word Mode -- Visit to the Tidepool", resourceName: "demo_wordmode"),
+            ScriptInfo(name: "Classic Tiles Showcase", description: "order food, then flip the whole board to the Classic tile set", resourceName: "demo_food"),
         ]
     }
 }

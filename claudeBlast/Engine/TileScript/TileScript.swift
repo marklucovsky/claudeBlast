@@ -16,5 +16,8 @@ struct TileScript: Sendable {
     let sentenceWait: TimingValue
     let provider: String?
     let scene: String?
+    /// Interaction mode the demo runs in (sentence vs. single-word). nil →
+    /// defaults to sentence, so existing scripts behave unchanged.
+    let mode: InteractionMode?
     let commands: [TileScriptCommand]
 }

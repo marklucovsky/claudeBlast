@@ -147,7 +147,8 @@ struct claudeBlastApp: App {
                     scriptRunner.configure(
                         engine: sentenceEngine,
                         coordinator: navigationCoordinator,
-                        modelContext: modelContainer.mainContext
+                        modelContext: modelContainer.mainContext,
+                        resolver: imageResolver
                     )
                     scriptRecorder.configure(engine: sentenceEngine, runner: scriptRunner, coordinator: navigationCoordinator)
                 }

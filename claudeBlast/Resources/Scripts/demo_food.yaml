@@ -1,20 +1,23 @@
-name: Food Ordering
-description: Child requesting various foods with increasing urgency
+name: Classic Tiles Showcase
+description: Classic tile showcase
+scene: "<default>"
+mode: sentence
+
 audio: on
 tileWait: .human
 sentenceWait: .human
 
 script:
-  - comment: Starting with a simple request
+  - tileSet: classic
   - tiles:
-    - <home>, mom, <food>, pizza, <tilescript:noclose>   # Play, but keep the group open
-    - fries                                                # Extends the open group, then Play + Done
-  - comment: Wants a drink too
+    - <home>, mom, <food>, popsicle, cookie
+    - <tilescript:replay>
+    
+    - <home>, grandpa, <places>, playground +
+    - slide
+  
+  - tileset: playful
   - tiles:
-    - <home>, <actions>, drink, <home>, <drinks>, water
-  - comment: Back to food — escalation builds across consecutive replays
-  - tiles:
-    - <home>, mom, <food>, pizza, fries                   # First request after the detour
-    - <tilescript:replay>                                  # Getting impatient
-    - <tilescript:replay>                                  # Really wants it now
-  - comment: Food ordering demo complete
+    - <home>, <food>
+      
+  - comment: Your tile set is restored when the demo ends

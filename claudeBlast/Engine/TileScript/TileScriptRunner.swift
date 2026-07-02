@@ -54,6 +54,10 @@ final class TileScriptRunner {
     private var engine: SentenceEngine?
     private var coordinator: NavigationCoordinator?
     private var modelContext: ModelContext?
+    private var imageResolver: TileImageResolver?
+    /// The user's tile set at play time — restored on stop/finish (a tileSet
+    /// command is a transient demo change, not a persisted preference).
+    private var originalImageSet: ImageSetID?
 
     // MARK: - Internal
 
@@ -63,6 +67,24 @@ final class TileScriptRunner {
 
     private var tileWait: TimingValue = .human
     private var sentenceWait: TimingValue = .human
+
+    /// True when the script was started in step/debug mode (playPaused).
+    private var startedPaused = false
+
+    /// Voice each word as it's tapped when there's time to hear it: human-paced
+    /// tile delays, or any stepping session (the user controls the advance).
+    /// Fast/instant auto-runs stay silent per-tile (only the sentence speaks),
+    /// to avoid overlapping speech.
+    private var voicePerTile: Bool {
+        startedPaused || tileWait.duration >= .milliseconds(400)
+    }
+
+    /// The mode the script is running in (the engine's override during playback).
+    private var activeMode: InteractionMode { engine?.interactionMode ?? .sentence }
+
+    /// The implicit end-of-row terminal token shown in the overlay: Play (sentence
+    /// mode) or Clear (single-word mode).
+    var terminalToken: String { activeMode == .singleWord ? "\u{2715} Clear" : "\u{25B6} Play" }
 
     private enum StepMode {
         case stepOver
@@ -82,25 +104,44 @@ final class TileScriptRunner {
 
     // MARK: - Configuration
 
-    func configure(engine: SentenceEngine, coordinator: NavigationCoordinator, modelContext: ModelContext) {
+    func configure(engine: SentenceEngine, coordinator: NavigationCoordinator,
+                   modelContext: ModelContext, resolver: TileImageResolver) {
         self.engine = engine
         self.coordinator = coordinator
         self.modelContext = modelContext
+        self.imageResolver = resolver
     }
 
     // MARK: - Controls
 
+    /// Preflight failure from the last play attempt — the UI shows it, then clears.
+    private(set) var validationError: TileScriptValidator.Result?
+    func clearValidationError() { validationError = nil }
+
     func play(script: TileScript) {
         guard state == .idle || state == .finished else { return }
+        guard preflightOK(script) else { return }
         startScript(script, paused: false)
     }
 
     func playPaused(script: TileScript) {
         guard state == .idle || state == .finished else { return }
+        guard preflightOK(script) else { return }
         startScript(script, paused: true)
     }
 
+    /// Validate references before playing; on failure record the error (for the
+    /// UI) and refuse, rather than play a demo with dropped tiles / dead navs.
+    private func preflightOK(_ script: TileScript) -> Bool {
+        guard let modelContext else { return true }
+        let result = TileScriptValidator.validate(script, context: modelContext)
+        validationError = result.isValid ? nil : result
+        return result.isValid
+    }
+
     private func startScript(_ script: TileScript, paused: Bool) {
+        startedPaused = paused
+        originalImageSet = imageResolver?.activeSet
         currentScript = script
         commandIndex = 0
         rowIndex = 0
@@ -114,6 +155,7 @@ final class TileScriptRunner {
         sentenceWait = script.sentenceWait
 
         engine?.audioEnabled = script.audio
+        engine?.scriptedModeOverride = script.mode ?? .sentence   // declared mode, else sentence
         if let providerName = script.provider {
             applyProvider(providerName)
         }
@@ -165,6 +207,9 @@ final class TileScriptRunner {
         currentRow = nil
         currentRowCount = 0
         bulkProgress = nil
+        engine?.scriptedModeOverride = nil
+        if let set = originalImageSet { imageResolver?.activeSet = set }
+        originalImageSet = nil
         engine?.resetAll()
     }
 
@@ -203,6 +248,13 @@ final class TileScriptRunner {
     // MARK: - Execution
 
     private func executeScript(_ script: TileScript) async {
+        // Self-contained scene: activate the script's declared scene first so its
+        // pages/tiles are present regardless of what was active, then let the
+        // board switch settle before the first action.
+        if let sceneName = script.scene {
+            await activateScene(named: sceneName)
+            try? await Task.sleep(for: .milliseconds(350))
+        }
         while commandIndex < script.commands.count {
             guard !Task.isCancelled else { break }
 
@@ -247,6 +299,9 @@ final class TileScriptRunner {
             if let engine, !engine.activeGroup.tiles.isEmpty {
                 engine.commitActiveAndStartNew()
             }
+            engine?.scriptedModeOverride = nil
+            if let set = originalImageSet { imageResolver?.activeSet = set }
+            originalImageSet = nil
             skipNextPreCommit = false
             currentRow = nil
             currentRowCount = 0
@@ -303,6 +358,9 @@ final class TileScriptRunner {
 
         case .setScene(let name):
             await activateScene(named: name)
+
+        case .setTileSet(let imageSet):
+            imageResolver?.activeSet = imageSet
         }
     }
 
@@ -382,8 +440,10 @@ final class TileScriptRunner {
             await executeAction(executable[actionIndex])
             actionIndex += 1
 
-            // If more actions in this row, pause to show next action highlighted
-            if actionIndex < executable.count && stepMode == .stepInto {
+            // Pause to show the next step highlighted — including, after the last
+            // tile (actionIndex == count), the implicit terminal (Play / Clear) as
+            // its own step.
+            if stepMode == .stepInto {
                 state = .paused
                 stepMode = nil
                 await waitForResume()
@@ -391,7 +451,8 @@ final class TileScriptRunner {
             }
         }
 
-        await playTilesRow()
+        // We paused on the terminal step above; resuming runs it.
+        await runTerminal(noclose: row.hasNoclose)
         skipNextPreCommit = row.hasNoclose
 
         // After the row completes, pause
@@ -421,7 +482,7 @@ final class TileScriptRunner {
         }
         actionIndex = executable.count
 
-        await playTilesRow()
+        await runTerminal(noclose: row.hasNoclose)
         skipNextPreCommit = row.hasNoclose
     }
 
@@ -437,6 +498,32 @@ final class TileScriptRunner {
         }
         engine.commitActiveAndStartNew()
         skipNextPreCommit = false
+    }
+
+    /// The implicit end-of-row terminal: Play (sentence mode) generates + speaks
+    /// the sentence; Clear (single-word) clears the accumulated spoken strip. In
+    /// step mode this is its own step (see executeRowStepInto).
+    private func runTerminal(noclose: Bool) async {
+        if activeMode == .singleWord {
+            if noclose { return }   // "+" → keep the strip; the next row continues it
+            await clearRow()
+        } else {
+            await playTilesRow()   // Done is deferred to the next row's preCommit (skipped on noclose)
+        }
+    }
+
+    /// Single-word terminal: let the strip sit (each word was already voiced as it
+    /// landed), then clear it — the implicit end-of-row clear.
+    private func clearRow() async {
+        guard let engine else { return }
+        if sentenceWait.duration > .zero {
+            do { try await Task.sleep(for: sentenceWait.duration) } catch { return }
+        }
+        await waitForSpeech()
+        engine.clearStrip()
+        if tileWait.duration > .zero {
+            do { try await Task.sleep(for: tileWait.duration) } catch { return }
+        }
     }
 
     /// Tail of a tiles row. Waits `sentenceWait` (the play-button pulse plays during this), then
@@ -538,6 +625,7 @@ final class TileScriptRunner {
             Self.logger.warning("TileScript: tile '\(tileKey)' not found, skipping")
             return
         }
+        if voicePerTile { engine.speakTile(tile.displayName) }   // voice the word as it lands
         engine.addTile(tile)
     }
 
@@ -604,9 +692,8 @@ final class TileScriptRunner {
 
     private func activateScene(named name: String) async {
         guard let modelContext else { return }
-        let descriptor = FetchDescriptor<BlasterScene>()
-        guard let scenes = try? modelContext.fetch(descriptor) else { return }
-        guard let target = scenes.first(where: { $0.name == name }) else {
+        let scenes = (try? modelContext.fetch(FetchDescriptor<BlasterScene>())) ?? []
+        guard let target = TileScriptValidator.resolveScene(name, in: scenes) else {
             Self.logger.warning("TileScript: scene '\(name)' not found")
             return
         }
@@ -638,6 +725,8 @@ final class TileScriptRunner {
             return "provider: \(name)"
         case .setScene(let name):
             return "scene: \(name)"
+        case .setTileSet(let imageSet):
+            return "tileSet: \(imageSet.displayName)"
         }
     }
 
