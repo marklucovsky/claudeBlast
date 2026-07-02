@@ -41,6 +41,7 @@ struct TileScriptParser {
         let sentenceWait = parseTimingValue(root["sentenceWait"]) ?? .human
         let provider = root["provider"] as? String
         let scene = root["scene"] as? String
+        let mode = parseInteractionMode(root["mode"])
 
         guard let scriptArray = root["script"] as? [[String: Any]] else {
             throw ParseError.missingField("script")
@@ -56,8 +57,41 @@ struct TileScriptParser {
             sentenceWait: sentenceWait,
             provider: provider,
             scene: scene,
+            mode: mode,
             commands: commands
         )
+    }
+
+    /// Parse a `tileSet:` value (`classic` / `playful` / `arasaac` / `high-contrast`).
+    static func parseImageSet(_ value: Any?) -> ImageSetID? {
+        guard let raw = (value as? String)?
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespaces) else { return nil }
+        switch raw {
+        case "classic": return .classic
+        case "playful3d", "playful", "p3d", "3d": return .playful3D
+        case "arasaac", "legacy": return .arasaac
+        case "highcontrast", "hc": return .highContrast
+        default: return ImageSetID(rawValue: raw)
+        }
+    }
+
+    /// Parse a `mode:` header value (`sentence` / `single-word` / `singleWord`).
+    static func parseInteractionMode(_ value: Any?) -> InteractionMode? {
+        guard let raw = (value as? String)?
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespaces) else { return nil }
+        switch raw {
+        case "sentence": return .sentence
+        case "singleword", "word", "classic": return .singleWord
+        default: return nil
+        }
     }
 
     // MARK: - Line Comment Extraction
@@ -144,6 +178,9 @@ struct TileScriptParser {
         if let sceneName = dict["scene"] as? String {
             return [.setScene(name: sceneName)]
         }
+        if let tileSetValue = dict["tileSet"] ?? dict["tileset"], let set = parseImageSet(tileSetValue) {
+            return [.setTileSet(imageSet: set)]
+        }
 
         throw ParseError.invalidCommand("Unrecognized command: \(dict.keys.joined(separator: ", "))")
     }
@@ -185,14 +222,26 @@ struct TileScriptParser {
         let rawText = row.trimmingCharacters(in: .whitespaces)
         let comment = lineComments[rawText]
 
-        let parts = rawText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        let actions: [TileAction] = parts.compactMap { part in
+        // A trailing "+" is shorthand for <tilescript:noclose>: Play the row but
+        // don't Done it, so the next row extends the same tray (single-word: keep
+        // the strip). Look up the comment on the full text first, then strip it.
+        var body = rawText
+        var noclose = false
+        if body.hasSuffix("+") {
+            noclose = true
+            body = String(body.dropLast()).trimmingCharacters(in: .whitespaces)
+            if body.hasSuffix(",") { body = String(body.dropLast()).trimmingCharacters(in: .whitespaces) }
+        }
+
+        let parts = body.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        var actions: [TileAction] = parts.compactMap { part in
             guard !part.isEmpty else { return nil }
             if part.hasPrefix("<") && part.hasSuffix(">") {
                 return parseAngleToken(part)
             }
             return .tap(tileKey: part)
         }
+        if noclose { actions.append(.noclose) }
         return TileRow(actions: actions, rawText: rawText, comment: comment)
     }
 

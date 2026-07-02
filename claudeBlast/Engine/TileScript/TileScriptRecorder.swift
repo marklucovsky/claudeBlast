@@ -143,6 +143,7 @@ final class TileScriptRecorder {
             sentenceWait: .human,
             provider: nil,
             scene: sceneName.isEmpty ? nil : sceneName,
+            mode: nil,   // recordings default to sentence on playback (capture mode: TODO)
             commands: completedRows.isEmpty ? [] : [.tiles(rows: completedRows)]
         )
         onSwitchToScript?()

@@ -86,6 +86,9 @@ struct TileScriptSerializer {
 
         case .setScene(let name):
             return ["  - scene: \(name)"]
+
+        case .setTileSet(let imageSet):
+            return ["  - tileSet: \(imageSet.rawValue)"]
         }
     }
 

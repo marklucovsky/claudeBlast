@@ -108,4 +108,5 @@ enum TileScriptCommand: Sendable {
     case setSentenceWait(value: TimingValue)
     case setProvider(name: String)
     case setScene(name: String)
+    case setTileSet(imageSet: ImageSetID)
 }

@@ -104,9 +104,17 @@ final class SentenceEngine {
         return (2...8).contains(stored) ? stored : 4
     }
 
+    /// When set (during scripted TileScript playback), overrides the active
+    /// child's interaction mode for the demo's duration, so a script can declare
+    /// which mode it demonstrates. The runner sets it on play and clears it on
+    /// stop/finish — transient, no model mutation, so it auto-restores.
+    var scriptedModeOverride: InteractionMode? = nil
+
     /// Active child's interaction mode (AI sentences vs. classic single words).
     /// Defaults to `.sentence` before the resolver is wired or pre-onboarding.
-    var interactionMode: InteractionMode { profileResolver?.interactionMode ?? .sentence }
+    var interactionMode: InteractionMode {
+        scriptedModeOverride ?? (profileResolver?.interactionMode ?? .sentence)
+    }
 
     /// Idle debounce before auto-generation; backed by AppStorage.
     var idleDebounceDuration: Duration {

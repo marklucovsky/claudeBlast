@@ -118,8 +118,10 @@ struct TileScriptPlaybackOverlay: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                // Tile tokens with the next-to-execute action highlighted
-                tileRowTokens(row: row, activeIndex: runner.actionIndex)
+                // Tile tokens with the next-to-execute action highlighted, plus
+                // the implicit terminal (Play / Clear) as a trailing step token.
+                tileRowTokens(row: row, activeIndex: runner.actionIndex,
+                              terminal: row.isReplay ? nil : runner.terminalToken)
 
                 // Line comment in italics
                 if let comment = row.comment {
@@ -151,12 +153,13 @@ struct TileScriptPlaybackOverlay: View {
     }
 
     /// Render tile row tokens as a horizontal flow, highlighting the action at `activeIndex`.
-    private func tileRowTokens(row: TileRow, activeIndex: Int) -> some View {
-        HStack(spacing: 4) {
-            ForEach(Array(row.tokens.enumerated()), id: \.offset) { index, token in
+    private func tileRowTokens(row: TileRow, activeIndex: Int, terminal: String?) -> some View {
+        let tokens = row.tokens + (terminal.map { [$0] } ?? [])
+        return HStack(spacing: 4) {
+            ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
                 tokenView(token: token, index: index, activeIndex: activeIndex)
 
-                if index < row.tokens.count - 1 {
+                if index < tokens.count - 1 {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 7))
                         .foregroundStyle(.quaternary)
