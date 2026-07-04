@@ -32,6 +32,7 @@ struct SceneEditorView: View {
     @State private var showPreview = false
     @State private var showKeySheet = false
     @State private var pageToLink: PageLinkTarget? = nil
+    @AppStorage(AppSettingsKey.generateAllStyles) private var generateAllStyles = false
 
     private var tileLookup: [String: TileModel] {
         Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
@@ -104,6 +105,8 @@ struct SceneEditorView: View {
                     }
                 } else {
                     Section {
+                        Toggle("Generate all styles", isOn: $generateAllStyles)
+                            .font(.subheadline)
                         Button {
                             artController.start(tiles: tilesNeedingArt, apiKey: resolvedAPIKey,
                                                 context: modelContext, resolver: imageResolver)
@@ -113,7 +116,9 @@ struct SceneEditorView: View {
                                   systemImage: "sparkles")
                         }
                     } footer: {
-                        Text("These words were added by AI and don't have pictures yet.")
+                        Text(generateAllStyles
+                             ? "These words were added by AI and don't have pictures yet. Art is generated for every tile style."
+                             : "These words were added by AI and don't have pictures yet.")
                     }
                 }
             }

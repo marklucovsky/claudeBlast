@@ -34,8 +34,21 @@ struct TilePhotoSection: View {
     @State private var isLoading = false
     @State private var isGenerating = false
     @State private var imageDetail = ""
+    @AppStorage(AppSettingsKey.generateAllStyles) private var generateAllStyles = false
 
     private var apiKey: String { OpenAIKeyVault.currentKey() ?? "" }
+
+    /// Whether this tile currently shows a real picture (bundled or AI variant) in
+    /// the active set — i.e. there's something to Refine / Regenerate. Reading
+    /// `resolver.revision` keeps the labels in sync after art is (re)generated.
+    private var hasActiveArt: Bool {
+        _ = resolver.revision
+        return resolver.image(for: tile.key, in: resolver.activeSet) != nil
+    }
+
+    /// Refine is offered only when there's active-set art AND no photo override —
+    /// a photo would hide the refined variant, which would be confusing.
+    private var canRefine: Bool { hasActiveArt && tile.userImageData == nil }
 
     var body: some View {
         Section("Photo") {
@@ -54,23 +67,52 @@ struct TilePhotoSection: View {
             .disabled(isLoading || isGenerating)
 
             if !apiKey.isEmpty {
+                Toggle("Generate all styles", isOn: $generateAllStyles)
+                    .font(.caption)
+                    .disabled(isLoading || isGenerating)
+
                 Button {
                     Task { await generateImage() }
                 } label: {
-                    Label(tile.userImageData == nil ? "Generate with AI" : "Regenerate with AI",
+                    Label(hasActiveArt ? "Regenerate (fresh image)" : "Generate with AI",
                           systemImage: "wand.and.stars")
                 }
                 .disabled(isLoading || isGenerating)
 
-                TextField("Add a detail to refine (optional)", text: $imageDetail, axis: .vertical)
-                    .font(.caption)
-                    .lineLimit(1...2)
-                    .disabled(isLoading || isGenerating)
-                    .onChange(of: imageDetail) { _, value in
-                        if value.count > TileImageGenerator.maxDetailLength {
-                            imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
-                        }
+                if canRefine {
+                    Button {
+                        Task { await refineImage() }
+                    } label: {
+                        Label("Refine this image", systemImage: "wand.and.rays")
                     }
+                    .disabled(isLoading || isGenerating || imageDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                HStack(spacing: 6) {
+                    TextField(canRefine ? "Describe a change, e.g. give her red hair" : "Add a detail to guide the image (optional)",
+                              text: $imageDetail, axis: .vertical)
+                        .font(.caption)
+                        .lineLimit(1...2)
+                        .disabled(isLoading || isGenerating)
+                        .onChange(of: imageDetail) { _, value in
+                            if value.count > TileImageGenerator.maxDetailLength {
+                                imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
+                            }
+                        }
+                    if !imageDetail.isEmpty {
+                        Button { imageDetail = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading || isGenerating)
+                        .accessibilityLabel("Clear text")
+                    }
+                }
+                if canRefine {
+                    Text("Refine keeps this picture and applies your change (active style only). Regenerate makes a brand-new image.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 if imageDetail.count >= TileImageGenerator.detailCounterThreshold {
                     Text("\(imageDetail.count)/\(TileImageGenerator.maxDetailLength)")
                         .font(.caption2)
@@ -128,14 +170,42 @@ struct TilePhotoSection: View {
         isGenerating = true
         errorMessage = nil
         defer { isGenerating = false }
+        let targets = generateAllStyles
+            ? ImageSetID.generationTargets(preferring: resolver.activeSet)
+            : [resolver.activeSet]
+        for set in targets {
+            do {
+                let image = try await TileImageGenerator.generate(
+                    displayName: tile.displayName, wordClass: tile.wordClass,
+                    imageSet: set, detail: imageDetail, apiKey: apiKey)
+                if let err = TilePhotoCommit.applyVariant(image, to: tile, imageSet: set,
+                                                          context: modelContext, resolver: resolver) {
+                    errorMessage = err
+                }
+            } catch {
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
+            }
+        }
+    }
+
+    /// Image-to-image refine of the active set's current art (bundled or variant),
+    /// storing the result as this set's canonical variant. Each refine builds on
+    /// the last image, so context is preserved.
+    private func refineImage() async {
+        guard let base = resolver.image(for: tile.key, in: resolver.activeSet)
+                ?? resolver.image(for: tile.key) else { return }
+        isGenerating = true
+        errorMessage = nil
+        defer { isGenerating = false }
         do {
-            let image = try await TileImageGenerator.generate(
-                displayName: tile.displayName, wordClass: tile.wordClass,
-                imageSet: resolver.activeSet, detail: imageDetail, apiKey: apiKey)
-            errorMessage = TilePhotoCommit.apply(
-                image, to: tile, context: modelContext, resolver: resolver)
+            let image = try await TileImageGenerator.edit(
+                baseImage: base, instruction: imageDetail, apiKey: apiKey)
+            if let err = TilePhotoCommit.applyVariant(image, to: tile, imageSet: resolver.activeSet,
+                                                      context: modelContext, resolver: resolver) {
+                errorMessage = err
+            }
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't refine the image."
         }
     }
 
@@ -166,6 +236,29 @@ enum TilePhotoCommit {
             return err.errorDescription
         } catch {
             return "Couldn't save that photo."
+        }
+    }
+
+    /// Store an AI-generated image as the tile's CANONICAL art for `imageSet` (a
+    /// synced TileArtVariant), not the camera-photo override. Returns a
+    /// user-facing error on failure, nil on success.
+    @MainActor
+    static func applyVariant(_ image: UIImage,
+                             to tile: TileModel,
+                             imageSet: ImageSetID,
+                             context: ModelContext,
+                             resolver: TileImageResolver) -> String? {
+        do {
+            let processed = try TilePhotoProcessor.process(image)
+            TileArtVariant.upsert(tileKey: tile.key, imageSet: imageSet,
+                                  imageData: processed, context: context)
+            try context.save()
+            resolver.invalidateVariants(for: tile.key)
+            return nil
+        } catch let err as TilePhotoProcessor.ProcessError {
+            return err.errorDescription
+        } catch {
+            return "Couldn't save that image."
         }
     }
 }

@@ -278,6 +278,7 @@ struct TileScriptRecorderTests {
             sentenceWait: .human,
             provider: nil,
             scene: nil,
+            mode: nil,
             commands: [.tiles(rows: [row])]
         )
         let yaml = TileScriptSerializer.serialize(script)

@@ -345,12 +345,7 @@ struct TilePropertiesSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: 14) {
-                        TileImageView(key: tile?.bundleImage ?? tileKey,
-                                      wordClass: tile?.wordClass ?? "")
-                            .frame(width: 56, height: 56)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-
+                    VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tile?.displayName ?? tileKey)
                                 .font(.headline)
@@ -365,6 +360,11 @@ struct TilePropertiesSheet: View {
                                 }
                             }
                         }
+
+                        // Per-style art review: every style side by side + zoom.
+                        TileStyleStripView(tileKey: tile?.key ?? tileKey,
+                                           displayName: tile?.displayName ?? tileKey,
+                                           wordClass: tile?.wordClass ?? "")
                     }
                     .padding(.vertical, 4)
                 }

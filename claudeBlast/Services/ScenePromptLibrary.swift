@@ -49,26 +49,21 @@ enum StarterSceneCatalog {
 }
 
 extension StarterScene {
-    /// Bundled per-key art sidecar: Resources/starterart_<key>.png. The bundle
-    /// JSON stays human-readable by keeping art out of it.
-    static func artData(for key: String) -> Data? {
-        guard let url = Bundle.main.url(forResource: "starterart_\(key)", withExtension: "png") else { return nil }
-        return try? Data(contentsOf: url)
-    }
-
     /// Decode the readable bundle into a GeneratedScene for the shared Scene
-    /// Preview, plus a key→art map loaded from the sidecars so the new (not-yet-
-    /// imported) tiles show their pictures. Accept then imports via `importBundle`.
+    /// Preview. No art is attached: known words resolve their picture per the
+    /// active tile set (bundled `cls_`/`p3d_` art) via the resolver, and genuinely
+    /// new words render their letter placeholder — exactly like an AI-generated
+    /// scene's new words, with optional AI generation after import. (Previously a
+    /// per-key `starterart_*` p3d sidecar was baked into `userImageData`, which
+    /// pinned every tile to Playful-3D and masked Classic mode.)
     func loadPreview() -> (scene: GeneratedScene, images: [String: Data])? {
         guard let data = bundleData(),
               let exportable = try? JSONDecoder().decode(ExportableScene.self, from: data)
         else { return nil }
 
         var meta: [String: (displayName: String, wordClass: String)] = [:]
-        var images: [String: Data] = [:]
         for tile in exportable.tiles ?? [] {
             meta[tile.key] = (tile.displayName, tile.wordClass)
-            if let art = Self.artData(for: tile.key) { images[tile.key] = art }
         }
 
         let pages = exportable.pages.map { page in
@@ -82,27 +77,15 @@ extension StarterScene {
         }
         let scene = GeneratedScene(name: exportable.name, description: exportable.description,
                                    homePageKey: exportable.homePageKey, pages: pages)
-        return (scene, images)
+        return (scene, [:])
     }
 
-    /// Import the bundled starter into `context`, attaching each new word's art
-    /// from its sidecar (re-encoded inline so the standard SceneImporter path is
-    /// reused unchanged). Returns the created scene.
+    /// Import the bundled starter into `context`. The scene only adds vocabulary —
+    /// no art is attached to any tile. Known words resolve per active tile set;
+    /// genuinely new words stay imageless (caregiver generates art on demand).
     func importBundle(context: ModelContext) -> BlasterScene? {
-        guard let data = bundleData(),
-              var exportable = try? JSONDecoder().decode(ExportableScene.self, from: data)
-        else { return nil }
-
-        var tiles = exportable.tiles ?? []
-        for i in tiles.indices {
-            if let art = Self.artData(for: tiles[i].key) {
-                tiles[i].imageData = art.base64EncodedString()
-            }
-        }
-        exportable.tiles = tiles
-
-        guard let encoded = try? JSONEncoder().encode(exportable),
-              let result = try? SceneImporter.importJSON(encoded, context: context,
+        guard let data = bundleData() else { return nil }
+        guard let result = try? SceneImporter.importJSON(data, context: context,
                                                          sourceURL: "starter:\(id)")
         else { return nil }
         return result.scene
