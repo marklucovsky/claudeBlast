@@ -57,21 +57,71 @@ enum TileImageGenerator {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = 60 // image generation is slow (~10-20s)
 
+        return try await send(request)
+    }
+
+    /// Refine an existing image (image-to-image) via /images/edits: sends the
+    /// current image + an instruction so the result keeps the base and applies
+    /// just the change — true iterative refinement (each refine builds on the
+    /// last image), unlike a fresh text-to-image generation.
+    static func edit(baseImage: UIImage, instruction: String, apiKey: String) async throws -> UIImage {
+        guard !apiKey.isEmpty else { throw OpenAIError.missingAPIKey }
+        guard let png = baseImage.pngData() else {
+            throw OpenAIError.decodingError("Couldn't encode the base image")
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func appendField(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(value)\r\n".data(using: .utf8)!)
+        }
+        appendField("model", model)
+        appendField("prompt", editPrompt(instruction: instruction))
+        appendField("size", "1024x1024")
+        appendField("quality", quality)
+        appendField("n", "1")
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
+        body.append(png)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let url = URL(string: "https://api.openai.com/v1/images/edits")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        request.timeoutInterval = 90
+        return try await send(request)
+    }
+
+    private static func editPrompt(instruction: String) -> String {
+        let inst = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        let change = inst.isEmpty ? "Refine the image" : inst
+        return "\(change). Keep the same subject, composition, and art style."
+    }
+
+    /// Shared: run an images request, surface OpenAI's structured error, decode
+    /// the returned image (base64 or URL).
+    private static func send(_ request: URLRequest) async throws -> UIImage {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OpenAIError.httpError(statusCode: 0, body: "Invalid response")
         }
         guard http.statusCode == 200 else {
-            // Surface OpenAI's structured error message (e.g. content policy,
-            // model access, invalid parameter) rather than the raw body.
+            // Surface OpenAI's structured error message (content policy, model
+            // access, invalid parameter) rather than the raw body.
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
                 throw OpenAIError.apiError(message)
             }
-            throw OpenAIError.httpError(
-                statusCode: http.statusCode,
-                body: String(data: data, encoding: .utf8) ?? "Unknown error")
+            throw OpenAIError.httpError(statusCode: http.statusCode,
+                                        body: String(data: data, encoding: .utf8) ?? "Unknown error")
         }
         return try await decodeImage(data: data)
     }

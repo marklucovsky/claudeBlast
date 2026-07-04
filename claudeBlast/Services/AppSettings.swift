@@ -47,6 +47,9 @@ enum AppSettingsKey {
     static let tileSizeStep          = "tile_size_step"
     static let compareProviders      = "compare_providers"
     static let imageSet              = "image_set"
+    /// When ON, AI art generation produces a variant for every generatable style
+    /// (see ImageSetID.generationTargets) so a custom word is arted in all styles.
+    static let generateAllStyles     = "generate_all_styles"
 
     // Sentence tray timeline settings (PR cb-tray-timeline)
     static let tileCapPerGroup       = "tile_cap_per_group"
@@ -71,14 +74,14 @@ func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
     // installs continue to read the same store file — only the new local
     // configuration gets a distinct on-disk location.
     let syncedSchema = Schema([
-        TileModel.self,
+        TileModel.self, TileArtVariant.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
         ChildProfile.self,
     ])
     let localSchema = Schema([DeviceProfile.self])
     let allSchema = Schema([
-        TileModel.self,
+        TileModel.self, TileArtVariant.self,
         SentenceCache.self, BlasterScene.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
         ChildProfile.self,

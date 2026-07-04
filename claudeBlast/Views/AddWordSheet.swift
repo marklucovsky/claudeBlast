@@ -35,11 +35,13 @@ struct AddWordSheet: View {
     // Inline photo (held until the word is created).
     @State private var pickerItem: PhotosPickerItem?
     @State private var cropTarget: CropTarget?
-    @State private var processedPhoto: Data?
+    @State private var processedPhoto: Data?               // camera photo → userImageData override
+    @State private var generatedArt: [String: Data] = [:]  // imageSetRaw → AI art → TileArtVariant
     @State private var photoPreview: UIImage?
     @State private var photoError: String?
     @State private var isGenerating = false
     @State private var imageDetail = ""
+    @AppStorage(AppSettingsKey.generateAllStyles) private var generateAllStyles = false
 
     private var apiKey: String { OpenAIKeyVault.currentKey() ?? "" }
 
@@ -131,6 +133,7 @@ struct AddWordSheet: View {
                             Spacer()
                             Button(role: .destructive) {
                                 processedPhoto = nil
+                                generatedArt = [:]
                                 self.photoPreview = nil
                             } label: {
                                 Label("Remove", systemImage: "trash")
@@ -144,23 +147,54 @@ struct AddWordSheet: View {
                     .disabled(isGenerating)
 
                     if !apiKey.isEmpty {
+                        Toggle("Generate all styles", isOn: $generateAllStyles)
+                            .font(.caption)
+                            .disabled(isGenerating)
+
                         Button {
                             Task { await generateImage() }
                         } label: {
-                            Label(photoPreview == nil ? "Generate with AI" : "Regenerate with AI",
+                            Label(photoPreview == nil ? "Generate with AI" : "Regenerate (fresh image)",
                                   systemImage: "wand.and.stars")
                         }
                         .disabled(isGenerating || trimmedName.isEmpty)
 
-                        TextField("Add a detail to refine (optional)", text: $imageDetail, axis: .vertical)
-                            .font(.caption)
-                            .lineLimit(1...2)
-                            .disabled(isGenerating)
-                            .onChange(of: imageDetail) { _, value in
-                                if value.count > TileImageGenerator.maxDetailLength {
-                                    imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
-                                }
+                        if photoPreview != nil {
+                            Button {
+                                Task { await refineImage() }
+                            } label: {
+                                Label("Refine this image", systemImage: "wand.and.rays")
                             }
+                            .disabled(isGenerating || imageDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+
+                        // Detail / refinement field, with a one-tap clear.
+                        HStack(spacing: 6) {
+                            TextField(photoPreview == nil ? "Add a detail (optional)" : "Describe a change, e.g. give him red hair",
+                                      text: $imageDetail, axis: .vertical)
+                                .font(.caption)
+                                .lineLimit(1...2)
+                                .disabled(isGenerating)
+                                .onChange(of: imageDetail) { _, value in
+                                    if value.count > TileImageGenerator.maxDetailLength {
+                                        imageDetail = String(value.prefix(TileImageGenerator.maxDetailLength))
+                                    }
+                                }
+                            if !imageDetail.isEmpty {
+                                Button { imageDetail = "" } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isGenerating)
+                                .accessibilityLabel("Clear text")
+                            }
+                        }
+
+                        if photoPreview != nil {
+                            Text("Refine keeps this picture and applies your change. Regenerate makes a brand-new image.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                         if imageDetail.count >= TileImageGenerator.detailCounterThreshold {
                             Text("\(imageDetail.count)/\(TileImageGenerator.maxDetailLength)")
                                 .font(.caption2)
@@ -264,13 +298,21 @@ struct AddWordSheet: View {
         let tile = TileModel(key: finalKey, value: trimmedName, wordClass: wordClass)
         tile.isSystem = false
         if let processedPhoto {
-            tile.userImageData = processedPhoto
+            tile.userImageData = processedPhoto   // camera photo → removable override
         }
         modelContext.insert(tile)
-        try? modelContext.save()
-        if processedPhoto != nil {
-            resolver.invalidatePhoto(for: finalKey)
+        // AI-generated art is the word's CANONICAL per-style art (synced), keyed to
+        // the now-final tile key. The key isn't known until here, so it's held until
+        // commit and upserted per style.
+        for (setRaw, data) in generatedArt {
+            if let set = ImageSetID(rawValue: setRaw) {
+                TileArtVariant.upsert(tileKey: finalKey, imageSet: set,
+                                      imageData: data, context: modelContext)
+            }
         }
+        try? modelContext.save()
+        if processedPhoto != nil { resolver.invalidatePhoto(for: finalKey) }
+        if !generatedArt.isEmpty { resolver.invalidateVariants(for: finalKey) }
         onCommit(tile)
         dismiss()
     }
@@ -321,17 +363,46 @@ struct AddWordSheet: View {
         isGenerating = true
         photoError = nil
         defer { isGenerating = false }
+        let targets = generateAllStyles
+            ? ImageSetID.generationTargets(preferring: resolver.activeSet)
+            : [resolver.activeSet]
+        for set in targets {
+            do {
+                let image = try await TileImageGenerator.generate(
+                    displayName: trimmedName, wordClass: wordClass,
+                    imageSet: set, detail: imageDetail, apiKey: apiKey)
+                let data = try TilePhotoProcessor.process(image)
+                generatedArt[set.rawValue] = data
+                if set == resolver.activeSet { photoPreview = UIImage(data: data) }
+            } catch let err as TilePhotoProcessor.ProcessError {
+                photoError = err.errorDescription
+            } catch {
+                photoError = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
+            }
+        }
+        if photoPreview == nil, let first = generatedArt.values.first {
+            photoPreview = UIImage(data: first)   // active set wasn't a target (e.g. arasaac)
+        }
+    }
+
+    /// Refine the current image (image-to-image) with the detail as the change —
+    /// each refine builds on the last, so context is preserved in the image.
+    private func refineImage() async {
+        guard let base = photoPreview else { return }
+        isGenerating = true
+        photoError = nil
+        defer { isGenerating = false }
         do {
-            let image = try await TileImageGenerator.generate(
-                displayName: trimmedName, wordClass: wordClass,
-                imageSet: resolver.activeSet, detail: imageDetail, apiKey: apiKey)
+            let image = try await TileImageGenerator.edit(
+                baseImage: base, instruction: imageDetail, apiKey: apiKey)
             let data = try TilePhotoProcessor.process(image)
-            processedPhoto = data
+            // Refine updates the displayed style's canonical art, not the override.
+            generatedArt[resolver.activeSet.rawValue] = data
             photoPreview = UIImage(data: data)
         } catch let err as TilePhotoProcessor.ProcessError {
             photoError = err.errorDescription
         } catch {
-            photoError = (error as? LocalizedError)?.errorDescription ?? "Couldn't generate an image."
+            photoError = (error as? LocalizedError)?.errorDescription ?? "Couldn't refine the image."
         }
     }
 }

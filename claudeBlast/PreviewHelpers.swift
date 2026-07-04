@@ -13,7 +13,7 @@ import SwiftData
 @MainActor
 let previewContainer: ModelContainer = {
     let schema = Schema([
-        TileModel.self,
+        TileModel.self, TileArtVariant.self,
         BlasterScene.self, SentenceCache.self, MetricEvent.self,
         RecordedScript.self, LoggedUtterance.self,
     ])

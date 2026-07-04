@@ -24,6 +24,7 @@ struct TilePickerView: View {
     @State private var isSuggesting = false
     @State private var suggestionError: String? = nil
     @State private var showAddWord = false
+    @State private var showBulkWord = false
     @Environment(\.isSearching) private var isSearching
 
     private var apiKey: String {
@@ -97,6 +98,14 @@ struct TilePickerView: View {
                 wordClassFilter
                     .padding(.vertical, 8)
 
+                Button { showBulkWord = true } label: {
+                    Label("Paste a word list", systemImage: "list.bullet.clipboard")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+
                 // When a search has matches the grid shows them, which otherwise
                 // hides the "create" path — so an existing word (any class, with
                 // or without spaces) couldn't be extended without changing the
@@ -127,6 +136,11 @@ struct TilePickerView: View {
                 ) { tile in
                     placeTileOnPage(tile.key)
                     searchText = ""
+                }
+            }
+            .sheet(isPresented: $showBulkWord) {
+                BulkWordSheet(existingTiles: allTiles) { tiles in
+                    for tile in tiles { placeTileOnPage(tile.key) }
                 }
             }
             .onAppear {

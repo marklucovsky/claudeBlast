@@ -31,6 +31,16 @@ enum ImageSetID: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact label for tight UI (e.g. the per-style review strip).
+    var shortName: String {
+        switch self {
+        case .playful3D: return "Playful 3D"
+        case .classic: return "Classic"
+        case .arasaac: return "ARASAAC"
+        case .highContrast: return "Contrast"
+        }
+    }
+
     var description: String {
         switch self {
         case .playful3D: return "Modern clay/plasticine 3D style"
@@ -73,6 +83,20 @@ enum ImageSetID: String, CaseIterable, Identifiable {
         return allCases.filter(\.isShippable)
         #endif
     }
+
+    /// Styles AI art is generated for — the authored, first-class sets. ARASAAC
+    /// is an external reference set (not generated); High Contrast is unshipped.
+    static var generationTargets: [ImageSetID] { [.playful3D, .classic] }
+
+    /// Generation targets ordered so `preferred` (usually the active set) comes
+    /// first. A newly-generated tile then shows the right style as soon as its
+    /// first variant lands — the other styles fill in behind it — instead of
+    /// briefly showing whichever style happened to finish first (e.g. a p3d flash
+    /// while in Classic mode).
+    static func generationTargets(preferring preferred: ImageSetID) -> [ImageSetID] {
+        guard generationTargets.contains(preferred) else { return generationTargets }
+        return [preferred] + generationTargets.filter { $0 != preferred }
+    }
 }
 
 // MARK: - Tile Image Resolver
@@ -110,9 +134,17 @@ final class TileImageResolver {
     /// render of every photo-less tile (the vast majority) would issue a fetch.
     private var overrideMisses = Set<String>()
 
+    /// Decoded custom per-style art (TileArtVariant), keyed "variant:<set>:<key>"
+    /// (and "variant:any:<key>" for the cross-style fallback), plus a negative
+    /// cache of "<set>:<key>" / "any:<key>" with no variant — so bundled tiles
+    /// never fetch.
+    private var variantCache = NSCache<NSString, UIImage>()
+    private var variantMisses = Set<String>()
+
     init() {
         cache.countLimit = 600 // ~500 tiles + headroom
         overrideCache.countLimit = 600
+        variantCache.countLimit = 600
     }
 
     /// Wire the SwiftData context so photo overrides can be resolved. Safe to
@@ -122,6 +154,8 @@ final class TileImageResolver {
         self.context = modelContext
         overrideCache.removeAllObjects()
         overrideMisses.removeAll()
+        variantCache.removeAllObjects()
+        variantMisses.removeAll()
     }
 
     /// Resolve a UIImage for the given tile key, applying the full fallback
@@ -142,6 +176,8 @@ final class TileImageResolver {
         if let photo = userPhoto(for: key) { return photo }
         if let img = rawImage(for: key, in: activeSet) { return img }
         if activeSet != .playful3D, let img = rawImage(for: key, in: .playful3D) { return img }
+        // A custom word arted in only one style still shows (its variant) in others.
+        if let img = anyVariantImage(for: key) { return img }
         return placeholderImage(for: activeSet)
     }
 
@@ -158,13 +194,20 @@ final class TileImageResolver {
     /// use this to decide whether a tile relies on bundled art, and a caregiver
     /// photo must not make a custom tile look bundled.
     func hasImage(for key: String) -> Bool {
-        if rawImage(for: key, in: activeSet) != nil { return true }
-        return rawImage(for: key, in: .playful3D) != nil
+        if bundledImage(for: key, in: activeSet) != nil { return true }
+        return bundledImage(for: key, in: .playful3D) != nil
     }
 
     /// Raw art for a key in a set, with no placeholder or backfill. This is the
     /// single switch over set → asset lookup used by the public resolvers.
     private func rawImage(for key: String, in imageSet: ImageSetID) -> UIImage? {
+        if let bundled = bundledImage(for: key, in: imageSet) { return bundled }
+        return variantImage(for: key, in: imageSet)
+    }
+
+    /// Bundled system art only (asset catalog / {prefix}_{key}.png). No custom
+    /// variants, no placeholder — the single source of "is this a bundled tile".
+    private func bundledImage(for key: String, in imageSet: ImageSetID) -> UIImage? {
         switch imageSet {
         case .arasaac:
             // ARASAAC images live in Assets.xcassets — UIKit caches these internally.
@@ -179,6 +222,66 @@ final class TileImageResolver {
         case .highContrast:
             return prefixedBundleImage(for: key, prefix: "hc")
         }
+    }
+
+    // MARK: - Custom per-style art (TileArtVariant, synced)
+
+    /// Decoded custom art for `key` in `imageSet`, or nil. Positive + negative
+    /// caches keep bundled tiles from ever fetching.
+    private func variantImage(for key: String, in imageSet: ImageSetID) -> UIImage? {
+        guard let context else { return nil }
+        let pair = "\(imageSet.rawValue):\(key)"
+        if variantMisses.contains(pair) { return nil }
+        let cacheKey = NSString(string: "variant:\(pair)")
+        if let cached = variantCache.object(forKey: cacheKey) { return cached }
+
+        let raw = imageSet.rawValue
+        var descriptor = FetchDescriptor<TileArtVariant>(
+            predicate: #Predicate { $0.tileKey == key && $0.imageSetRaw == raw }
+        )
+        descriptor.fetchLimit = 1
+        if let variant = try? context.fetch(descriptor).first,
+           let img = UIImage(data: variant.imageData) {
+            variantCache.setObject(img, forKey: cacheKey)
+            return img
+        }
+        variantMisses.insert(pair)
+        return nil
+    }
+
+    /// Any variant for `key` (preferring the master set), for the cross-style
+    /// fallback — a word arted in one style still shows in another.
+    private func anyVariantImage(for key: String) -> UIImage? {
+        guard let context else { return nil }
+        let missKey = "any:\(key)"
+        if variantMisses.contains(missKey) { return nil }
+        let cacheKey = NSString(string: "variant:any:\(key)")
+        if let cached = variantCache.object(forKey: cacheKey) { return cached }
+
+        var descriptor = FetchDescriptor<TileArtVariant>(predicate: #Predicate { $0.tileKey == key })
+        descriptor.fetchLimit = 5
+        guard let variants = try? context.fetch(descriptor), !variants.isEmpty else {
+            variantMisses.insert(missKey); return nil
+        }
+        let chosen = variants.first { $0.imageSetRaw == ImageSetID.playful3D.rawValue } ?? variants[0]
+        guard let img = UIImage(data: chosen.imageData) else {
+            variantMisses.insert(missKey); return nil
+        }
+        variantCache.setObject(img, forKey: cacheKey)
+        return img
+    }
+
+    /// Invalidate cached variants for `key` after art is (re)generated, and bump
+    /// `revision` so views re-render.
+    func invalidateVariants(for key: String) {
+        for set in ImageSetID.allCases {
+            let pair = "\(set.rawValue):\(key)"
+            variantCache.removeObject(forKey: NSString(string: "variant:\(pair)"))
+            variantMisses.remove(pair)
+        }
+        variantCache.removeObject(forKey: NSString(string: "variant:any:\(key)"))
+        variantMisses.remove("any:\(key)")
+        revision &+= 1
     }
 
     /// The active set's shared missing-art placeholder, if it ships one.

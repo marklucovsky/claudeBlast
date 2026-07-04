@@ -48,6 +48,16 @@ final class SceneImageBatchController {
     private(set) var currentName = ""
     private(set) var failures: [String] = []
 
+    /// Styles to generate per word: every generatable style when the "all styles"
+    /// setting is on, else just the active set.
+    private var styleTargets: [ImageSetID] {
+        let active = resolver?.activeSet ?? .playful3D
+        if UserDefaults.standard.bool(forKey: AppSettingsKey.generateAllStyles) {
+            return ImageSetID.generationTargets(preferring: active)
+        }
+        return [active]
+    }
+
     private var queue: [TileModel] = []
     private var task: Task<Void, Never>?
     private var pauseRequested = false
@@ -149,17 +159,23 @@ final class SceneImageBatchController {
 
                 let tile = self.queue.removeFirst()
                 self.currentName = tile.displayName.isEmpty ? tile.value : tile.displayName
-                do {
-                    let image = try await TileImageGenerator.generate(
-                        displayName: tile.displayName, wordClass: tile.wordClass,
-                        imageSet: self.resolver?.activeSet ?? .playful3D, apiKey: self.apiKey)
-                    if let context = self.context, let resolver = self.resolver,
-                       TilePhotoCommit.apply(image, to: tile, context: context, resolver: resolver) != nil {
-                        self.failures.append(self.currentName)
+                var failed = false
+                for set in self.styleTargets {
+                    if Task.isCancelled { return }
+                    do {
+                        let image = try await TileImageGenerator.generate(
+                            displayName: tile.displayName, wordClass: tile.wordClass,
+                            imageSet: set, apiKey: self.apiKey)
+                        if let context = self.context, let resolver = self.resolver,
+                           TilePhotoCommit.applyVariant(image, to: tile, imageSet: set,
+                                                        context: context, resolver: resolver) != nil {
+                            failed = true
+                        }
+                    } catch {
+                        if !Task.isCancelled { failed = true }
                     }
-                } catch {
-                    if !Task.isCancelled { self.failures.append(self.currentName) }
                 }
+                if failed { self.failures.append(self.currentName) }
                 self.completed += 1
             }
             self.task = nil

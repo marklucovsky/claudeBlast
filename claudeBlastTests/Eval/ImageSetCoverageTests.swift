@@ -41,6 +41,55 @@ struct ImageSetCoverageTests {
         ],
     ]
 
+    /// Every distinct tile key introduced by a bundled pack/starter scene
+    /// (starter_*.json, pack_*.json). These are the "extension" words beyond core
+    /// vocabulary.json — the ones a caregiver sees when they instantiate a starter
+    /// scene like Farm or Tide Pools. Nothing guarded these before, which let
+    /// classic art for them go unnoticed when a build shipped without it.
+    private func extensionSceneKeys() throws -> [String] {
+        struct Tile: Decodable { let key: String }
+        struct Scene: Decodable { let tiles: [Tile]? }
+        var keys = Set<String>()
+        for prefix in ["starter_", "pack_"] {
+            let urls = Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
+            for url in urls where url.lastPathComponent.hasPrefix(prefix) {
+                guard let scene = try? JSONDecoder().decode(Scene.self, from: Data(contentsOf: url)),
+                      let tiles = scene.tiles else { continue }
+                tiles.forEach { keys.insert($0.key) }
+            }
+        }
+        return keys.sorted()
+    }
+
+    /// Extension words that intentionally ship WITHOUT art — they are the "new
+    /// words" a starter scene surfaces to demo the Generate-art flow, plus page /
+    /// home keys that never render as a tile. They lack art in every set (not just
+    /// classic), so they are not a coverage regression.
+    private static let extensionWordsWithoutArt: Set<String> = [
+        "mealtime", "tidepools",           // home/page keys, not tiles
+        "placemat", "scarecrow", "seahorse", // intentional generate-art demo words
+    ]
+
+    /// The authored generation sets (Playful-3D + Classic) must carry real art for
+    /// every word a starter/pack scene adds — otherwise a caregiver in Classic mode
+    /// who picks that scene sees the Playful-3D master backfill, not Classic. This
+    /// is the exact bug behind the `starterart_*` p3d sidecars: they baked p3d into
+    /// `userImageData`, masking the active set. ARASAAC is deliberately excluded —
+    /// it's a legacy reference set that never received pack extensions and relies
+    /// on the master backfill for them.
+    @Test func authoredSetsCoverExtensionSceneWords() throws {
+        let keys = try extensionSceneKeys()
+        #expect(!keys.isEmpty, "no bundled starter/pack scene keys found")
+
+        let resolver = TileImageResolver()
+        for set in ImageSetID.generationTargets {
+            let missing = Set(keys.filter { resolver.image(for: $0, in: set) == nil })
+            let unexpected = missing.subtracting(Self.extensionWordsWithoutArt).sorted()
+            #expect(unexpected.isEmpty,
+                    "Authored set \(set.rawValue) is missing art for \(unexpected.count) starter/pack word(s) — a caregiver picking that scene in \(set.displayName) mode sees the master-set fallback, not \(set.displayName): \(unexpected.prefix(20).joined(separator: ", "))")
+        }
+    }
+
     @Test func shippableSetsCoverEntireVocabulary() throws {
         let keys = try vocabularyKeys()
         #expect(!keys.isEmpty)
