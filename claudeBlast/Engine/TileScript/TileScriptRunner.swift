@@ -35,6 +35,13 @@ final class TileScriptRunner {
     /// Total rows in the current tiles command (0 if not in a tiles command).
     private(set) var currentRowCount: Int = 0
 
+    /// Grid tap feedback for playback. `tapPulseKey` is the tile the script just
+    /// "tapped"; `tapPulseCount` increments on EVERY tap so repeated taps of the
+    /// SAME tile still re-fire the grid tile's bounce — essential for repetition
+    /// demos, where the static selection ring doesn't show the mashing.
+    private(set) var tapPulseKey: String?
+    private(set) var tapPulseCount: Int = 0
+
     /// Bulk generation progress (completed, total). Nil when not generating.
     private(set) var bulkProgress: (completed: Int, total: Int)?
     /// Number of duplicate combos skipped during bulk generation.
@@ -70,6 +77,10 @@ final class TileScriptRunner {
 
     /// True when the script was started in step/debug mode (playPaused).
     private var startedPaused = false
+
+    /// True when running under the debugger (Step), false for a straight Run.
+    /// Demo mode hides the playback pill only on a Run — stepping still needs it.
+    var isStepping: Bool { startedPaused }
 
     /// Voice each word as it's tapped when there's time to hear it: human-paced
     /// tile delays, or any stepping session (the user controls the advance).
@@ -627,6 +638,10 @@ final class TileScriptRunner {
         }
         if voicePerTile { engine.speakTile(tile.displayName) }   // voice the word as it lands
         engine.addTile(tile)
+        // Pulse the tapped tile in the grid so the tap is visible on playback —
+        // count bumps every time, so repeated taps of the same tile re-animate.
+        tapPulseKey = tileKey
+        tapPulseCount += 1
     }
 
     // MARK: - Sentence / Speech Wait

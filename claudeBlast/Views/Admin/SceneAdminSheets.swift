@@ -207,6 +207,7 @@ struct SceneGeneratorSheet: View {
     /// accept path and the "served from cache" badge. Cleared on refine.
     @State private var cachedStarter: StarterScene? = nil
     @State private var cachedPreviewImages: [String: Data] = [:]
+    @AppStorage(AppSettingsKey.demoMode) private var demoMode = false
 
     var body: some View {
         NavigationStack {
@@ -215,9 +216,10 @@ struct SceneGeneratorSheet: View {
                     preview: preview,
                     allTiles: allTiles,
                     apiKey: apiKey,
+                    profile: .focused,
                     previewImages: cachedPreviewImages,
                     onRefined: { cachedStarter = nil },
-                    onAccept: { scene in buildAndAccept(scene) },
+                    onAccept: { scene, focused in buildAndAccept(scene, focused: focused) },
                     onCancel: { dismiss() }
                 )
                 .navigationTitle("Scene Preview")
@@ -312,7 +314,9 @@ struct SceneGeneratorSheet: View {
                             Text("Generating…")
                         }
                     } else {
-                        let isCached = StarterSceneCatalog.matching(sessionDescription) != nil
+                        // Demo mode always presents "Generate Scene" ✨ so a
+                        // prebuilt sample reads as live AI on stage.
+                        let isCached = StarterSceneCatalog.matching(sessionDescription) != nil && !demoMode
                         Label(isCached ? "Load Example" : "Generate Scene",
                               systemImage: isCached ? "square.grid.2x2.fill" : "sparkles")
                     }
@@ -396,14 +400,30 @@ struct SceneGeneratorSheet: View {
         }
         cachedStarter = starter
         cachedPreviewImages = loaded.images
-        preview = loaded.scene
+        if demoMode {
+            // Demo: play the "Generating…" beat so a prebuilt sample reads as live AI.
+            isGenerating = true
+            Task {
+                try? await Task.sleep(for: .milliseconds(1200))
+                await MainActor.run {
+                    preview = loaded.scene
+                    isGenerating = false
+                }
+            }
+        } else {
+            preview = loaded.scene
+        }
     }
 
-    private func buildAndAccept(_ generated: GeneratedScene) {
+    private func buildAndAccept(_ generated: GeneratedScene, focused: Bool) {
         // Unedited cached starter → import the bundle (art re-attached from
         // sidecars inside importBundle, preserving the bundled pictures).
         if let starter = cachedStarter {
             if let scene = starter.importBundle(context: modelContext) {
+                // Starter bundles are authored Focused — flag the imported scene to
+                // match, or the editor's Focused toggle shows Off over a focused
+                // board (and toggling it re-scaffolds to full).
+                scene.isFocused = focused
                 scene.creationSummary = "⚡ Served from cache — instant, no tokens used"
                 onAccept(scene)
             }
@@ -412,6 +432,9 @@ struct SceneGeneratorSheet: View {
         }
         let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
         if let scene = try? SceneBuilder.build(from: generated, tileLookup: tileLookup, context: modelContext) {
+            // The previewed `generated` scene was already scaffolded at this
+            // profile, so the flag matches the pages the board will show.
+            scene.isFocused = focused
             if let tokens = generated.tokenUsage {
                 scene.creationSummary = "Generated with AI · \(tokens) tokens"
             }
@@ -433,8 +456,8 @@ struct ScenePreviewView: View {
     /// Called when an in-place refinement replaces the scene (so a cached starter
     /// preview can drop its "served from cache" identity — it's now a live scene).
     let onRefined: () -> Void
-    /// Emits the (possibly refined) scene the author accepted.
-    let onAccept: (GeneratedScene) -> Void
+    /// Emits the accepted scene plus whether the Focused board profile is on.
+    let onAccept: (GeneratedScene, Bool) -> Void
     let onCancel: () -> Void
 
     /// The scene currently shown — seeded from the initial preview and replaced
@@ -444,6 +467,10 @@ struct ScenePreviewView: View {
     @State private var isRefining = false
     @State private var refineError: String? = nil
     @State private var showRefineSheet = false
+    /// Focused board profile: topical tiles alone (template removed) vs the full
+    /// familiar board (topical + Core template). Seeded from the caller's profile —
+    /// the generator opens Focused (ON); the editor mirrors the scene's setting.
+    @State private var focused: Bool
 
     init(preview: GeneratedScene,
          allTiles: [TileModel],
@@ -451,7 +478,7 @@ struct ScenePreviewView: View {
          profile: SceneNavigation.Profile = .full,
          previewImages: [String: Data] = [:],
          onRefined: @escaping () -> Void = {},
-         onAccept: @escaping (GeneratedScene) -> Void,
+         onAccept: @escaping (GeneratedScene, Bool) -> Void,
          onCancel: @escaping () -> Void) {
         self.allTiles = allTiles
         self.apiKey = apiKey
@@ -460,7 +487,18 @@ struct ScenePreviewView: View {
         self.onRefined = onRefined
         self.onAccept = onAccept
         self.onCancel = onCancel
-        _working = State(initialValue: preview)
+        // Seed the toggle + board from the caller's profile: the generator opens
+        // Focused, the editor mirrors the scene. Re-scaffold topical-only when
+        // Focused (cached starters have no rawContent → fall back to the preview).
+        _focused = State(initialValue: profile == .focused)
+        if profile == .focused, let content = preview.rawContent,
+           let parsed = try? GeneratedScene.parse(content: content, allTiles: allTiles, profile: .focused) {
+            var f = parsed
+            f.tokenUsage = preview.tokenUsage
+            _working = State(initialValue: f)
+        } else {
+            _working = State(initialValue: preview)
+        }
     }
 
     private var tileLookup: [String: TileModel] {
@@ -502,6 +540,18 @@ struct ScenePreviewView: View {
             }
             .padding(.top, 12)
             .padding(.horizontal)
+
+            // Focused board toggle — only for AI-generated scenes (cached starters
+            // have fixed pages and no raw content to re-scaffold).
+            if working.rawContent != nil {
+                Toggle(isOn: $focused) {
+                    Label("Focused board", systemImage: "scope")
+                        .font(.caption)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .onChange(of: focused) { _, _ in applyFocus() }
+            }
 
             // New-word summary: tells the author what will be added to vocabulary.
             if !newWords.isEmpty {
@@ -605,7 +655,7 @@ struct ScenePreviewView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(isRefining || apiKey.isEmpty)
-                Button("Accept") { onAccept(working) }
+                Button("Accept") { onAccept(working, focused) }
                     .buttonStyle(.borderedProminent)
                     .disabled(isRefining)
             }
@@ -621,6 +671,18 @@ struct ScenePreviewView: View {
         }
     }
 
+    /// Re-derive the previewed scene from its raw content at the current profile
+    /// (focused ⇄ full) — no API call, just a re-scaffold. Preserves token usage.
+    private func applyFocus() {
+        guard let content = working.rawContent,
+              let parsed = try? GeneratedScene.parse(content: content, allTiles: allTiles,
+                                                     profile: focused ? .focused : .full) else { return }
+        var next = parsed
+        next.tokenUsage = working.tokenUsage
+        working = next
+        selectedPageIndex = 0
+    }
+
     private func runRefine(_ instruction: String) {
         let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !apiKey.isEmpty else { return }
@@ -631,7 +693,7 @@ struct ScenePreviewView: View {
         let tiles = allTiles
         Task {
             do {
-                let result = try await service.refine(instruction: text, currentTopical: currentTopical, allTiles: tiles, profile: profile)
+                let result = try await service.refine(instruction: text, currentTopical: currentTopical, allTiles: tiles, profile: focused ? .focused : .full)
                 await MainActor.run {
                     working = result
                     selectedPageIndex = 0

@@ -26,6 +26,7 @@ struct TileScriptView: View {
     @State private var selectedMinLength: Int = 2
     @State private var selectedMaxLength: Int = 4
     @State private var errorMessage: String?
+    @AppStorage(AppSettingsKey.demoMode) private var demoMode = false
 
     // Save modal state
     @State private var showSaveSheet = false
@@ -39,6 +40,7 @@ struct TileScriptView: View {
     var body: some View {
         NavigationStack {
             List {
+                demoModeSection
                 recordSection
                 if !recordings.isEmpty {
                     recordingsSection
@@ -87,6 +89,18 @@ struct TileScriptView: View {
 
     private var isRunningOrRecording: Bool {
         runner.state == .running || runner.state == .paused || recorder.state == .recording
+    }
+
+    // MARK: - Demo Mode
+
+    private var demoModeSection: some View {
+        Section {
+            Toggle(isOn: $demoMode) {
+                Label("Demo Mode", systemImage: "sparkles")
+            }
+        } footer: {
+            Text("For screen recording: hides the playback pill on Run and shows the “Generating…” beat even on cached results, so demos read as live AI.")
+        }
     }
 
     // MARK: - Record Section
