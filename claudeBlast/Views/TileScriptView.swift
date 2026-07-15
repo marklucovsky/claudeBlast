@@ -33,6 +33,9 @@ struct TileScriptView: View {
     @State private var saveName = ""
     @State private var saveYaml = ""
 
+    // Demo run logs (JSONL, written by the runner in Demo Mode)
+    @State private var runLogs: [URL] = []
+
     private let countOptions = [100, 1_000, 10_000, 200_000, 1_000_000]
 
     private var activeScene: BlasterScene? { activeScenes.first }
@@ -41,6 +44,9 @@ struct TileScriptView: View {
         NavigationStack {
             List {
                 demoModeSection
+                if demoMode || !runLogs.isEmpty {
+                    runLogsSection
+                }
                 recordSection
                 if !recordings.isEmpty {
                     recordingsSection
@@ -73,6 +79,13 @@ struct TileScriptView: View {
             if let script = recorder.lastRecordedScript {
                 populateSaveModal(for: script)
             }
+            refreshRunLogs()
+        }
+        .onChange(of: runner.state) { _, newState in
+            // A finished/stopped run has just written its log — surface it.
+            if newState == .finished || newState == .idle {
+                refreshRunLogs()
+            }
         }
         .onChange(of: recorder.lastRecordedScript != nil) { _, hasScript in
             // Covers subsequent recordings while the view stays mounted.
@@ -99,8 +112,53 @@ struct TileScriptView: View {
                 Label("Demo Mode", systemImage: "sparkles")
             }
         } footer: {
-            Text("For screen recording: hides the playback pill on Run and shows the “Generating…” beat even on cached results, so demos read as live AI.")
+            Text("For screen recording: hides the playback pill on Run, shows the “Generating…” beat even on cached results, and saves a timestamped run log (below) for aligning the capture.")
         }
+    }
+
+    // MARK: - Run Logs
+
+    private var runLogsSection: some View {
+        Section {
+            if runLogs.isEmpty {
+                Text("No run logs yet. With Demo Mode on, Run a demo — a timestamped event log (taps, sentences, escalations) is saved here to export.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(runLogs, id: \.self) { url in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(url.deletingPathExtension().lastPathComponent)
+                                .font(.callout.weight(.medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text(TileScriptRunLogger.modDate(url), format: .dateTime.month().day().hour().minute().second())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        ShareLink(item: url) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        try? FileManager.default.removeItem(at: runLogs[index])
+                    }
+                    refreshRunLogs()
+                }
+            }
+        } header: {
+            Text("Run Logs")
+        } footer: {
+            Text("JSONL, one event per line, timed from run start. Share to your Mac (AirDrop / Messages / Save to Files) to align a screen recording.")
+        }
+    }
+
+    private func refreshRunLogs() {
+        runLogs = TileScriptRunLogger.existingLogs()
     }
 
     // MARK: - Record Section

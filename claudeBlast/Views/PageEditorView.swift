@@ -359,6 +359,11 @@ struct TilePropertiesSheet: View {
                                         .foregroundStyle(.purple)
                                 }
                             }
+                            // Key is the stable id used in TileScript / scene JSON — surface it (copyable).
+                            Text("key: \(tile?.key ?? tileKey)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
                         }
 
                         // Per-style art review: every style side by side + zoom.
