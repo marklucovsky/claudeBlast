@@ -1,0 +1,138 @@
+/* BlasterAI deck theme — Marp custom theme
+   Palette: "MODERN AI" brand direction (concept #2) — Intelligent. Human. Forward-thinking.
+   Exact swatches: Teal Accent #14B8A6 (primary), Blue Accent #3B82F6 (secondary/links),
+   Success #22C55E, Warning #EAB308, Text #0F172A/#475569, Surface #FFF, Background #F8FAFC.
+   Deep-teal dividers use their teal scale (700–900); bright teals (300–400) on dark.
+   Typeface: Inter. Import of built-in "default" gives base layout; we override for brand. */
+/* @theme blaster */
+
+@import 'default';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --brand-ink: #0f172a;      /* Text Primary — primary text & dark surfaces */
+  --brand-ink-soft: #475569; /* Text Secondary */
+  --brand-accent: #14b8a6;   /* Teal Accent — primary accent / CTAs / highlights */
+  --brand-accent-2: #3b82f6; /* Blue Accent — secondary actions & links */
+  --brand-gold: #eab308;     /* Warning — highlight bars */
+  --brand-green: #22c55e;    /* Success — positive metrics */
+  --brand-error: #ef4444;    /* Error */
+  --brand-bg: #ffffff;       /* Surface */
+  --brand-bg-tint: #f8fafc;  /* Background — soft panel */
+}
+
+section {
+  font-family: 'Inter', -apple-system, "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+  font-size: 24px;
+  color: var(--brand-ink);
+  background: var(--brand-bg);
+  padding: 60px 72px 72px;
+  line-height: 1.42;
+}
+
+h1 { color: var(--brand-ink); font-size: 52px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 0.3em; }
+h2 { color: var(--brand-ink); font-size: 36px; font-weight: 700; letter-spacing: -0.3px; }
+h3 { color: var(--brand-accent); font-size: 26px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+
+strong { color: var(--brand-accent); font-weight: 700; }
+em { color: var(--brand-ink-soft); font-style: normal; font-weight: 600; }
+a { color: var(--brand-accent-2); }
+
+/* Accent rule under headings */
+h1::after { content: ""; display: block; width: 84px; height: 6px; background: var(--brand-accent); border-radius: 3px; margin-top: 18px; }
+
+ul, ol { margin-top: 0.2em; }
+li { margin-bottom: 0.35em; }
+li::marker { color: var(--brand-accent); }
+
+blockquote {
+  border-left: 6px solid var(--brand-gold);
+  background: var(--brand-bg-tint);
+  padding: 18px 28px;
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--brand-ink);
+  border-radius: 0 10px 10px 0;
+}
+
+table { font-size: 22px; border-collapse: collapse; }
+th { background: var(--brand-ink); color: #fff; padding: 10px 16px; text-align: left; }
+td { padding: 9px 16px; border-bottom: 1px solid #e2e8f0; }
+tr:nth-child(even) td { background: var(--brand-bg-tint); }
+
+code { background: #f1f5f9; color: #0f766e; padding: 2px 7px; border-radius: 5px; font-size: 0.85em; }
+
+img { border-radius: 14px; }
+
+/* ---- Cover / section-divider layout ---- */
+section.cover {
+  background: linear-gradient(135deg, #0f172a 0%, #111827 50%, #134e4a 100%);
+  color: #fff;
+  justify-content: center;
+}
+section.cover h1 { color: #fff; font-size: 72px; }
+section.cover h1::after { background: var(--brand-accent); width: 120px; }
+section.cover h2 { color: #99f6e4; font-weight: 600; font-size: 32px; }
+section.cover p, section.cover strong { color: #cbd5e1; }
+section.cover em { color: #2dd4bf; }
+
+section.divider {
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 55%, #134e4a 100%);
+  color: #fff;
+  justify-content: center;
+}
+section.divider h1 { color: #fff; font-size: 60px; }
+section.divider h1::after { background: #fff; }
+section.divider h3 { color: #99f6e4; }
+section.divider p, section.divider strong, section.divider em { color: #fff; }
+section.divider .cap { color: #99f6e4; }
+section.cover .cap { color: #94a3b8; }
+
+/* "BlasterAI" wordmark — the AI in a bright teal, tuned per background */
+.ai { color: var(--brand-accent); font-weight: inherit; }
+section.cover .ai { color: #2dd4bf; }   /* teal-400 on dark navy */
+section.divider .ai { color: #5eead4; } /* teal-300 on deep teal */
+
+/* Tinted content slide */
+section.tint { background: var(--brand-bg-tint); }
+
+/* Big stat emphasis */
+.stat { font-size: 84px; font-weight: 800; color: var(--brand-accent); line-height: 1; }
+.stat-2 { color: var(--brand-accent-2); }
+.stat-g { color: var(--brand-green); }
+.label { font-size: 22px; color: var(--brand-ink-soft); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Demo callout badge — also used as a link to the live demo videos */
+.demo { display: inline-block; background: var(--brand-accent); color: #fff; font-size: 20px; font-weight: 700;
+        padding: 6px 16px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
+a.demo { color: #fff; text-decoration: none; }
+a.demo:hover { filter: brightness(1.08); }
+/* Links inside caption lines keep the caption weight, just tinted */
+.cap a { color: var(--brand-accent-2); text-decoration: none; }
+.cap a:hover { text-decoration: underline; }
+
+/* two-column helper via HTML */
+.cols { display: flex; gap: 40px; }
+.cols > div { flex: 1; }
+
+/* footer / pagination — palette-aware (Text Secondary on light slides).
+   Suppressed on the full-bleed statement slides (cover + dividers) so tiny
+   chrome doesn't fight the dark teal/navy backgrounds. */
+footer { color: var(--brand-ink-soft); font-size: 13px; }
+section::after { color: var(--brand-ink-soft); font-size: 13px; }
+section.divider footer, section.cover footer { display: none; }
+
+/* Small caption text */
+.cap { font-size: 18px; color: var(--brand-ink-soft); font-weight: 500; }
+
+/* Slide-7 "tiles → sentence" pipeline. Same flex mechanism as .cols so markdown
+   images parse. Teal arrow / plus / sentence are CSS TEXT (vector) so brand teal
+   color-manages identically to the deck accent in the exported PDF — a baked-PNG
+   teal reads shifted on P3 displays. Only the tiles (no brand teal) are raster. */
+.flowrow { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+.flowrow > div { flex: 0 0 auto; }
+.flowrow img { border-radius: 0; margin: 0; }
+.flowrow .plus { color: var(--brand-accent); font-size: 44px; font-weight: 800; line-height: 1; }
+.flowrow .arrow { color: var(--brand-accent); font-size: 50px; font-weight: 800; line-height: 1; margin: 0 8px; }
+.flowrow .say { flex: 1 1 auto; min-width: 0; color: var(--brand-accent); font-size: 27px; font-weight: 700; }
+.flowrow .say p { margin: 0; line-height: 1.28; }
