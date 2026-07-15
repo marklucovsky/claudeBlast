@@ -37,6 +37,9 @@ fastlane/test_output
 # Claude Code local settings
 .claude/settings.local.json
 
+# Wrangler (Cloudflare CLI) local cache — created by ad-hoc npx runs
+.wrangler/
+
 # Python
 tools/__pycache__/
 
