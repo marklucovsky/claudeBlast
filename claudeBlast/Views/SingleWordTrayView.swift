@@ -63,6 +63,12 @@ struct SingleWordTrayView: View {
                     } else {
                         ForEach(Array(strip.enumerated()), id: \.offset) { idx, tile in
                             WordChip(tile: tile) { onRemove(idx) }
+                                .overlay(alignment: .topTrailing) {
+                                    if idx == strip.count - 1 && engine.repetitionCount > 0 {
+                                        ReplayBadge(count: engine.repetitionCount, compact: true)
+                                            .offset(x: 6, y: -4)
+                                    }
+                                }
                                 .id(idx)
                         }
                     }

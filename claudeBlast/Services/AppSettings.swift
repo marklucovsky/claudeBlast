@@ -58,6 +58,16 @@ enum AppSettingsKey {
     /// Long idle timeout (ms) after which the active group is auto-committed to history (the
     /// equivalent of the Done button firing on its own). 0 disables auto-Done.
     static let autoDoneMs            = "auto_done_ms"
+
+    /// Demo mode: cleans up the app for screen recording — hides the TileScript
+    /// playback pill on a straight Run, and always shows the "Generating…" beat
+    /// even when a result comes from cache, so demos read as live AI.
+    static let demoMode              = "demo_mode"
+}
+
+/// Convenience accessor for the demo-mode flag from non-view code (engine, runner).
+enum DemoMode {
+    static var isOn: Bool { UserDefaults.standard.bool(forKey: AppSettingsKey.demoMode) }
 }
 
 // Bootstrap version stamp removed in Step M. needsBootstrap now derives from

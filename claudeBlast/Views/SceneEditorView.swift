@@ -1161,7 +1161,7 @@ private struct SceneRefinementSheet: View {
                     allTiles: allTiles,
                     apiKey: apiKey,
                     profile: profile,
-                    onAccept: { scene in apply(scene) },
+                    onAccept: { scene, _ in apply(scene) },
                     onCancel: { dismiss() }
                 )
             } else {

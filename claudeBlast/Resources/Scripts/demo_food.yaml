@@ -8,16 +8,22 @@ tileWait: .human
 sentenceWait: .human
 
 script:
+  - wait: 1s
   - tileSet: classic
   - tiles:
     - <home>, mom, <food>, popsicle, cookie
-    - <tilescript:replay>
-    
-    - <home>, grandpa, <places>, playground +
-    - slide
   
-  - tileset: playful
+  - tileSet: playful
+  - wait: 2s
+  - tileSet: classic
+
   - tiles:
-    - <home>, <food>
+    - <home>, dad, <social>, bored
+  
+  - tileSet: playful
+  - wait: 2s
+  - tileSet: classic
+  - wait: 2s
+
       
   - comment: Your tile set is restored when the demo ends

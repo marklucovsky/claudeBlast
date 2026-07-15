@@ -35,6 +35,13 @@ final class TileScriptRunner {
     /// Total rows in the current tiles command (0 if not in a tiles command).
     private(set) var currentRowCount: Int = 0
 
+    /// Grid tap feedback for playback. `tapPulseKey` is the tile the script just
+    /// "tapped"; `tapPulseCount` increments on EVERY tap so repeated taps of the
+    /// SAME tile still re-fire the grid tile's bounce — essential for repetition
+    /// demos, where the static selection ring doesn't show the mashing.
+    private(set) var tapPulseKey: String?
+    private(set) var tapPulseCount: Int = 0
+
     /// Bulk generation progress (completed, total). Nil when not generating.
     private(set) var bulkProgress: (completed: Int, total: Int)?
     /// Number of duplicate combos skipped during bulk generation.
@@ -65,11 +72,20 @@ final class TileScriptRunner {
     private var executionTask: Task<Void, Never>?
     private var pauseContinuation: CheckedContinuation<Void, Never>?
 
+    /// Per-run JSONL event log (Demo Mode only) — a screen-recording alignment aid.
+    /// See `TileScriptRunLogger`. `loggingEnabled` is captured at play time.
+    private let runLog = TileScriptRunLogger()
+    private var loggingEnabled = false
+
     private var tileWait: TimingValue = .human
     private var sentenceWait: TimingValue = .human
 
     /// True when the script was started in step/debug mode (playPaused).
     private var startedPaused = false
+
+    /// True when running under the debugger (Step), false for a straight Run.
+    /// Demo mode hides the playback pill only on a Run — stepping still needs it.
+    var isStepping: Bool { startedPaused }
 
     /// Voice each word as it's tapped when there's time to hear it: human-paced
     /// tile delays, or any stepping session (the user controls the advance).
@@ -154,6 +170,13 @@ final class TileScriptRunner {
         tileWait = script.tileWait
         sentenceWait = script.sentenceWait
 
+        // Start every run from a clean slate: clear the active tray AND the utterance
+        // history so a fresh Play doesn't inherit a prior run's committed sentences.
+        // Without this, replaying a demo (state .idle/.finished) leaves the previous
+        // run's history pills on screen — a spoiler strip that shows the whole demo's
+        // punchlines from frame 0. Only stop() reset before; play() didn't.
+        engine?.resetAll()
+
         engine?.audioEnabled = script.audio
         engine?.scriptedModeOverride = script.mode ?? .sentence   // declared mode, else sentence
         if let providerName = script.provider {
@@ -169,6 +192,13 @@ final class TileScriptRunner {
 
         // Point currentRow at the first tiles row if applicable
         updateCurrentRow()
+
+        loggingEnabled = DemoMode.isOn
+        if loggingEnabled {
+            runLog.begin(scriptName: script.name)
+            if let scene = script.scene { runLog.event("scene", ["name": scene]) }
+            runLog.event("mode", ["mode": "\(script.mode ?? .sentence)"])
+        }
 
         if paused {
             state = .paused
@@ -211,6 +241,7 @@ final class TileScriptRunner {
         if let set = originalImageSet { imageResolver?.activeSet = set }
         originalImageSet = nil
         engine?.resetAll()
+        if loggingEnabled { runLog.event("stopped"); runLog.finish(); loggingEnabled = false }
     }
 
     func rewind() {
@@ -306,6 +337,7 @@ final class TileScriptRunner {
             currentRow = nil
             currentRowCount = 0
             state = .finished
+            if loggingEnabled { runLog.finish(); loggingEnabled = false }
         }
     }
 
@@ -336,10 +368,12 @@ final class TileScriptRunner {
 
         case .clear:
             engine?.clearSelection()
+            if loggingEnabled { runLog.event("cleared") }
 
         case .comment(let text):
             currentComment = text
             Self.logger.info("TileScript comment: \(text)")
+            if loggingEnabled { runLog.event("comment", ["text": text]) }
 
         case .wait(let duration):
             do { try await Task.sleep(for: duration) } catch { return }
@@ -521,6 +555,7 @@ final class TileScriptRunner {
         }
         await waitForSpeech()
         engine.clearStrip()
+        if loggingEnabled { runLog.event("strip.cleared") }
         if tileWait.duration > .zero {
             do { try await Task.sleep(for: tileWait.duration) } catch { return }
         }
@@ -543,7 +578,13 @@ final class TileScriptRunner {
         if engine.activeGroup.tiles.count >= 2 {
             engine.triggerGo()
             await waitForSentence()
+            if loggingEnabled {
+                runLog.event("sentence", ["text": engine.generatedSentence ?? "",
+                                          "tiles": engine.activeGroup.tiles.map(\.key),
+                                          "rep": engine.repetitionCount])
+            }
             await waitForSpeech()
+            if loggingEnabled { runLog.event("tts.done") }
         }
 
         if tileWait.duration > .zero {
@@ -569,7 +610,13 @@ final class TileScriptRunner {
 
         engine.replay()
         await waitForSentence()
+        if loggingEnabled {
+            runLog.event("escalate", ["text": engine.generatedSentence ?? "",
+                                      "tiles": engine.activeGroup.tiles.map(\.key),
+                                      "rep": engine.repetitionCount])
+        }
         await waitForSpeech()
+        if loggingEnabled { runLog.event("tts.done") }
 
         if tileWait.duration > .zero {
             do { try await Task.sleep(for: tileWait.duration) } catch { return }
@@ -608,6 +655,7 @@ final class TileScriptRunner {
     }
 
     private func navigateTo(_ pageKey: String, coordinator: NavigationCoordinator) {
+        if loggingEnabled { runLog.event("navigate", ["page": pageKey]) }
         if pageKey == "home" {
             coordinator.navigateToRoot()
         } else {
@@ -627,6 +675,13 @@ final class TileScriptRunner {
         }
         if voicePerTile { engine.speakTile(tile.displayName) }   // voice the word as it lands
         engine.addTile(tile)
+        // Pulse the tapped tile in the grid so the tap is visible on playback —
+        // count bumps every time, so repeated taps of the same tile re-animate.
+        tapPulseKey = tileKey
+        tapPulseCount += 1
+        if loggingEnabled {
+            runLog.event("tap", ["key": tileKey, "group": engine.activeGroup.tiles.map(\.key)])
+        }
     }
 
     // MARK: - Sentence / Speech Wait

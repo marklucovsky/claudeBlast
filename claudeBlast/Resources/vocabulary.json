@@ -871,6 +871,10 @@
     "wordClass": "drinks"
   },
   {
+    "key": "chocolate",
+    "wordClass": "snacks"
+  },
+  {
     "key": "water",
     "wordClass": "drinks"
   },

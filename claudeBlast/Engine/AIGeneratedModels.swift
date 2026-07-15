@@ -130,6 +130,10 @@ struct GeneratedScene: Codable {
     /// Total tokens billed for this generation, attached by SceneGeneratorService
     /// after parsing the response. Optional → absent in model JSON decodes to nil.
     var tokenUsage: Int? = nil
+    /// The raw model JSON this scene was parsed from. Retained so the preview can
+    /// re-scaffold the same content at a different profile (focused ⇄ full) with
+    /// no extra API call. nil on cached-starter scenes.
+    var rawContent: String? = nil
 }
 
 extension GeneratedScene {
@@ -187,7 +191,9 @@ extension GeneratedScene {
             homePageKey: homeKey,
             pages: sanitizedPages
         )
-        return SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys, profile: profile)
+        var result = SceneNavigation.scaffold(scene, allTiles: allTiles, validKeys: validKeys, profile: profile)
+        result.rawContent = content
+        return result
     }
 }
 

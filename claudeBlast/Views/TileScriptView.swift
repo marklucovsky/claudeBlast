@@ -26,11 +26,15 @@ struct TileScriptView: View {
     @State private var selectedMinLength: Int = 2
     @State private var selectedMaxLength: Int = 4
     @State private var errorMessage: String?
+    @AppStorage(AppSettingsKey.demoMode) private var demoMode = false
 
     // Save modal state
     @State private var showSaveSheet = false
     @State private var saveName = ""
     @State private var saveYaml = ""
+
+    // Demo run logs (JSONL, written by the runner in Demo Mode)
+    @State private var runLogs: [URL] = []
 
     private let countOptions = [100, 1_000, 10_000, 200_000, 1_000_000]
 
@@ -39,6 +43,10 @@ struct TileScriptView: View {
     var body: some View {
         NavigationStack {
             List {
+                demoModeSection
+                if demoMode || !runLogs.isEmpty {
+                    runLogsSection
+                }
                 recordSection
                 if !recordings.isEmpty {
                     recordingsSection
@@ -71,6 +79,13 @@ struct TileScriptView: View {
             if let script = recorder.lastRecordedScript {
                 populateSaveModal(for: script)
             }
+            refreshRunLogs()
+        }
+        .onChange(of: runner.state) { _, newState in
+            // A finished/stopped run has just written its log — surface it.
+            if newState == .finished || newState == .idle {
+                refreshRunLogs()
+            }
         }
         .onChange(of: recorder.lastRecordedScript != nil) { _, hasScript in
             // Covers subsequent recordings while the view stays mounted.
@@ -87,6 +102,63 @@ struct TileScriptView: View {
 
     private var isRunningOrRecording: Bool {
         runner.state == .running || runner.state == .paused || recorder.state == .recording
+    }
+
+    // MARK: - Demo Mode
+
+    private var demoModeSection: some View {
+        Section {
+            Toggle(isOn: $demoMode) {
+                Label("Demo Mode", systemImage: "sparkles")
+            }
+        } footer: {
+            Text("For screen recording: hides the playback pill on Run, shows the “Generating…” beat even on cached results, and saves a timestamped run log (below) for aligning the capture.")
+        }
+    }
+
+    // MARK: - Run Logs
+
+    private var runLogsSection: some View {
+        Section {
+            if runLogs.isEmpty {
+                Text("No run logs yet. With Demo Mode on, Run a demo — a timestamped event log (taps, sentences, escalations) is saved here to export.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(runLogs, id: \.self) { url in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(url.deletingPathExtension().lastPathComponent)
+                                .font(.callout.weight(.medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text(TileScriptRunLogger.modDate(url), format: .dateTime.month().day().hour().minute().second())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        ShareLink(item: url) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        try? FileManager.default.removeItem(at: runLogs[index])
+                    }
+                    refreshRunLogs()
+                }
+            }
+        } header: {
+            Text("Run Logs")
+        } footer: {
+            Text("JSONL, one event per line, timed from run start. Share to your Mac (AirDrop / Messages / Save to Files) to align a screen recording.")
+        }
+    }
+
+    private func refreshRunLogs() {
+        runLogs = TileScriptRunLogger.existingLogs()
     }
 
     // MARK: - Record Section

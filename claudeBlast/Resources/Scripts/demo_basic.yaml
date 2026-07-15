@@ -10,9 +10,13 @@ script:
   - comment: Basic AAC interaction flow
   
   - tiles:
+    - <home>, mom, <food>, chocolate, +
+    - chocolate +
+    - chocolate
+  
+  - tiles:
     - <home>, grandpa, <places>, playground, +
-    - <home>, <drinks>, lemonade
-    - <tilescript:replay>
+    - slide
   
   - tiles:
     - <home>, mom, <body_health>, stomachache, +

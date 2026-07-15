@@ -209,8 +209,17 @@ final class SentenceEngine {
 
         let selection = TileSelection(from: tile)
 
-        // Universal: adds, never deletes. Re-tapping a present tile is a no-op
-        // (no toggle-off, no duplicate). Removal happens from the tray chip.
+        // Mash-to-escalate: re-tapping the MOST RECENT tile is the child turning
+        // up the volume ("she really means chocolate"). Route it into the
+        // escalation machinery instead of the old no-op — mashing the tile on the
+        // grid now raises urgency, the same signal as repeatedly hitting Play/Done.
+        if activeGroup.tiles.last?.key == selection.key {
+            mashEscalate()
+            return
+        }
+
+        // Universal: adds, never deletes. Re-tapping a present (non-last) tile is
+        // a no-op (no toggle-off, no duplicate). Removal happens from the tray chip.
         if activeGroup.tiles.contains(where: { $0.key == selection.key }) { return }
 
         guard activeGroup.tiles.count < maxTilesPerGroup else { return }
@@ -225,6 +234,25 @@ final class SentenceEngine {
         scheduleGeneration()
     }
 
+    /// A grid tap on the most-recent tile — the "mash the tile harder" volume
+    /// knob. A lone tile bumps its repeat count and re-speaks the word; a 2+ tile
+    /// group generates if it hasn't locked yet, then escalates (rising urgency)
+    /// on each further mash. Ignored while a generation is already in flight so
+    /// rapid taps debounce naturally.
+    private func mashEscalate() {
+        guard !isThinking else { return }
+        if activeGroup.tiles.count == 1 {
+            // A lone tile has no sentence to escalate — a mash just re-speaks the
+            // word ("say it again"). Do NOT populate the sentence bubble with the
+            // raw word (that read as a bogus one-word "sentence").
+            if let tile = activeGroup.tiles.first { speakTile(tile.value) }
+        } else if canReplay {
+            replay()
+        } else if activeGroup.tiles.count >= 2 {
+            triggerGo()
+        }
+    }
+
     // MARK: - Single-word (classic AAC) strip
 
     /// Append a spoken word to the FIFO strip (single-word mode). Duplicates are
@@ -234,6 +262,21 @@ final class SentenceEngine {
     /// view), so this is data-only and won't double-speak.
     private func appendSpokenWord(_ tile: TileModel) {
         let selection = TileSelection(from: tile)
+
+        // Mash-to-escalate: re-tapping the same word bumps a run count on the last
+        // strip tile (surfaced as an escalation badge) instead of flooding the
+        // strip with duplicates. The grid tap still speaks the word (view-driven),
+        // so the child hears each insistent tap; the strip just stops growing.
+        if spokenStrip.last?.key == selection.key {
+            repetitionCount += 1
+            lastTileKey = selection.key
+            cacheManager?.logEvent(subjectType: "tile", subjectKey: tile.key, eventType: .selected)
+            return
+        }
+
+        // A different word starts a fresh run — reset the escalation counter.
+        repetitionCount = 0
+        lastTileKey = selection.key
         spokenStrip.append(selection)
         if spokenStrip.count > spokenStripCap {
             spokenStrip.removeFirst(spokenStrip.count - spokenStripCap)
@@ -251,11 +294,16 @@ final class SentenceEngine {
     func removeStripWord(at index: Int) {
         guard spokenStrip.indices.contains(index) else { return }
         spokenStrip.remove(at: index)
+        // Editing the strip ends the current escalation run.
+        repetitionCount = 0
+        lastTileKey = nil
     }
 
     /// Clear the entire spoken strip (the strip's ✕ button).
     func clearStrip() {
         spokenStrip.removeAll()
+        repetitionCount = 0
+        lastTileKey = nil
     }
 
     /// Remove a tile from the active group.
@@ -652,6 +700,12 @@ final class SentenceEngine {
             guard tiles == activeGroup.tiles else {
                 isThinking = false
                 return
+            }
+            // Demo mode: hold the "Generating…" beat even on a cache hit so a
+            // scripted demo reads as live AI, not an instant cache fetch.
+            if DemoMode.isOn {
+                try? await Task.sleep(for: .milliseconds(900))
+                guard tiles == activeGroup.tiles else { isThinking = false; return }
             }
             let tileKeys = tiles.map(\.key).joined(separator: ", ")
             Self.logger.info("generate: source=cache tiles=[\(tileKeys)] sentence=\"\(cached.sentence)\"")

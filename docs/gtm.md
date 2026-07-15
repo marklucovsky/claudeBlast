@@ -15,23 +15,23 @@ This doc captures our market understanding, positioning, and the multiple paths 
 
 **Most children who need AAC don't have it.**
 
-- ~1.5-2 million children under 18 in the US could benefit from AAC
-- **~50,000-75,000 new children per year** enter the AAC pipeline in the US. Breakdown:
-  - Autism: ~30,000-45,000 (120-150K diagnosed/yr, 25-30% minimally verbal)
-  - Childhood apraxia of speech: ~6,000-15,000
-  - Cerebral palsy: ~2,000-3,500
+- **~1 million+ children** in the US have complex communication needs and could benefit from AAC (Light & McNaughton 2012). This is the defensible *child-specific* anchor; the widely-cited ~4-5M figure (Beukelman & Light 2020) is **all ages**, not children — don't conflate them.
+- **~35,000-55,000 new children per year** become AAC candidates in the US. Breakdown:
+  - Autism: ~30,000-38,000 (~116K diagnosed/yr at 1-in-31, CDC 2022; 25-30% minimally verbal)
+  - Childhood apraxia of speech: ~4,000-7,000 (capped by total new-CAS incidence; the earlier 6-15K estimate exceeded the entire CAS population)
+  - Cerebral palsy: ~2,000-3,000
   - Down syndrome: ~800-1,500
-  - Other (intellectual disability, TBI, rare conditions): ~4,500-11,000
+  - Other (intellectual disability, TBI, rare conditions): ~2,000-6,000
 - Globally: tens of millions, with nearly zero AAC access in low/middle-income countries
 
-**These numbers are growing.** Autism prevalence has 4x'd in 20 years (1 in 150 in 2000 → 1 in 36 in 2020, CDC ADDM data) with no sign of plateauing. The proportion of autistic children who are minimally verbal (~25-30%) has stayed stable, so the absolute number grows proportionally. Net effect: **total new AAC-needing children is growing ~5-8% annually.** Other conditions (CP, Down syndrome) are stable. The growth is almost entirely autism-driven — a combination of broader diagnostic criteria, better screening in underserved communities, and possible genuine increase.
+**These numbers are growing — but keep two rates separate.** (1) CDC-measured **autism prevalence** rose 1-in-150 (2000) → 1-in-36 (2020) → **1-in-31 (2022)** — ~7-9%/yr recently; CDC cautions much of this reflects better identification, not necessarily rising incidence. (2) The **AAC device market** is growing ~7-9%/yr (Grand View Research), inflated by price/reimbursement/adoption, not population alone. There is **no clean primary source for a single "addressable-population growth rate"** — don't present one; cite the prevalence trend and the market CAGR as distinct, labeled figures.
 
-**Only 10-25% of people who could benefit from AAC actually have access** (Beukelman & Light, widely cited across AAC literature). That means 1.1-1.8 million underserved children in the US alone.
+**Access is deeply unequal, but the specific "10-25% have access" figure is not well-sourced** — it appears to be WHO/UNICEF's *global, all-assistive-tech, all-ages* "~1 in 10" statistic relabeled as US pediatric AAC (and for a high-income country that figure would imply *high* access, contradicting a 10-25% reading). Rigorous national AAC-access data barely exists (CommunicationFIRST, *AAC Counts*, 2023). What **is** documented: awareness and equity gaps — e.g. only ~4% of children with developmental disabilities had unmet AT-communication needs (NS-CSHCN), 78% of highly-unintelligible-speech children in one study had never seen an AAC professional, and device access ran **32% (minority families) vs 84% (white families)** among minimally-verbal autistic children (CHLA). Lead with these, not an invented access rate.
 
 **Why the gap exists:**
 1. **Cost.** Dedicated AAC devices run $5,000-$15,000. Even iPad apps cost $100-$300/year.
 2. **Wait times.** Medicaid approval for speech-generating devices takes 3-18 months, varies wildly by state.
-3. **SLP shortage.** Fewer than 5% of the ~210,000 SLPs in the US specialize in AAC.
+3. **SLP shortage.** Well under 5% of the ~218,000 certified SLPs in the US specialize in AAC — the best hard proxy, ASHA's SIG-12 (AAC) affiliation, is ~2% (~4,100 affiliates, 2016). Most SLPs also report inadequate pre-service AAC training.
 4. **Myths.** Persistent belief that AAC will prevent natural speech development (research says the opposite).
 5. **Demographic disparities.** Access correlates heavily with income, race, and geography.
 
@@ -39,18 +39,21 @@ This doc captures our market understanding, positioning, and the multiple paths 
 
 ### Competitive Landscape
 
-#### Pricing (as of early 2025 — verify for current)
+#### Pricing (verified mid-2026)
 
 | App | Price | Notes |
 |-----|-------|-------|
-| Proloquo (AssistiveWare) | ~$100/yr subscription | Dominant iOS AAC. 200K+ users. Transitioned from $249.99 one-time (Proloquo2Go) |
-| TouchChat HD (PRC-Saltillo) | $299.99 one-time | Often bundled with dedicated devices ($5K-$9K) |
-| TD Snap (Tobii Dynavox) | ~$300/yr subscription | Or bundled with dedicated devices ($5K-$15K+) |
+| Proloquo (AssistiveWare) | ~$100/yr ($99.99) subscription | Newer app; free download + trial. Predecessor **Proloquo2Go still sold as $249.99 one-time** — don't conflate |
+| TouchChat HD (PRC-Saltillo) | $149.99 base / **$299.99 with WordPower** one-time | The $299.99 figure is the WordPower edition, not the base app. One-time, not subscription |
+| **TD Snap (Tobii Dynavox)** | **Freemium — free download; ~$120/yr ($9.99/mo) for speech output** | **Corrected:** moved to freemium May 2024. The old "~$300/yr" was a *discontinued one-time $310 PODD bundle*, not an annual fee. Free for SLPs/clinicians |
 | LAMP Words for Life | $299.99 one-time | Motor planning approach |
 | GoTalk NOW | $79.99-$99.99 | Budget option |
 | Avaz AAC | ~$100/yr subscription | Notable for Android support, 20+ languages |
-| CoughDrop | $6/mo | Web-based, partially open source (AGPLv3) |
+| CoughDrop | free trial → ~$9/mo or $295 lifetime | Web-based, partially open source (AGPLv3) |
+| LetMeTalk / Cboard | **Free** | Genuinely free (donation- / grant-funded). Cboard is open source, web/Cordova. NB: free options *do* exist — don't claim "all AAC is expensive" |
 | **Blaster** | **Free** | **Open source (Apache 2.0)** |
+
+The clinically-dominant, feature-complete symbol apps still cluster at **$250-$300 upfront or a subscription** — that's our honest wedge, not "all AAC apps are expensive."
 
 Dedicated AAC hardware devices: $5,000-$15,000+. Insurance/Medicaid often only covers dedicated devices, not iPad + app combos.
 
@@ -72,12 +75,12 @@ Dedicated AAC hardware devices: $5,000-$15,000+. Insurance/Medicaid often only c
 
 - **CoughDrop** — only production-quality open-source AAC (AGPLv3, Rails+Ember). Web-based, functions as open-core commercial SaaS. Not native iOS.
 - **OpenAAC** — standards initiative (Open Board Format), not an app. Good intent, slow adoption.
-- **No native iOS open-source AAC app exists.** Blaster would be first.
+- **"First native iOS open-source AAC app" is FALSE — do not claim it.** Verified counterexamples exist: **Echo** (Ace Centre, 99% Swift, GPL-3.0, on the App Store) and **voice4you** (100% Swift, MIT, Swift Student Challenge 2024 — and it also does AI sentence refinement); plus **iWishSwift-AAC** (2016, 99% Swift, source-available). A knowledgeable reviewer will puncture "first" instantly. Our real novelty is the **combination** — open-source + SwiftUI-native + child-tuned + tile→LLM-sentence — none of which is individually a first, but the bundle plausibly is.
 - **Symbol sets:** ARASAAC (free, CC BY-NC-SA, 15K+ symbols), Mulberry (CC BY-SA, ~3,500 symbols). Blaster currently uses ARASAAC + some DALL-E generated images.
 
 #### AI in AAC
 
-**No major AAC app has shipped LLM-based sentence generation.** Existing "AI" in AAC means traditional next-word prediction — a completely different thing.
+**No *major* AAC app ships LLM sentence generation *from selected symbol tiles*** — and that qualifier matters. Incumbent "AI" is word prediction (Tobii/SwiftKey), grammar/spell correction and AI image/board generation (PRC-Saltillo 2026.1), or neural TTS — not tile→sentence. AssistiveWare's Sept 2025 "Let's Look Before We Leap" paper is a strong supporting cite: the category leader deliberately *hasn't* shipped LLM message generation. Watch two counterexamples: **Cboard** ships symbol→phrase AI (but web/Cordova, not a major vendor) and **Smartbox Text Talker AI** expands *typed keywords* (beta, for literate users) — neither is tile→sentence on native iOS, so the tightened claim holds. Avoid the unqualified "no AAC app does LLM sentences."
 
 - **Fluent AAC** is an early-stage startup building AI-first AAC. Worth watching.
 - The AAC community is split on AI: therapists want it to reduce setup burden, but some advocates worry about AI "speaking for" the user.
@@ -293,6 +296,14 @@ Proposal: Yes, but minimal. A single-page landing site: what Blaster is, link to
 ### Appendix: Discussion Log
 
 *(Newest first)*
+
+**2026-07-06 — Market/competitive fact-check (verified against primary sources)**
+- Prompted by a "have these numbers been sniff-tested?" review before sending demo materials to prospects, Anthropic, and OpenAI. Ran a three-stream verification (population/market, competitor pricing, differentiation claims). Body of this doc updated; earlier changelog entries left as-is for history but are **superseded by the corrections below.**
+- **Corrected (were wrong):** "1.5-2M *children*" → ~1M+ children (the 4-5M figure is all ages). **TD Snap "~$300/yr" → freemium, ~$120/yr** (the $300 was a discontinued one-time PODD bundle). **"First native iOS open-source AAC app" → FALSE** (Echo, voice4you, iWishSwift-AAC all predate us) — dropped the "first" claim.
+- **Reframed (inflated/conflated):** "50-75K/yr" → ~35-55K (CAS was 6-15K, impossible; → ~4-7K). "10-25% have access" → unsourced WHO-global relabel; replaced with documented awareness/equity gaps (CHLA 32% vs 84%). "5-8% growth" → split into autism-prevalence trend vs. AAC market CAGR (~7-9%). "6-12 mo approval" → that's the full eval-to-device journey incl. appeals, not the insurer decision (weeks).
+- **Tightened:** "no major AAC app ships LLM sentence generation" → added "from selected symbol tiles" (defensible; Cboard/Text Talker are the near-misses).
+- **Verified / kept:** <5% (really ~2%) of SLPs specialize in AAC; devices $5K-$15K; Proloquo ~$100/yr; TouchChat WordPower $299.99.
+- Cross-cutting lesson: stop conflating *condition prevalence* → *could-benefit* → *actually-use*, and never borrow global/all-ages/all-assistive-tech figures as US-pediatric-AAC-specific. Present every headline as a sourced estimate with its population scope named. (Two field sources — CommunicationFIRST's *AAC Counts*, 2023 — warn rigorous AAC prevalence/access data barely exists.)
 
 **2026-03-30 — Surveys, UX studies, image sets decided**
 - Added Surveys & User Research section. Kurt Yalcin (Mark's son-in-law, UI/UX research & clinical trials expert) onboarding as research lead.

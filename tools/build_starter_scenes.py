@@ -4,10 +4,11 @@
 """
 Build the bundled "Verified Starter Scenes" for Blaster.
 
-These must MATCH what the real AI generator produces: the topical tiles wrapped
-in the familiar Core board. We therefore replicate SceneNavigation.scaffold(.full)
-here (claudeBlast/Services/SceneNavigation.swift) — a deterministic, topic-
-independent core board — rather than hand-authoring a sparse single page.
+These MATCH what the real AI generator produces: the topical tiles wrapped in the
+Core board. We replicate SceneNavigation.scaffold here
+(claudeBlast/Services/SceneNavigation.swift) — a deterministic, topic-independent
+core board. Ships the Focused profile by default (topical + a lean needs strip +
+the body & health page); pass --full to build the full familiar board instead.
 
 Each starter is emitted as Resources/starter_<id>.json (.blasterscene format;
 SceneImporter ignores the extension). New topical words get bundled Playful-3D
@@ -60,6 +61,14 @@ HOME_CLUSTER = [
     "yes", "no", "more", "want", "please", "all_done", "look",
 ]
 HOME_CLUSTER_LINKS = [("eat", "food"), ("drink", "drinks")]
+# Lean needs strip for the Focused board — mirrors SceneNavigation.focusedClusterKeys.
+# No eat/drink links (hungry/thirsty stand in), and only body_health is bundled.
+FOCUSED_CLUSTER = [
+    "i", "you", "want",
+    "help", "more", "hungry", "thirsty", "bathroom",
+    "happy", "sad", "tired", "hurt", "sick", "scared",
+    "yes", "no", "all_done", "look",
+]
 CORE_CATEGORIES = [
     {"pageKey": "people", "iconKey": "people", "wordClasses": {"people"}, "crossLinks": []},
     {"pageKey": "food", "iconKey": "food",
@@ -150,21 +159,28 @@ def page_tile(key, link="", audible=True):
     return {"key": key, "isAudible": audible, "link": link}
 
 
-def scaffold_pages(scene, vocab, valid_keys):
-    """Replicate SceneNavigation.scaffold(.full): home page (topical + core
-    cluster + category links) plus the rich category pages, built by wordClass."""
+def scaffold_pages(scene, vocab, valid_keys, focused=True):
+    """Replicate SceneNavigation.scaffold. Focused (default, what we ship): topical
+    tiles + a lean needs strip, with only the body & health category page. Full:
+    topical + the full core cluster, eat/drink links, and every category page. The
+    scene editor can flip Focused off at runtime (re-scaffolds to full)."""
     home_key = scene["id"]
     home_tiles = [page_tile(k) for k in scene["topical"]]
 
-    for k in HOME_CLUSTER:
+    cluster = FOCUSED_CLUSTER if focused else HOME_CLUSTER
+    for k in cluster:
         if k in valid_keys:
             home_tiles.append(page_tile(k))
-    for k, to in HOME_CLUSTER_LINKS:
-        if k in valid_keys:
-            home_tiles.append(page_tile(k, link=to))
+    if not focused:
+        for k, to in HOME_CLUSTER_LINKS:
+            if k in valid_keys:
+                home_tiles.append(page_tile(k, link=to))
+
+    categories = ([c for c in CORE_CATEGORIES if c["pageKey"] == "body_health"]
+                  if focused else CORE_CATEGORIES)
 
     category_pages = []
-    for cat in CORE_CATEGORIES:
+    for cat in categories:
         if cat["pageKey"] == home_key:
             continue
         content = [t["key"] for t in vocab if t.get("wordClass") in cat["wordClasses"]]
@@ -185,6 +201,8 @@ def scaffold_pages(scene, vocab, valid_keys):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--full", action="store_true",
+                        help="Build the full familiar board instead of the shipped Focused board")
     args = parser.parse_args()
 
     vocab = json.loads(VOCAB_FILE.read_text())
@@ -193,7 +211,7 @@ def main() -> None:
     # Validate every referenced key resolves (topical-new excepted).
     errors = []
     for scene in SCENES:
-        pages = scaffold_pages(scene, vocab, valid_keys)
+        pages = scaffold_pages(scene, vocab, valid_keys, focused=not args.full)
         for page in pages:
             for t in page["tiles"]:
                 k = t["key"]
@@ -249,7 +267,7 @@ def main() -> None:
                 "displayName": display,
             })
 
-        pages = scaffold_pages(scene, vocab, valid_keys)
+        pages = scaffold_pages(scene, vocab, valid_keys, focused=not args.full)
         bundle = {
             "@type": MEDIA_TYPE,
             "_comment": "Blaster starter scene (bundled). Edit the prompt to generate a fresh scene.",

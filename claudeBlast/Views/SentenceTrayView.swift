@@ -459,6 +459,12 @@ private struct ActiveTileCard: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.10), radius: 3, y: 1)
             )
+            // Retain the grid's wordClass color-coding in the tray so a chip
+            // reads as the same category it does on the board.
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(colorForWordClass(tile.wordClass).opacity(0.6), lineWidth: 2.5)
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove \(tile.value)")
@@ -602,7 +608,7 @@ struct PrimaryPlayButton: View {
 /// hit replay at least once, the badge expands to a capsule carrying the
 /// escalation count next to the recycle glyph (e.g. `↺ 2`). Same visual
 /// language for iPad and iPhone — only the icon/text sizes differ.
-private struct ReplayBadge: View {
+struct ReplayBadge: View {
     let count: Int
     let compact: Bool
 

@@ -46,6 +46,12 @@ struct TileGridView: View {
     @State private var pendingNote: String = ""
     @State private var showNoteAlert: Bool = false
     @State private var promotedExpanded: Bool = false
+    /// The tile that most recently fired a press pulse — lifted above its grid
+    /// neighbors (via cell zIndex) so the grow animation isn't clipped by the
+    /// adjacent cell. LazyVGrid ignores zIndex set inside the cell's subtree, so
+    /// it has to live on the cell view itself.
+    @State private var lastTappedKey: String?
+    @AppStorage(AppSettingsKey.demoMode) private var demoMode = false
 
     @AppStorage(AppSettingsKey.tileSizeStep) private var tileSizeStep: Int = 0
 
@@ -200,10 +206,12 @@ struct TileGridView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if scriptRunner.state != .idle {
-                TileScriptPlaybackOverlay()
-            } else {
+            if scriptRunner.state == .idle {
                 TileScriptRecordingOverlay()
+            } else if !(demoMode && !scriptRunner.isStepping) {
+                // Demo mode hides the playback pill on a straight Run for clean
+                // screen recordings; stepping keeps it (you need the controls).
+                TileScriptPlaybackOverlay()
             }
         }
         // Caregiver menu — opened by long-pressing Home. Replaces the old hidden
@@ -405,7 +413,10 @@ struct TileGridView: View {
             }
             #if DEBUG
             .overlay(alignment: .centerLastTextBaseline) {
-                gridDebugBadge(spec: spec, tileCount: page.tiles.count)
+                // Hidden in demo mode so the geometry/density badge isn't recorded.
+                if !demoMode {
+                    gridDebugBadge(spec: spec, tileCount: page.tiles.count)
+                }
             }
             #endif
             .onChange(of: isLandscape) { _, _ in
@@ -542,8 +553,13 @@ struct TileGridView: View {
                 link: entry.link,
                 isAudible: entry.isAudible,
                 isSelected: engine.selectedTiles.contains { $0.key == entry.key },
-                labelFontSize: labelFontSize
-            ) { handleTileTap(entry) }
+                labelFontSize: labelFontSize,
+                scriptPulseKey: scriptRunner.tapPulseKey,
+                scriptPulseCount: scriptRunner.tapPulseCount
+            ) {
+                lastTappedKey = entry.key
+                handleTileTap(entry)
+            }
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
                     .onEnded { _ in
@@ -551,6 +567,10 @@ struct TileGridView: View {
                         showNoteAlert = true
                     }
             )
+            // Lift the tile that just pulsed (live tap or scripted) above its
+            // neighbors so the grow animation draws on top — not half-under the
+            // cell to its right.
+            .zIndex(lastTappedKey == entry.key || scriptRunner.tapPulseKey == entry.key ? 1 : 0)
         }
     }
 
