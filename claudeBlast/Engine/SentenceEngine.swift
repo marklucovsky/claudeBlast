@@ -826,7 +826,7 @@ final class SentenceEngine {
             let keys = entry.tileKeys
             let descriptor = FetchDescriptor<TileModel>()
             if let allTiles = try? ctx.fetch(descriptor) {
-                let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+                let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
                 for key in keys {
                     if let tile = lookup[key] {
                         activeGroup.tiles.append(TileSelection(from: tile))

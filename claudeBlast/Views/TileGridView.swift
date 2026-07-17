@@ -29,7 +29,7 @@ struct TileGridView: View {
     private var promotedEntries: [SentenceCache]
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     @Environment(SentenceEngine.self) private var engine

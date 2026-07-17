@@ -238,13 +238,13 @@ struct SceneImportSheet: View {
             fillWords = analysis.fillWords
             collisions = analysis.collisions
 
-            let byKey = Dictionary(uniqueKeysWithValues: deviceTiles.map { ($0.key, $0) })
+            let byKey = Dictionary(deviceTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
             for tile in collisions {
                 if let data = byKey[tile.key]?.userImageData, let img = UIImage(data: data) {
                     deviceImage[tile.key] = img
                 }
             }
-            useShared = Dictionary(uniqueKeysWithValues: collisions.map { ($0.key, false) })
+            useShared = Dictionary(collisions.map { ($0.key, false) }, uniquingKeysWith: { first, _ in first })
         } catch {
             self.error = error.localizedDescription
         }
