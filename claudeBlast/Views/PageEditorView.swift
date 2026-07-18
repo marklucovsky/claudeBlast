@@ -39,7 +39,7 @@ struct PageEditorView: View {
     private let columns = [GridItem(.adaptive(minimum: 84, maximum: 112), spacing: 10)]
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
     private var pageIndex: Int? { scene.pages.firstIndex { $0.key == pageKey } }
     private var page: PageSpec? { scene.pages.first { $0.key == pageKey } }

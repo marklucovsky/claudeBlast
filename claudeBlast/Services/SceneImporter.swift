@@ -59,7 +59,7 @@ enum SceneImporter {
     /// identity (key/displayName/wordClass) is never changed by import; this only
     /// governs images.
     static func analyze(_ exportable: ExportableScene, deviceTiles: [TileModel]) -> ImportAnalysis {
-        let lookup = Dictionary(uniqueKeysWithValues: deviceTiles.map { ($0.key, $0) })
+        let lookup = Dictionary(deviceTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         var newWords: [ExportableTile] = []
         var fillWords: [ExportableTile] = []
         var collisions: [ExportableTile] = []
@@ -108,7 +108,7 @@ enum SceneImporter {
 
         // Fetch existing tiles + categorize the file's custom tiles.
         let deviceTiles = try context.fetch(FetchDescriptor<TileModel>())
-        var tileLookup = Dictionary(uniqueKeysWithValues: deviceTiles.map { ($0.key, $0) })
+        var tileLookup = Dictionary(deviceTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let analysis = analyze(exportable, deviceTiles: deviceTiles)
 
         var newTileCount = 0

@@ -22,6 +22,8 @@ struct claudeBlastApp: App {
     @State private var profileResolver = ChildProfileResolver()
     @State private var sceneArtCoordinator = SceneArtCoordinator()
     @State private var caregiverMenu = CaregiverMenuCoordinator()
+    @State private var syncCoordinator = CloudKitSyncCoordinator()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // Register fallback defaults for any keys the engine reads via
@@ -65,9 +67,18 @@ struct claudeBlastApp: App {
         // Always wipe first — on a fresh store this is a no-op; on a version
         // bump it prevents duplicate records when re-seeding from the bundle.
         if BootstrapLoader.needsBootstrap() {
-            BootstrapLoader.wipeAllData(context: container.mainContext)
-            _ = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
-            BootstrapLoader.markBootstrapComplete()
+            // Under CloudKit, a second device may already hold the synced dataset
+            // by the time it launches (the seed-once flag is local-only). Don't
+            // seed a duplicate full copy — adopt the synced one. Best-effort: if
+            // the initial import hasn't landed yet the device still seeds, and
+            // CloudKitDedupReconciler collapses the resulting duplicates below.
+            if BootstrapLoader.storeAlreadySeeded(context: container.mainContext) {
+                BootstrapLoader.markBootstrapComplete()
+            } else {
+                BootstrapLoader.wipeAllData(context: container.mainContext)
+                _ = BootstrapLoader.loadDefaultVocabulary(context: container.mainContext)
+                BootstrapLoader.markBootstrapComplete()
+            }
         }
 
         ProfileMigration.ensureProfilesAfterBootstrap(
@@ -78,6 +89,11 @@ struct claudeBlastApp: App {
         // One-time: mark bundled tiles as system on installs that predate
         // TileModel.isSystem. No-op on fresh bootstraps (already flagged).
         BootstrapLoader.backfillTileProvenance(context: container.mainContext)
+
+        // Collapse any CloudKit multi-device duplicates already present at launch
+        // and enforce single-active invariants. Duplicates that arrive later via
+        // async CloudKit import are handled by CloudKitSyncCoordinator (below).
+        CloudKitDedupReconciler.reconcile(context: container.mainContext)
 
         // Move any prior UserDefaults-stored API key into the Keychain on
         // the first launch after upgrade. Idempotent; no-op on fresh installs.
@@ -151,8 +167,18 @@ struct claudeBlastApp: App {
                         resolver: imageResolver
                     )
                     scriptRecorder.configure(engine: sentenceEngine, runner: scriptRunner, coordinator: navigationCoordinator)
+                    // Keep collapsing CloudKit duplicates as they arrive via async
+                    // import; refresh the active-profile cache if a pass changed it.
+                    syncCoordinator.configure(modelContext: modelContainer.mainContext) {
+                        profileResolver.refresh()
+                    }
                 }
                 .environment(importCoordinator)
+                .onChange(of: scenePhase) { _, phase in
+                    // Reliable belt-and-suspenders: remote-change notifications can
+                    // be flaky under SwiftData, so reconcile on every foreground too.
+                    if phase == .active { syncCoordinator.reconcileSoon() }
+                }
                 .onOpenURL { url in
                     guard url.pathExtension == BlasterSceneFormat.fileExtension else { return }
                     importCoordinator.pendingURL = url

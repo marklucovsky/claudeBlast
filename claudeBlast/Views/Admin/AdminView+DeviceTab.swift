@@ -15,6 +15,7 @@ extension AdminView {
                 deviceSection
                 sentenceProviderSection
                 sentenceTraySection
+                aboutSection
                 #if DEBUG
                 storageSection
                 #endif
@@ -220,6 +221,19 @@ extension AdminView {
         } footer: {
             Text("Engine timings shared across profiles. Tiles-per-group is per-child — set it on the Now tab.")
                 .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    var aboutSection: some View {
+        Section {
+            NavigationLink {
+                AboutStatsView()
+            } label: {
+                Label("About & Stats", systemImage: "chart.bar.doc.horizontal")
+            }
+        } footer: {
+            Text("Vocabulary, board, and activity counts — plus CloudKit sync health.")
         }
     }
 

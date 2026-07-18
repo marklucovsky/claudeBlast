@@ -151,7 +151,7 @@ struct AdminView: View {
     // MARK: - Tile Lookup
 
     var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     func tileSelections(for entry: SentenceCache) -> [TileSelection] {

@@ -8,6 +8,13 @@ Cross-cutting design work to schedule. Each is a stub to expand into its own not
 
 ## 1. CloudKit: dev sandbox → production schema  ⚠️ highest risk
 
+> **Update 2026-07-15:** the two-device sniff test surfaced the multi-device
+> **duplication** bug (local seed-once flag → double bootstrap → duplicates of every
+> logical key → crash + silent wrong-active-record corruption). Root cause + a
+> deterministic dedup reconciler are now **implemented** (builds clean, pending the
+> on-device two-device test) — see [cloudkit-dedup.md](cloudkit-dedup.md). That fix is a
+> **prerequisite** for the Production promotion and for enabling iCloud by default.
+
 **Why it's scary:** CloudKit has separate **Development** and **Production**
 environments. We build against Development, where the schema is auto-created from
 the SwiftData model. Shipping requires **promoting the schema to Production** in

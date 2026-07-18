@@ -26,6 +26,12 @@ enum AppSettingsKey {
     /// to `false`; the backfill marks the ones matching bundled vocabulary as
     /// system. See `BootstrapLoader.backfillTileProvenance`.
     static let tileProvenanceBackfilled = "tile_provenance_backfilled"
+    /// CloudKitDedupReconciler telemetry (local, per-device). Surfaced on the
+    /// About & Stats screen. `reconcileLastDate` is a Double
+    /// timeIntervalSinceReferenceDate.
+    static let reconcileLastDeleted     = "reconcile_last_deleted"
+    static let reconcileLifetimeDeleted = "reconcile_lifetime_deleted"
+    static let reconcileLastDate        = "reconcile_last_date"
     /// Sticky preference for the force-refresh "Save a copy first" toggle.
     /// Default true (safe). Only read when forceRefreshDuplicateRemembered
     /// is true; otherwise the dialog opens with the default each time.
@@ -105,9 +111,13 @@ func setModelContainer(icloudEnabled: Bool) -> ModelContainer {
     let syncedLocalConfig = ModelConfiguration(schema: syncedSchema,
                                                isStoredInMemoryOnly: false,
                                                cloudKitDatabase: .none)
+    // Pinned to an EXPLICIT, brand-aligned container decoupled from the bundle id,
+    // so a future bundle-id change can't orphan the data. Register it once via the
+    // iCloud (CloudKit) capability. Inert until the entitlement exists — the `try?`
+    // below falls back to local-only.
     let syncedCloudConfig = ModelConfiguration(schema: syncedSchema,
                                                isStoredInMemoryOnly: false,
-                                               cloudKitDatabase: .automatic)
+                                               cloudKitDatabase: .private("iCloud.app.blasterai"))
     // iCloud defaults OFF. Toggle available on debug builds so CloudKit sync
     // can be tested on real devices without a special build. try? falls back
     // gracefully if the CloudKit entitlement is absent.

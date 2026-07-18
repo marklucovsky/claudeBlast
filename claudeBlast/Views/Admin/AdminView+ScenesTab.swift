@@ -213,7 +213,7 @@ extension AdminView {
 
     func exportScene(_ scene: BlasterScene) {
         do {
-            let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let tileLookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
             let data = try SceneExporter.exportJSON(scene,
                                                     defaultTileKeys: defaultTileKeys,
                                                     tileLookup: tileLookup)

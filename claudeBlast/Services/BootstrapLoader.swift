@@ -80,6 +80,18 @@ enum BootstrapLoader {
         defaults.set(bundledContentHash, forKey: AppSettingsKey.bootstrapContentHash)
     }
 
+    /// True when the synced store already holds bundled (system) vocabulary.
+    /// Used to avoid seeding a second full copy on a device that has already
+    /// received CloudKit data (the seed-once flag is local-only, so a fresh
+    /// second device would otherwise re-seed). Best-effort — a device can still
+    /// seed before its initial CloudKit import lands; CloudKitDedupReconciler is
+    /// the guarantee that any resulting duplicates get collapsed.
+    static func storeAlreadySeeded(context: ModelContext) -> Bool {
+        var desc = FetchDescriptor<TileModel>(predicate: #Predicate { $0.isSystem })
+        desc.fetchLimit = 1
+        return ((try? context.fetch(desc))?.isEmpty == false)
+    }
+
     /// One-time backfill of `TileModel.isSystem` for installs that predate the
     /// flag. Fresh bootstraps already set it; this only matters for RELEASE
     /// users who installed before the field existed (their bundled tiles read
@@ -156,7 +168,7 @@ enum BootstrapLoader {
                 tile.isSystem = true
                 return tile
             }
-            let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let tileLookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
 
             // ----- Core-First scene from Resources/scenes/core_first.json -----
             // The hardcoded Swift scene specs (coreFirstHomeSpecs / foodDrinksSpecs)
@@ -208,6 +220,9 @@ enum BootstrapLoader {
                 isDefault: false,
                 isActive: false
             )
+            // Stable key so CloudKitDedupReconciler can collapse duplicate
+            // All-Tiles scenes produced by multi-device bootstrap.
+            allTilesScene.systemSceneKey = "all_tiles"
             allTilesScene.pages = [allTilesPage]
 
             // ----- persist -----
@@ -220,7 +235,7 @@ enum BootstrapLoader {
                 context.insert(allTilesScene)
                 // Every page gets a page-link image tile, reusing the image its
                 // existing category link already uses (no new art).
-                let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+                let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
                 PageLink.ensurePageImages(in: coreFirstScene, context: context, existing: lookup)
             }
 

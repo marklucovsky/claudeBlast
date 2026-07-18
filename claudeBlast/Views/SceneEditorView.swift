@@ -35,7 +35,7 @@ struct SceneEditorView: View {
     @AppStorage(AppSettingsKey.generateAllStyles) private var generateAllStyles = false
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Caregiver words this scene introduced that still have no art.
@@ -265,7 +265,7 @@ struct SceneEditorView: View {
         // Bundled (system) keys aren't packaged; caregiver words are. Provenance-
         // based so it's independent of the active image set.
         let defaultKeys = Set(allTiles.filter(\.isSystem).map(\.key))
-        let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        let tileLookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         guard let data = try? SceneExporter.exportJSON(scene,
                                                        defaultTileKeys: defaultKeys,
                                                        tileLookup: tileLookup) else { return }
@@ -665,7 +665,7 @@ private struct PageGeneratorSheet: View {
         // A page copied from another scene → recreate it here with its word tiles
         // (navigation links dropped; structural tiles skipped).
         if let copy = cachedCopy, !editMode {
-            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
             let tiles = copyableTiles(from: copy).map { TileEntry(key: $0.key, link: "", isAudible: true) }
             guard !tiles.isEmpty else { dismiss(); return }
             var pageKey = copy.key
@@ -697,7 +697,7 @@ private struct PageGeneratorSheet: View {
         // page, and project the non-system demo word (no art) so the caregiver
         // experiences image generation. Served instantly (0 tokens).
         if let ex = cachedAIExample, !editMode {
-            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
             var tiles: [TileEntry] = []
             if let pack = PackCatalog.pack(id: ex.packId) {
                 PackInstaller.install(pack, context: modelContext, existing: lookup)
@@ -729,7 +729,7 @@ private struct PageGeneratorSheet: View {
         // A vocabulary pack accepted as a page → install the pack, then build the
         // page from its words (set-switching art, no embedded images).
         if let pack = cachedPack, !editMode {
-            let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+            let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
             PackInstaller.install(pack, context: modelContext, existing: lookup)
             var pageKey = pack.slug
             var n = 2
@@ -749,7 +749,7 @@ private struct PageGeneratorSheet: View {
         }
         let key = normalizedPageKey(pageName)
         guard !key.isEmpty else { return }
-        var lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        var lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
 
         // Materialize proposed-new words (both paths) so they're real tiles —
         // wired onto the page (accept) or pre-selectable in the picker (edit).
@@ -798,7 +798,7 @@ private struct PageGeneratorSheet: View {
     /// Word tiles of `page` present in device vocab and not structural
     /// (page_link / navigation) — what a copy carries over.
     private func copyableTiles(from page: PageSpec) -> [TileModel] {
-        let lookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        let lookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return page.tiles.compactMap { entry in
             guard let t = lookup[entry.key],
                   t.wordClass != PageLink.wordClass, t.wordClass != "navigation" else { return nil }
@@ -861,7 +861,7 @@ private struct PageGeneratorSheet: View {
         PageLink.mint(pageKey: key,
                       displayName: pageName.trimmingCharacters(in: .whitespacesAndNewlines),
                       context: modelContext,
-                      existing: Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) }))
+                      existing: Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first }))
         onCreate(key, preSelectedKeys)
         dismiss()
     }
@@ -892,7 +892,7 @@ private struct PagePreviewView: View {
     @State private var selectedSection = 0  // 0 = primary, 1+ = sub-pages
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private let columns = [GridItem(.adaptive(minimum: 60, maximum: 76))]
@@ -1148,7 +1148,7 @@ private struct SceneRefinementSheet: View {
     @State private var preview: GeneratedScene? = nil
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private var profile: SceneNavigation.Profile { scene.isFocused ? .focused : .full }

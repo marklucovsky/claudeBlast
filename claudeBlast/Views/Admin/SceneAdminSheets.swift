@@ -430,7 +430,7 @@ struct SceneGeneratorSheet: View {
             dismiss()
             return
         }
-        let tileLookup = Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        let tileLookup = Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         if let scene = try? SceneBuilder.build(from: generated, tileLookup: tileLookup, context: modelContext) {
             // The previewed `generated` scene was already scaffolded at this
             // profile, so the flag matches the pages the board will show.
@@ -502,7 +502,7 @@ struct ScenePreviewView: View {
     }
 
     private var tileLookup: [String: TileModel] {
-        Dictionary(uniqueKeysWithValues: allTiles.map { ($0.key, $0) })
+        Dictionary(allTiles.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private let columns = [GridItem(.adaptive(minimum: 60, maximum: 76))]
