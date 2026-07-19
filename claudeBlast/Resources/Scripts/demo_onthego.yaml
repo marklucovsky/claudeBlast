@@ -1,0 +1,15 @@
+name: On the Go — Bathroom
+description: A stomachache and a trip to the bathroom — a real need, out and about. iPhone.
+scene: "<default>"   # activate the built-in default scene first, so this works regardless of active scene
+mode: sentence
+audio: on
+tileWait: .human
+sentenceWait: .human
+
+script:
+  - comment: On the phone, out and about — a real need
+  - tiles:
+    - <home>, mom, <body_health>, stomachache, +
+    - <home>, <social>, bathroom
+    - <tilescript:replay>
+  - comment: Demo complete

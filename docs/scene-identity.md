@@ -6,6 +6,17 @@
 current recordings; this is groundwork for the *shared/published* scene + pack
 ecosystem.
 
+> **Note on the "Vocab" scene (2026-07-19).** `demo_wordmode.yaml` references
+> `scene: "Vocab"`, which is **not** a bootstrapped built-in — bootstrap only ships
+> "Empty" (default), "All Tiles" (review), and "Core First" (`core_first.json`).
+> Per Mark, that's fine: Vocab is a **demo precondition, not app functionality** —
+> a sample scene the presenter builds by hand (combining the single-word packs:
+> space, vehicles, tidepools, dinosaurs, farm) before running the wordmode script.
+> We do **not** need to pre-bake or bundle it. The two-device video scripts
+> (`demo_home`, `demo_onthego`) use `scene: "<default>"` and are unaffected. What
+> this doc addresses is separate: the scene *identity/resolver* refactor so a
+> `scene: "Vocab"` reference resolves unambiguously (id → slug → displayName).
+
 ## Problem
 
 Scenes are identified by a bare `name` string (`"Vocab"`, `"Tide Pools"`), which

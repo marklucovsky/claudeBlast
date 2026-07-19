@@ -422,6 +422,18 @@ struct TileGridView: View {
             .onChange(of: isLandscape) { _, _ in
                 currentDisplayPage = 0
             }
+            .onChange(of: scriptRunner.tapPulseKey) { _, key in
+                // During TileScript playback, page the grid to the display-chunk that
+                // holds the just-tapped tile so the tap is visible even when it's off
+                // the current page. (The script navigates to the tile's board page
+                // first, so the tile is always somewhere on `page`.)
+                guard let key,
+                      let idx = page.tiles.firstIndex(where: { $0.key == key }) else { return }
+                let chunk = idx / max(1, spec.perPage)
+                if currentDisplayPage != chunk {
+                    withAnimation { currentDisplayPage = chunk }
+                }
+            }
         }
     }
 

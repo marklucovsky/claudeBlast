@@ -115,6 +115,8 @@ and helps the grown-ups around them grow that voice.*
 
 ## Two devices, one voice
 
+<a class="demo" href="https://blasterai.app/demo/#v6">▶ Watch Demo</a>
+
 <div class="cols">
 <div>
 

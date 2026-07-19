@@ -500,6 +500,8 @@ struct TileScriptView: View {
             ScriptInfo(name: "First Look", description: "Child, Grandpa, Mom, and a Playground", resourceName: "demo_basic"),
             ScriptInfo(name: "Single Word Mode", description: "Single Word Mode -- Visit to the Tidepool", resourceName: "demo_wordmode"),
             ScriptInfo(name: "Classic Tiles Showcase", description: "order food, then flip the whole board to the Classic tile set", resourceName: "demo_food"),
+            ScriptInfo(name: "At Home — Chocolate", description: "\"Mom, I want chocolate\" — repetition escalates the want (iPad)", resourceName: "demo_home"),
+            ScriptInfo(name: "On the Go — Bathroom", description: "\"Mom, I have a stomachache. Can I go to the bathroom?\" (iPhone)", resourceName: "demo_onthego"),
         ]
     }
 }
