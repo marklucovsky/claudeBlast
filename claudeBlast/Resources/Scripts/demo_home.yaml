@@ -1,0 +1,15 @@
+name: At Home — Chocolate
+description: Mom wants chocolate — repetition escalates the want. iPad, at home.
+scene: "<default>"   # activate the built-in default scene first, so this works regardless of active scene
+mode: sentence
+audio: on
+tileWait: .human
+sentenceWait: .human
+
+script:
+  - comment: At home on the iPad — an escalating want
+  - tiles:
+    - <home>, mom, <food>, chocolate, +
+    - chocolate +
+    - chocolate
+  - comment: Demo complete
