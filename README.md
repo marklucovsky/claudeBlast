@@ -24,8 +24,8 @@ Open source under the Apache License 2.0.
 ## Quick Start
 
 ```bash
-git clone https://github.com/marklucovsky/claudeBlast.git
-cd claudeBlast
+git clone https://github.com/marklucovsky/blasterai.git
+cd blasterai
 open claudeBlast.xcodeproj
 ```
 

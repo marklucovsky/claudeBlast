@@ -28,7 +28,7 @@ See `reference/` for the original Blaster models, screenshots, vocabulary, and l
 
 Feature work is collaborator-driven via a fresh Claude session. The collaborator-facing version of this lives in `docs/collaborator-workflow.md`; this section is the rules Claude itself follows.
 
-- **Starting work.** A feature begins with the collaborator launching Claude in `~/src/claudeBlast`, on `main`, in a fresh session. Plan mode is the default for non-trivial features — write the plan, get approval, then execute.
+- **Starting work.** A feature begins with the collaborator launching Claude in `~/src/blasterai`, on `main`, in a fresh session. Plan mode is the default for non-trivial features — write the plan, get approval, then execute.
 - **Worktrees.** Use `EnterWorktree` to create the branch + checkout (placed under `.claude/worktrees/`). Prefer a descriptive name like `cb-<short-feature>`. Never switch branches in the main checkout. Never run `git checkout -b` or `git switch -c`.
 - **Xcode.** When the collaborator wants to run the app, drive previews, or use the simulator against the in-progress branch, run `open claudeBlast.xcodeproj` from inside the worktree directory (`Bash(open:*)` is allowed). That opens the worktree's checkout, not main.
 - **Commits and PRs are Claude's job.** Claude stages specific files, commits, pushes (`git push -u origin <branch>`), and opens the PR via `gh pr create`. Always confirm with the collaborator before the first push and before `gh pr create`. Never `git add -A`. Never force-push without explicit instruction. Never push to `main` directly from a worktree.

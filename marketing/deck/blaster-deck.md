@@ -472,7 +472,7 @@ The runtime that helps these children be heard — sentences *and* images. Let's
 
 <br>
 
-<span class="cap"><a href="https://blasterai.app">blasterai.app</a> · <a href="https://github.com/marklucovsky/claudeBlast">github.com/marklucovsky/claudeBlast</a> · Apache 2.0</span>
+<span class="cap"><a href="https://blasterai.app">blasterai.app</a> · <a href="https://github.com/marklucovsky/blasterai">github.com/marklucovsky/blasterai</a> · Apache 2.0</span>
 
 </div>
 </div>

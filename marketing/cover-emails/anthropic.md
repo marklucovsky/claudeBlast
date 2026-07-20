@@ -27,7 +27,7 @@ With gratitude,
 Mark
 
 Mark Lucovsky
-blasterai.app · mark@lucovsky.com · github.com/marklucovsky/claudeBlast
+blasterai.app · mark@lucovsky.com · github.com/marklucovsky/blasterai
 
 ---
 

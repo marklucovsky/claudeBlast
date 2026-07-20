@@ -12,7 +12,7 @@ This is the workflow for anyone using Claude Code as their primary contribution 
   gh auth login           # GitHub.com → HTTPS → web browser
   ```
   Verify with `gh auth status` — you should see your account and a token with `repo` scope.
-- The repo cloned at `~/src/claudeBlast`.
+- The repo cloned at `~/src/blasterai`.
 
 ## Working on tile image sets (optional, tile collaborators only)
 
@@ -34,7 +34,7 @@ If you ran `git lfs install` **before** cloning, masters check out as real PNGs 
 If you cloned earlier and only just installed LFS, the master files in your working tree are tiny pointer text files instead of PNGs. Convert them:
 
 ```sh
-cd ~/src/claudeBlast
+cd ~/src/blasterai
 git lfs pull
 ```
 
@@ -55,7 +55,7 @@ The review tool (`python3 tools/build_review_page.py`), the generation pipeline 
 
 ## Starting a feature
 
-1. Open a terminal, `cd ~/src/claudeBlast`.
+1. Open a terminal, `cd ~/src/blasterai`.
 2. Confirm you're on `main` and clean: `git status`. If not, finish or set aside whatever's pending in the main checkout — it stays there, untouched.
 3. Launch a fresh Claude session: `claude`.
 4. Describe the feature. Claude will plan first by default; you review and approve the plan before any code is written.
@@ -65,7 +65,7 @@ The review tool (`python3 tools/build_review_page.py`), the generation pipeline 
 Once the plan is approved, Claude performs every step of the lifecycle:
 
 1. **Create the worktree** — `EnterWorktree` makes a new branch + checkout under `.claude/worktrees/<name>`. The session switches into that directory.
-2. **Implement** — edits files inside the worktree. The main checkout at `~/src/claudeBlast` is untouched.
+2. **Implement** — edits files inside the worktree. The main checkout at `~/src/blasterai` is untouched.
 3. **Build / test** when relevant — runs `xcodebuild ... build` or the test scheme.
 4. **Commit** — stages specific files (never `git add -A`), commits with a clear message. Claude confirms with you before staging if anything looks unexpected.
 5. **Push** — `git push -u origin <branch>`. Claude confirms before pushing the first time.
@@ -78,7 +78,7 @@ When you need to run the app, drive SwiftUI previews, or use the simulator again
 If you'd rather do it yourself from a terminal:
 
 ```sh
-cd ~/src/claudeBlast/.claude/worktrees/<name>
+cd ~/src/blasterai/.claude/worktrees/<name>
 open claudeBlast.xcodeproj
 ```
 

@@ -50,4 +50,4 @@ Shipped: trust/onboarding, scene generation, eval-tested quality, demo tooling. 
 </div>
 </div>
 
-<span class="cap">blasterai.app · Mark Lucovsky · support@blasterai.app · github.com/marklucovsky/claudeBlast · Apache 2.0</span>
+<span class="cap">blasterai.app · Mark Lucovsky · support@blasterai.app · github.com/marklucovsky/blasterai · Apache 2.0</span>

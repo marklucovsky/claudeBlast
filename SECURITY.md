@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in Blaster, please report it privately rather than opening a public GitHub issue.
 
-**Contact:** Open a [GitHub Security Advisory](https://github.com/marklucovsky/claudeBlast/security/advisories/new) or email the maintainer directly (see profile).
+**Contact:** Open a [GitHub Security Advisory](https://github.com/marklucovsky/blasterai/security/advisories/new) or email the maintainer directly (see profile).
 
 Please include a description of the issue, steps to reproduce, and any potential impact. We will respond within 72 hours and coordinate a fix before public disclosure.
 
