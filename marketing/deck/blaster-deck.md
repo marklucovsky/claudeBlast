@@ -207,7 +207,7 @@ Same child, same words, same scenes — because everything syncs through the fam
 <div>
 
 ### 1 · Sentences
-Not word-salad — real, age-appropriate speech that carries **emotion and urgency**, and gets **measured** for quality.
+Not word-salad — real, age-appropriate speech that carries **emotion and urgency**, and whose quality we **measure in an eval harness**.
 
 ### 2 · Images
 Add any word and BlasterAI **generates a matching tile** — styled to the child's art set, and refinable.
@@ -276,7 +276,7 @@ Same tiles — `grandpa` `playground` `lemonade` — asked again:
 <div class="cols">
 <div>
 
-BlasterAI ships with an **AI evaluation harness**: a Tier‑1 deterministic checker plus a Tier‑2 LLM judge that score every sentence against a rubric.
+BlasterAI ships with an **AI evaluation harness**: a Tier‑1 deterministic checker plus a Tier‑2 LLM judge that score our sentence generations in a test suite against a rubric.
 
 It caught the escalation problem, we fixed the prompt, and the harness **proved the fix**.
 
@@ -458,7 +458,7 @@ Today, therapists hand-pick vocabulary from **5,000–10,000+** items — hours 
 Pilot with us. Tell us where AI helps and where it gets in the way. Shape the roadmap toward real clinical value.
 
 **Anthropic**
-Continued partnership on the build — and on the evaluation rigor that makes AI safe to put in a child's hands.
+Continued partnership on the build — and on the evaluation rigor behind putting AI in a child's hands.
 
 **OpenAI**
 The runtime that helps these children be heard — sentences *and* images. Let's make it faster, cheaper, and even safer together.
@@ -536,7 +536,7 @@ The runtime that helps these children be heard — sentences *and* images. Let's
 - Subject/judge models **decoupled**; runs opt-in and reproducible
 - Locked baseline: escalation judge pass **38% → 85%**, deterministic **0% → 100%**
 
-**Safety:** persona + hard content rails in the system prompt ("never sexual, violent…"), enforced and eval-checked.
+**Safety:** persona + content rails in the system prompt ("never sexual, violent…") sent on **every** call, with a deterministic safety net + judge in eval.
 
 </div>
 </div>
