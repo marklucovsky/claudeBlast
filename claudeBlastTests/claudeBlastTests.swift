@@ -81,10 +81,16 @@ struct claudeBlastTests {
     }
 
     @Test func sentenceCacheOrderIndependentKey() throws {
-        let cache1 = SentenceCache(tileKeys: ["mom", "eat", "pizza"], sentence: "test")
-        let cache2 = SentenceCache(tileKeys: ["pizza", "mom", "eat"], sentence: "test")
+        let sels = [
+            TileSelection(key: "mom", value: "mom", wordClass: "people"),
+            TileSelection(key: "eat", value: "eat", wordClass: "actions"),
+            TileSelection(key: "pizza", value: "pizza", wordClass: "food"),
+        ]
+        let cache1 = SentenceCache(tiles: sels, grade: 2, sentence: "test")
+        let cache2 = SentenceCache(tiles: sels.reversed(), grade: 2, sentence: "test")
         #expect(cache1.cacheKey == cache2.cacheKey)
-        #expect(cache1.cacheKey == "eat,mom,pizza")
+        // Key folds in the model/prompt version + grade + per-tile word class; tiles remain sorted.
+        #expect(cache1.cacheKey == "\(CacheKeyPolicy.versionToken)/g2#eat:actions,mom:people,pizza:food")
     }
 
     @Test func tileSelectionLogic() throws {
