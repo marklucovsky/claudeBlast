@@ -570,8 +570,15 @@ final class SentenceEngine {
 
     // MARK: - Generation pipeline
 
+    /// The active child's grade level — folded into every cache key so a
+    /// sentence generated for one grade is never served to another. Stable
+    /// within a generation call (the resolver doesn't change mid-flight).
+    private var currentGrade: Int {
+        profileResolver?.ageGrade ?? ChildProfileResolver.fallbackAgeGrade
+    }
+
     private func updateRepetitionState(for tiles: [TileSelection]) -> Int {
-        let currentKey = SentenceCacheManager.cacheKey(for: tiles)
+        let currentKey = SentenceCacheManager.cacheKey(for: tiles, grade: currentGrade)
         if currentKey == lastTileKey {
             repetitionCount += 1
         } else {
@@ -692,11 +699,11 @@ final class SentenceEngine {
 
         // Escalation: still count the hit even though we bypass the cached sentence
         if repetition > 0 {
-            cacheManager?.recordHit(tiles: tiles)
+            cacheManager?.recordHit(tiles: tiles, grade: currentGrade)
         }
 
         // Cache lookup (skip for replay/escalation requests)
-        if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles) {
+        if repetition == 0, let cached = cacheManager?.lookup(tiles: tiles, grade: currentGrade) {
             guard tiles == activeGroup.tiles else {
                 isThinking = false
                 return
@@ -721,7 +728,7 @@ final class SentenceEngine {
 
         // Build prompt. Grade comes from the active child profile when
         // resolver is wired; fallback keeps tests/preview paths working.
-        let grade = profileResolver?.ageGrade ?? ChildProfileResolver.fallbackAgeGrade
+        let grade = currentGrade
         var promptBuilder = SentencePromptBuilder(ageGradeLevel: grade)
         promptBuilder.repetitionCount = repetition
         promptBuilder.conversationContext = conversationHistory
@@ -766,9 +773,9 @@ final class SentenceEngine {
             let elapsed = apiStart.duration(to: .now)
 
             if repetition == 0 {
-                cacheManager?.store(tiles: tiles, sentence: result.text,
+                cacheManager?.store(tiles: tiles, grade: grade, sentence: result.text,
                                     childID: profileResolver?.activeChildID)
-                let usedKey = SentenceCacheManager.cacheKey(for: tiles)
+                let usedKey = SentenceCacheManager.cacheKey(for: tiles, grade: grade)
                 cacheManager?.logEvent(subjectType: "sentence", subjectKey: usedKey, eventType: .used)
             }
 

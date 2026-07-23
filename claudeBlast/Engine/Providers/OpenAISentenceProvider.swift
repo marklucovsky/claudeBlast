@@ -84,7 +84,9 @@ struct OpenAISentenceProvider: SentenceProvider {
         }
 
         return [
-            "model": "gpt-4o-mini",
+            // Single source of truth: the same constant seeds the cache version
+            // token, so the request model and cache identity can't diverge.
+            "model": CacheKeyPolicy.modelID,
             "messages": messages,
             "max_tokens": 500,
             // Lower temperature so the model is more obedient to the word-class

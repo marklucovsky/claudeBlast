@@ -63,7 +63,7 @@ struct SentenceEngineTests {
         let container = try makeTestContainer()
         let cache = SentenceCacheManager(modelContext: container.mainContext)
         let tiles = [TileSelection(key: "eat", value: "eat", wordClass: "actions")]
-        let result = cache.lookup(tiles: tiles)
+        let result = cache.lookup(tiles: tiles, grade: 2)
         #expect(result == nil)
     }
 
@@ -75,8 +75,8 @@ struct SentenceEngineTests {
             TileSelection(key: "pizza", value: "pizza", wordClass: "food"),
         ]
 
-        cache.store(tiles: tiles, sentence: "I want pizza!")
-        let hit = cache.lookup(tiles: tiles)
+        cache.store(tiles: tiles, grade: 2, sentence: "I want pizza!")
+        let hit = cache.lookup(tiles: tiles, grade: 2)
         #expect(hit != nil)
         #expect(hit?.sentence == "I want pizza!")
         #expect(hit?.hitCount == 1)
@@ -87,9 +87,9 @@ struct SentenceEngineTests {
         let cache = SentenceCacheManager(modelContext: container.mainContext)
         let tiles = [TileSelection(key: "eat", value: "eat", wordClass: "actions")]
 
-        cache.store(tiles: tiles, sentence: "I want to eat!")
-        _ = cache.lookup(tiles: tiles)
-        let second = cache.lookup(tiles: tiles)
+        cache.store(tiles: tiles, grade: 2, sentence: "I want to eat!")
+        _ = cache.lookup(tiles: tiles, grade: 2)
+        let second = cache.lookup(tiles: tiles, grade: 2)
         #expect(second?.hitCount == 2)
     }
 
@@ -98,10 +98,10 @@ struct SentenceEngineTests {
         let cache = SentenceCacheManager(modelContext: container.mainContext)
         let tiles = [TileSelection(key: "eat", value: "eat", wordClass: "actions")]
 
-        cache.store(tiles: tiles, sentence: "Original")
-        cache.store(tiles: tiles, sentence: "Updated")
+        cache.store(tiles: tiles, grade: 2, sentence: "Original")
+        cache.store(tiles: tiles, grade: 2, sentence: "Updated")
 
-        let hit = cache.lookup(tiles: tiles)
+        let hit = cache.lookup(tiles: tiles, grade: 2)
         #expect(hit?.sentence == "Updated")
     }
 
@@ -111,8 +111,8 @@ struct SentenceEngineTests {
         let tiles1 = [TileSelection(key: "eat", value: "eat", wordClass: "actions")]
         let tiles2 = [TileSelection(key: "drink", value: "drink", wordClass: "actions")]
 
-        cache.store(tiles: tiles1, sentence: "I want to eat!")
-        cache.store(tiles: tiles2, sentence: "I want to drink!")
+        cache.store(tiles: tiles1, grade: 2, sentence: "I want to eat!")
+        cache.store(tiles: tiles2, grade: 2, sentence: "I want to drink!")
         #expect(cache.allEntries().count == 2)
 
         cache.flushAll()
@@ -128,7 +128,7 @@ struct SentenceEngineTests {
             TileSelection(key: "eat", value: "eat", wordClass: "actions"),
             TileSelection(key: "pizza", value: "pizza", wordClass: "food"),
         ]
-        #expect(SentenceCacheManager.cacheKey(for: tilesA) == SentenceCacheManager.cacheKey(for: tilesB))
+        #expect(SentenceCacheManager.cacheKey(for: tilesA, grade: 2) == SentenceCacheManager.cacheKey(for: tilesB, grade: 2))
     }
 
     // MARK: - MockSentenceProvider
