@@ -7,24 +7,30 @@
 
 import SwiftData
 import Foundation
+import os
 
 @MainActor
 final class SentenceCacheManager {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "claudeBlast", category: "SentenceCache")
+
     let context: ModelContext
 
     init(modelContext: ModelContext) {
         self.context = modelContext
     }
 
-    /// Build a canonical cache key from tile keys (deduplicated, sorted, comma-joined).
-    static func cacheKey(for tiles: [TileSelection]) -> String {
-        Set(tiles.map(\.key)).sorted().joined(separator: ",")
+    /// Build a canonical cache key. Folds in the model + prompt version and the
+    /// child's grade (both change the generated sentence), then the deduplicated,
+    /// sorted tile keys. See `CacheKeyPolicy`.
+    static func cacheKey(for tiles: [TileSelection], grade: Int) -> String {
+        CacheKeyPolicy.key(for: tiles, grade: grade)
     }
 
     /// Increment hitCount for an existing cache entry without returning the sentence.
     /// Called on escalation paths that bypass the cache for generation but should still count usage.
-    func recordHit(tiles: [TileSelection]) {
-        let key = Self.cacheKey(for: tiles)
+    func recordHit(tiles: [TileSelection], grade: Int) {
+        let key = Self.cacheKey(for: tiles, grade: grade)
         var descriptor = FetchDescriptor<SentenceCache>(
             predicate: #Predicate { $0.cacheKey == key }
         )
@@ -35,8 +41,8 @@ final class SentenceCacheManager {
     }
 
     /// Look up a cached sentence. Returns nil on miss; increments hitCount on hit.
-    func lookup(tiles: [TileSelection]) -> SentenceCache? {
-        let key = Self.cacheKey(for: tiles)
+    func lookup(tiles: [TileSelection], grade: Int) -> SentenceCache? {
+        let key = Self.cacheKey(for: tiles, grade: grade)
         var descriptor = FetchDescriptor<SentenceCache>(
             predicate: #Predicate { $0.cacheKey == key }
         )
@@ -54,9 +60,10 @@ final class SentenceCacheManager {
     /// Store or update a cached sentence for the given tiles.
     /// `childID` is stamped on new entries so future per-child analytics can
     /// filter on it. Existing entries retain their original `childID`.
-    func store(tiles: [TileSelection], sentence: String, audioData: String = "",
+    /// Every write (re)stamps `keyVersion` with the current `CacheKeyPolicy`.
+    func store(tiles: [TileSelection], grade: Int, sentence: String, audioData: String = "",
                childID: String? = nil) {
-        let key = Self.cacheKey(for: tiles)
+        let key = Self.cacheKey(for: tiles, grade: grade)
         var descriptor = FetchDescriptor<SentenceCache>(
             predicate: #Predicate { $0.cacheKey == key }
         )
@@ -66,9 +73,9 @@ final class SentenceCacheManager {
             existing.sentence = sentence
             existing.audioData = audioData
             existing.lastUsed = .now
+            existing.keyVersion = CacheKeyPolicy.versionToken
         } else {
-            let tileKeys = tiles.map(\.key)
-            let entry = SentenceCache(tileKeys: tileKeys, sentence: sentence,
+            let entry = SentenceCache(tiles: tiles, grade: grade, sentence: sentence,
                                       audioData: audioData, childID: childID)
             context.insert(entry)
         }
@@ -87,12 +94,82 @@ final class SentenceCacheManager {
         context.delete(entry)
     }
 
-    /// Flush all cache entries.
+    /// Flush all cache entries (admin "clear all").
     func flushAll() {
         let entries = allEntries()
         for entry in entries {
             context.delete(entry)
         }
+    }
+
+    /// Launch-time sweep. Deletes unpinned entries that are stale (a mismatched
+    /// `keyVersion` from a model/prompt-version change) or expired (unused for
+    /// longer than `maxAge`), then LRU-evicts any unpinned overflow above
+    /// `maxCount`. Pinned entries are always exempt and never counted. Returns
+    /// the number deleted. `now` is injected for testability.
+    @discardableResult
+    func evictStale(now: Date = .now,
+                    maxAge: TimeInterval = CacheKeyPolicy.maxAge,
+                    maxCount: Int = CacheKeyPolicy.maxCount) -> Int {
+        let entries = allEntries()   // sorted by lastUsed, most-recent first
+        let currentVersion = CacheKeyPolicy.versionToken
+        var versionStale = 0, expired = 0, overCap = 0, pinned = 0
+
+        var survivors: [SentenceCache] = []
+        for entry in entries {
+            if entry.isPinned {
+                pinned += 1
+                continue   // pinned: exempt, and not counted toward maxCount
+            }
+            if entry.keyVersion != currentVersion {
+                context.delete(entry)
+                versionStale += 1
+            } else if now.timeIntervalSince(entry.lastUsed) > maxAge {
+                context.delete(entry)
+                expired += 1
+            } else {
+                survivors.append(entry)
+            }
+        }
+
+        // Count cap: survivors are already newest-first; drop the LRU overflow.
+        if survivors.count > maxCount {
+            for entry in survivors[maxCount...] {
+                context.delete(entry)
+                overCap += 1
+            }
+        }
+
+        let deleted = versionStale + expired + overCap
+        Self.logger.info("""
+        evictStale: scanned=\(entries.count, privacy: .public) \
+        removed=\(deleted, privacy: .public) \
+        (versionStale=\(versionStale, privacy: .public) \
+        expired=\(expired, privacy: .public) \
+        overCap=\(overCap, privacy: .public)) \
+        pinnedKept=\(pinned, privacy: .public) \
+        survivors=\(survivors.count - overCap, privacy: .public) \
+        version=\(currentVersion, privacy: .public)
+        """)
+        return deleted
+    }
+
+    /// On-demand, TTL-independent stale sweep (admin "clear stale"). Deletes
+    /// unpinned entries whose `keyVersion` no longer matches the current
+    /// `CacheKeyPolicy` — the reclaim path after a cache-invalidating prompt
+    /// change, without waiting for a relaunch or the TTL. Returns the count.
+    @discardableResult
+    func pruneStaleVersions() -> Int {
+        let currentVersion = CacheKeyPolicy.versionToken
+        let stale = allEntries().filter { !$0.isPinned && $0.keyVersion != currentVersion }
+        for entry in stale {
+            context.delete(entry)
+        }
+        Self.logger.info("""
+        pruneStaleVersions: removed=\(stale.count, privacy: .public) \
+        version=\(currentVersion, privacy: .public)
+        """)
+        return stale.count
     }
 
     /// Fetch promoted entries: hitCount >= threshold or pinned, sorted by hitCount desc.

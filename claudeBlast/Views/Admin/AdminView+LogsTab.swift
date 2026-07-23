@@ -232,6 +232,23 @@ extension AdminView {
         try? modelContext.save()
     }
 
+    /// Unpinned entries whose `keyVersion` no longer matches the current
+    /// `CacheKeyPolicy` — i.e. sentences left stale by a model/prompt-version
+    /// bump. Surfaces the "Clear Stale" affordance only when there's work to do.
+    var staleCacheCount: Int {
+        cacheEntries.filter { !$0.isPinned && $0.keyVersion != CacheKeyPolicy.versionToken }.count
+    }
+
+    /// On-demand stale sweep: reclaim version-mismatched entries without waiting
+    /// for a relaunch or TTL. Delegates to the manager so the staleness rule
+    /// lives in one place.
+    func pruneStaleCache() {
+        let removed = SentenceCacheManager(modelContext: modelContext).pruneStaleVersions()
+        if removed > 0 {
+            try? modelContext.save()
+        }
+    }
+
     // MARK: - Sections
 
     @ViewBuilder
@@ -281,6 +298,13 @@ extension AdminView {
             HStack {
                 Text("Sentence Cache (\(cacheEntries.count))")
                 Spacer()
+                if staleCacheCount > 0 {
+                    Button("Clear Stale (\(staleCacheCount))") {
+                        pruneStaleCache()
+                    }
+                    .font(.caption)
+                    .textCase(nil)
+                }
                 if !cacheEntries.isEmpty {
                     Button("Flush All", role: .destructive) {
                         flushAllCache()

@@ -42,6 +42,7 @@ final class BulkCacheGenerator {
         }
 
         let cacheManager = SentenceCacheManager(modelContext: modelContext)
+        let grade = ChildProfileResolver.fallbackAgeGrade
 
         insertedCount = 0
         duplicateCount = 0
@@ -55,16 +56,18 @@ final class BulkCacheGenerator {
             let combo = randomCombo(from: pool, length: length)
             let selections = combo.map { TileSelection(from: $0) }
 
-            // Exercise the cache: lookup first, store on miss
-            if let _ = cacheManager.lookup(tiles: selections) {
+            // Exercise the cache: lookup first, store on miss. Synthetic traffic
+            // has no child profile, so all combos share the fallback grade — keeps
+            // the combinatorial space small enough for combos to collide naturally.
+            if let _ = cacheManager.lookup(tiles: selections, grade: grade) {
                 // Cache hit — lookup already incremented hitCount
-                cacheManager.logEvent(subjectType: "cache", subjectKey: SentenceCacheManager.cacheKey(for: selections), eventType: .hit)
+                cacheManager.logEvent(subjectType: "cache", subjectKey: SentenceCacheManager.cacheKey(for: selections, grade: grade), eventType: .hit)
                 duplicateCount += 1
             } else {
                 // Cache miss — generate mock sentence and store
                 let sentence = buildMockSentence(from: combo)
-                cacheManager.store(tiles: selections, sentence: sentence)
-                cacheManager.logEvent(subjectType: "sentence", subjectKey: SentenceCacheManager.cacheKey(for: selections), eventType: .used)
+                cacheManager.store(tiles: selections, grade: grade, sentence: sentence)
+                cacheManager.logEvent(subjectType: "sentence", subjectKey: SentenceCacheManager.cacheKey(for: selections, grade: grade), eventType: .used)
                 insertedCount += 1
             }
 

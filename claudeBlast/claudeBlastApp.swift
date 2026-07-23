@@ -95,6 +95,14 @@ struct claudeBlastApp: App {
         // async CloudKit import are handled by CloudKitSyncCoordinator (below).
         CloudKitDedupReconciler.reconcile(context: container.mainContext)
 
+        // Sweep the sentence cache: drop stale-version and expired entries and
+        // enforce the size cap (pinned exempt). Runs after dedup so duplicates
+        // are already collapsed before entries are counted. Cheap; every launch.
+        let cacheSwept = SentenceCacheManager(modelContext: container.mainContext).evictStale()
+        if cacheSwept > 0 {
+            try? container.mainContext.save()
+        }
+
         // Move any prior UserDefaults-stored API key into the Keychain on
         // the first launch after upgrade. Idempotent; no-op on fresh installs.
         OpenAIKeyVault.migrateFromUserDefaultsIfNeeded()
